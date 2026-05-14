@@ -17,5 +17,7 @@ test('ADM consegue abrir a tela de usuários e fazer logout', async ({ page }) =
   await expect(page.getByRole('cell', { name: 'admin@juridico.com' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Encerrar' }).click();
-  await expect(page.getByRole('heading', { level: 2, name: 'Faça seu login' })).toBeVisible();
+  await expect(page.locator('input[type="email"]')).toBeVisible();
+  await expect(page.locator('input[type="password"]')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Entrar' })).toBeVisible();
 });
