@@ -1,0 +1,345 @@
+/* ═══════════════════════════════════════════════════════════════════ */
+/* SIDEBAR — Lexora                                                    */
+/* Premium navy sidebar com identidade de produto                     */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Backdrop mobile ─────────────────────────────────────────────── */
+.sidebar-backdrop {
+  display: none;
+}
+
+/* ── Container ───────────────────────────────────────────────────── */
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  background: var(--sidebar-bg);
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--sidebar-divider);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+  transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+              min-width 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 20;
+}
+
+.sidebar::-webkit-scrollbar { width: 3px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+.sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-full);
+}
+.sidebar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+/* ── Body (brand + nav) ──────────────────────────────────────────── */
+.sidebar-body {
+  flex: 1;
+  padding: var(--space-6) var(--space-4) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* ── Brand ───────────────────────────────────────────────────────── */
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-8);
+  padding: 0 var(--space-2);
+  overflow: hidden;
+}
+
+.sidebar-brand-wordmark {
+  height: 34px;
+  width: auto;
+  max-width: 150px;
+  filter: brightness(0) invert(1);
+  opacity: 0.92;
+  display: block;
+  flex-shrink: 0;
+}
+
+/* No modo colapsado, mostra só o símbolo (crops da viewBox via object-fit) */
+.sidebar-brand-icon {
+  display: none;
+  width: 32px;
+  height: 32px;
+  filter: brightness(0) invert(1);
+  opacity: 0.90;
+  flex-shrink: 0;
+  /* Mostra somente o ícone/símbolo recortando o wordmark */
+  object-fit: none;
+  object-position: left center;
+  overflow: hidden;
+}
+
+/* ── Nav ─────────────────────────────────────────────────────────── */
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* ── Nav item base ───────────────────────────────────────────────── */
+.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  height: var(--sidebar-item-h);
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--sidebar-text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-regular);
+  font-family: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.sidebar-nav-item:hover {
+  background: var(--sidebar-hover-bg);
+  color: var(--sidebar-text-hover);
+}
+
+.sidebar-nav-item.is-active {
+  background: var(--sidebar-active-bg);
+  color: var(--sidebar-text-active);
+  font-weight: var(--font-weight-medium);
+}
+
+.sidebar-nav-item.is-danger {
+  color: rgba(248, 113, 113, 0.72);
+}
+
+.sidebar-nav-item.is-danger:hover {
+  background: rgba(220, 38, 38, 0.12);
+  color: rgba(248, 113, 113, 0.92);
+}
+
+.sidebar-nav-item:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.sidebar-nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0.78;
+  transition: opacity 0.14s ease;
+}
+
+.sidebar-nav-item:hover .sidebar-nav-icon,
+.sidebar-nav-item.is-active .sidebar-nav-icon {
+  opacity: 1;
+}
+
+.sidebar-nav-label {
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+/* ── Divider entre nav principal e secundária ────────────────────── */
+.sidebar-nav-divider {
+  height: 1px;
+  background: var(--sidebar-divider);
+  margin: var(--space-3) var(--space-2);
+  flex-shrink: 0;
+}
+
+/* ── Secondary nav ───────────────────────────────────────────────── */
+.sidebar-secondary-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: var(--space-3);
+}
+
+/* ── Footer ──────────────────────────────────────────────────────── */
+.sidebar-footer {
+  flex-shrink: 0;
+  padding: var(--space-3) var(--space-4) var(--space-5);
+  border-top: 1px solid var(--sidebar-divider);
+}
+
+.sidebar-user {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-2) 0;
+  overflow: hidden;
+}
+
+.sidebar-user-avatar {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  border-radius: var(--radius-full);
+  background: rgba(106, 151, 186, 0.22);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--brand-300);
+}
+
+.sidebar-user-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.sidebar-user-name {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: rgba(255, 255, 255, 0.82);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-user-email {
+  font-size: 11px;
+  color: var(--sidebar-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Estado colapsado ────────────────────────────────────────────── */
+.sidebar.is-collapsed {
+  width: var(--sidebar-width-collapsed);
+  min-width: var(--sidebar-width-collapsed);
+}
+
+.sidebar.is-collapsed .sidebar-body {
+  padding-left: var(--space-3);
+  padding-right: var(--space-3);
+}
+
+.sidebar.is-collapsed .sidebar-footer {
+  padding-left: var(--space-3);
+  padding-right: var(--space-3);
+}
+
+.sidebar.is-collapsed .sidebar-brand-wordmark {
+  display: none;
+}
+
+.sidebar.is-collapsed .sidebar-brand-icon {
+  display: block;
+}
+
+.sidebar.is-collapsed .sidebar-nav-item {
+  justify-content: center;
+  padding: 0;
+}
+
+.sidebar.is-collapsed .sidebar-nav-label,
+.sidebar.is-collapsed .sidebar-user-info {
+  display: none;
+}
+
+.sidebar.is-collapsed .sidebar-user {
+  justify-content: center;
+}
+
+/* ── Responsive: tablet auto-collapse ───────────────────────────── */
+@media (max-width: 1199px) and (min-width: 768px) {
+  .sidebar {
+    width: var(--sidebar-width-collapsed);
+    min-width: var(--sidebar-width-collapsed);
+  }
+
+  .sidebar .sidebar-body {
+    padding-left: var(--space-3);
+    padding-right: var(--space-3);
+  }
+
+  .sidebar .sidebar-footer {
+    padding-left: var(--space-3);
+    padding-right: var(--space-3);
+  }
+
+  .sidebar .sidebar-brand-wordmark { display: none; }
+  .sidebar .sidebar-brand-icon { display: block; }
+
+  .sidebar .sidebar-nav-item {
+    justify-content: center;
+    padding: 0;
+  }
+
+  .sidebar .sidebar-nav-label,
+  .sidebar .sidebar-user-info {
+    display: none;
+  }
+
+  .sidebar .sidebar-user {
+    justify-content: center;
+  }
+}
+
+/* ── Mobile: drawer a partir da esquerda ─────────────────────────── */
+@media (max-width: 767px) {
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    height: 100dvh;
+    width: min(82vw, 288px);
+    min-width: 0;
+    z-index: 41;
+    transform: translateX(-100%);
+    transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .sidebar.is-open {
+    transform: translateX(0);
+  }
+
+  /* No mobile, o estado is-collapsed não recolhe */
+  .sidebar.is-collapsed {
+    width: min(82vw, 288px);
+  }
+
+  .sidebar.is-collapsed .sidebar-brand-wordmark { display: block; }
+  .sidebar.is-collapsed .sidebar-brand-icon { display: none; }
+  .sidebar.is-collapsed .sidebar-nav-item { justify-content: flex-start; padding: 0 var(--space-3); }
+  .sidebar.is-collapsed .sidebar-nav-label { display: block; }
+  .sidebar.is-collapsed .sidebar-user-info { display: flex; }
+  .sidebar.is-collapsed .sidebar-user { justify-content: flex-start; }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    border: none;
+    background: rgba(10, 18, 28, 0.52);
+    backdrop-filter: blur(2px);
+    z-index: 40;
+    cursor: pointer;
+  }
+}

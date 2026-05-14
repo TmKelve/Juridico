@@ -1,0 +1,27 @@
+node_modules
+dist
+dist-ssr
+*.tsbuildinfo
+*.log
+
+# Keep environment variables out of version control
+.env
+.env.*
+!.env.example
+
+# Local app/tooling state
+.codex/
+.obsidian/
+test-results/
+frontend/test-results/
+frontend/dashboard-screenshot-*.png
+backend/tmp_hash.js
+media/
+
+# Generated Prisma artifacts and local databases
+generated/prisma/
+backend/src/generated/prisma/
+backend/prisma/dev.db
+backend/.postgres-local/
+*.db
+*.db-journal

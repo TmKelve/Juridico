@@ -1,0 +1,73 @@
+/**
+ * Vercel Deployment Configuration
+ * Frontend deployment bundle with staging + production environments
+ */
+
+{
+  "version": 2,
+  "name": "lexora-juridico-frontend",
+  "alias": ["lexora.cloud", "www.lexora.cloud"],
+  "env": [
+    {
+      "key": "VITE_API_URL",
+      "value": "https://api-staging.lexora.cloud",
+      "target": ["preview"]
+    },
+    {
+      "key": "VITE_API_URL",
+      "value": "https://api.lexora.cloud",
+      "target": ["production"]
+    },
+    {
+      "key": "VITE_SENTRY_DSN",
+      "value": "https://YOUR_SENTRY_KEY@sentry.io/YOUR_PROJECT_ID"
+    },
+    {
+      "key": "VITE_GA_MEASUREMENT_ID",
+      "value": "G-XXXXXXXXXX"
+    }
+  ],
+  "buildCommand": "npm run build",
+  "framework": "vite",
+  "outputDirectory": "dist",
+  "regions": ["sao1", "gru1"],
+  "git": {
+    "deploymentEnabled": {
+      "main": true,
+      "develop": true
+    }
+  },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, must-revalidate"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "SAMEORIGIN"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        }
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "https://api.lexora.cloud/$1"
+    }
+  ]
+}

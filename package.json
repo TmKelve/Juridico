@@ -1,0 +1,19 @@
+{
+  "name": "app-juridico",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "backend:build": "npm --prefix backend run build",
+    "backend:prisma:generate": "npm --prefix backend run prisma:generate",
+    "backend:prisma:migrate:dev": "npm --prefix backend run prisma:migrate:dev",
+    "backend:prisma:migrate:deploy": "npm --prefix backend run prisma:migrate:deploy",
+    "frontend:build": "npm --prefix frontend run build",
+    "frontend:lint": "npm --prefix frontend run lint",
+    "frontend:test:smoke": "npm --prefix frontend run test:smoke",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "Workspace orchestrator for frontend and backend"
+}

@@ -1,0 +1,291 @@
+/* ═══════════════════════════════════════════════════════════════════ */
+/* TOPBAR — Lexora                                                     */
+/* Premium lightweight top bar                                         */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Container ───────────────────────────────────────────────────── */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 56px;
+  min-height: 56px;
+  padding: 0 var(--space-5);
+  background: var(--white);
+  border-bottom: 1px solid var(--neutral-100);
+  gap: var(--space-4);
+}
+
+.topbar svg {
+  stroke-width: 1.75;
+}
+
+/* ── Start: menu + search ────────────────────────────────────────── */
+.topbar-start {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Menu button ─────────────────────────────────────────────────── */
+.topbar-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--neutral-600);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.topbar-menu-btn:hover {
+  background: var(--neutral-100);
+  color: var(--neutral-900);
+}
+
+.topbar-menu-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+/* ── Search ──────────────────────────────────────────────────────── */
+.topbar-search {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: 380px;
+  height: 38px;
+  padding: 0 var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  background: var(--neutral-50);
+  cursor: text;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.topbar-search-icon {
+  color: var(--neutral-400);
+  flex-shrink: 0;
+  transition: color 0.15s ease;
+}
+
+.topbar-search:hover {
+  background: var(--neutral-100);
+}
+
+.topbar-search:hover .topbar-search-icon {
+  color: var(--neutral-500);
+}
+
+.topbar-search:focus-within {
+  background: var(--white);
+  border-color: var(--brand-400);
+  box-shadow: 0 0 0 3px rgba(76, 120, 154, 0.10);
+}
+
+.topbar-search:focus-within .topbar-search-icon {
+  color: var(--brand-600);
+}
+
+.topbar-search input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: var(--font-size-sm);
+  color: var(--neutral-900);
+  line-height: 38px;
+  min-height: 0;
+}
+
+.topbar-search input::placeholder {
+  color: var(--neutral-400);
+  font-weight: var(--font-weight-regular);
+}
+
+.topbar-search input:focus-visible {
+  outline: none;
+}
+
+/* ── End: actions + user ─────────────────────────────────────────── */
+.topbar-end {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+
+/* ── Icon buttons ────────────────────────────────────────────────── */
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.topbar-icon-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--neutral-500);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+  padding: 0;
+}
+
+.topbar-icon-btn:hover {
+  background: var(--neutral-100);
+  color: var(--neutral-800);
+}
+
+.topbar-icon-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+/* ── Badge ───────────────────────────────────────────────────────── */
+.topbar-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: var(--radius-full);
+  background: var(--error-600);
+  color: var(--white);
+  font-size: 10px;
+  font-weight: var(--font-weight-bold);
+  line-height: 16px;
+  text-align: center;
+  padding: 0 4px;
+  pointer-events: none;
+  border: 2px solid var(--white);
+}
+
+/* ── Separator ───────────────────────────────────────────────────── */
+.topbar-separator {
+  display: block;
+  width: 1px;
+  height: 24px;
+  background: var(--neutral-150, var(--neutral-200));
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+/* ── User menu ───────────────────────────────────────────────────── */
+.topbar-user {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px 8px 4px 4px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.12s ease;
+  font-family: inherit;
+}
+
+.topbar-user:hover {
+  background: var(--neutral-100);
+}
+
+.topbar-user:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.topbar-user-avatar {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--brand-600), var(--brand-800));
+  color: var(--white);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 1;
+  /* se for <img> */
+  object-fit: cover;
+}
+
+img.topbar-user-avatar {
+  border: 2px solid var(--neutral-100);
+}
+
+.topbar-user-name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--neutral-700);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+  text-transform: lowercase;
+  line-height: 1;
+}
+
+.topbar-user-chevron {
+  color: var(--neutral-400);
+  flex-shrink: 0;
+}
+
+/* ── Responsive: tablet ──────────────────────────────────────────── */
+@media (max-width: 1199px) and (min-width: 768px) {
+  .topbar {
+    padding: 0 var(--space-4);
+  }
+
+  .topbar-search {
+    max-width: 280px;
+  }
+
+  .topbar-user-name {
+    display: none;
+  }
+}
+
+/* ── Responsive: mobile ──────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .topbar {
+    padding: 0 var(--space-3);
+    gap: var(--space-2);
+  }
+
+  .topbar-search {
+    display: none;
+  }
+
+  .topbar-actions .topbar-icon-btn:nth-child(2),
+  .topbar-actions .topbar-icon-btn:nth-child(3) {
+    display: none;
+  }
+
+  .topbar-user-name {
+    display: none;
+  }
+
+  .topbar-separator {
+    display: none;
+  }
+}
