@@ -158,8 +158,12 @@
 }
 
 .cli-kpi-card--button {
+  display: block;
   width: 100%;
+  min-height: 0;
+  padding: var(--space-3) var(--space-4);
   text-align: left;
+  font: inherit;
   cursor: pointer;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
