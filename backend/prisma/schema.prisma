@@ -29,6 +29,7 @@ model Client {
   notes      String?
   createdAt  DateTime  @default(now())
   processes  Process[]
+  atendimentos Atendimento[]
 }
 
 model Process {
@@ -77,11 +78,24 @@ model Documento {
 }
 
 model Atendimento {
-  id          Int      @id @default(autoincrement())
-  processId   Int
-  process     Process  @relation(fields: [processId], references: [id])
-  title       String
-  description String
-  date        DateTime @default(now())
-  actorEmail  String
+  id                Int       @id @default(autoincrement())
+  processId         Int?
+  process           Process?  @relation(fields: [processId], references: [id])
+  clientId          Int?
+  clientRecord      Client?   @relation(fields: [clientId], references: [id])
+  subject           String    @map("title")
+  summary           String    @map("description")
+  notes             String?
+  occurredAt        DateTime  @default(now()) @map("date")
+  channel           String    @default("interno")
+  type              String    @default("rotina")
+  status            String    @default("aberto")
+  priority          String    @default("media")
+  responsible       String?
+  nextStep          String?
+  scheduledReturnAt DateTime?
+  critical          Boolean   @default(false)
+  actorEmail        String
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 }

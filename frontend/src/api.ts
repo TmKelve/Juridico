@@ -61,6 +61,30 @@ export interface ApiClient {
   };
 }
 
+export interface ApiAttendance {
+  id: number;
+  processId: number | null;
+  processLabel: string;
+  processTitle: string;
+  clientId: number | null;
+  client: string;
+  canal: 'whatsapp' | 'telefone' | 'email' | 'presencial' | 'portal' | 'interno';
+  tipo: 'consulta' | 'urgencia' | 'rotina' | 'triagem' | 'acompanhamento';
+  assunto: string;
+  resumo: string;
+  observacoes: string;
+  status: 'aberto' | 'resolvido' | 'aguardando_cliente' | 'sem_resposta' | 'agendado';
+  priority: 'alta' | 'media' | 'baixa';
+  responsavel: string;
+  area: string;
+  dataHora: string;
+  proximoPasso: string;
+  retornoAgendado: string | null;
+  critico: boolean;
+  actorEmail: string;
+  owner?: ApiUser;
+}
+
 interface LoginResponse {
   user: ApiUser;
 }
@@ -235,9 +259,50 @@ export const api = {
   createDocumento: (processId: number, data: { title: string; description: string }) =>
     apiClient(`/processes/${processId}/documentos`, { method: 'POST', body: data }),
 
+  getAttendances: () =>
+    apiClient<ApiAttendance[]>('/attendances'),
+
+  getAttendance: (id: number) =>
+    apiClient<ApiAttendance>(`/attendances/${id}`),
+
+  createAttendance: (data: {
+    processId?: number;
+    clientId?: number;
+    client?: string;
+    canal: ApiAttendance['canal'];
+    tipo?: ApiAttendance['tipo'];
+    assunto: string;
+    resumo?: string;
+    observacoes?: string;
+    status?: ApiAttendance['status'];
+    priority?: ApiAttendance['priority'];
+    responsavel?: string;
+    proximoPasso?: string;
+    retornoAgendado?: string;
+    dataHora?: string;
+    critical?: boolean;
+  }) =>
+    apiClient<ApiAttendance>('/attendances', { method: 'POST', body: data }),
+
+  updateAttendance: (id: number, data: Partial<{
+    canal: ApiAttendance['canal'];
+    tipo: ApiAttendance['tipo'];
+    assunto: string;
+    resumo: string;
+    observacoes: string;
+    status: ApiAttendance['status'];
+    priority: ApiAttendance['priority'];
+    responsavel: string;
+    proximoPasso: string;
+    retornoAgendado: string | null;
+    dataHora: string;
+    critical: boolean;
+  }>) =>
+    apiClient<ApiAttendance>(`/attendances/${id}`, { method: 'PUT', body: data }),
+
   getAtendimentos: (processId: number) =>
-    apiClient<unknown[]>(`/processes/${processId}/atendimentos`),
+    apiClient<ApiAttendance[]>(`/processes/${processId}/atendimentos`),
 
   createAtendimento: (processId: number, data: { title: string; description: string }) =>
-    apiClient(`/processes/${processId}/atendimentos`, { method: 'POST', body: data }),
+    apiClient<ApiAttendance>(`/processes/${processId}/atendimentos`, { method: 'POST', body: data }),
 };

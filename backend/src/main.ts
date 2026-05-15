@@ -236,6 +236,83 @@ async function seedData() {
   }
 
   await syncClientsFromProcesses();
+
+  const attendanceCount = await prisma.atendimento.count();
+  if (attendanceCount === 0) {
+    const seededProcesses = await prisma.process.findMany({
+      include: {
+        owner: { select: { email: true } },
+        clientRecord: true,
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    const channels = ['email', 'telefone', 'whatsapp', 'portal', 'presencial', 'interno'] as const;
+    const types = ['consulta', 'urgencia', 'rotina', 'triagem', 'acompanhamento'] as const;
+    const statuses = ['aberto', 'aguardando_cliente', 'resolvido', 'agendado'] as const;
+    const subjects = [
+      'Informações sobre audiência',
+      'Solicitação de documentos complementares',
+      'Confirmação de retorno jurídico',
+      'Atualização sobre andamento do processo',
+      'Alinhamento de próximos passos',
+      'Urgência em notificação recebida',
+    ] as const;
+
+    for (const [index, process] of seededProcesses.entries()) {
+      const baseDate = new Date();
+      const firstDate = new Date(baseDate);
+      firstDate.setDate(baseDate.getDate() - (index + 1));
+      firstDate.setHours(9 + index, 15, 0, 0);
+
+      const secondDate = new Date(baseDate);
+      secondDate.setDate(baseDate.getDate() - (index + 3));
+      secondDate.setHours(14 + index, 30, 0, 0);
+
+      const clientId = process.clientId ?? process.clientRecord?.id ?? null;
+      const responsible = getResponsibleLabel(process.owner?.email);
+
+      await prisma.atendimento.create({
+        data: {
+          processId: process.id,
+          clientId,
+          subject: subjects[index % subjects.length],
+          summary: `Cliente entrou em contato para tratar ${subjects[index % subjects.length].toLowerCase()} no processo ${process.title}.`,
+          notes: 'Seed inicial de atendimento para validar a carteira relacional.',
+          occurredAt: firstDate,
+          channel: channels[index % channels.length],
+          type: types[index % types.length],
+          status: statuses[index % statuses.length],
+          priority: index % 3 === 0 ? 'alta' : index % 2 === 0 ? 'media' : 'baixa',
+          responsible,
+          nextStep: index % 2 === 0 ? `Retornar cliente ${process.client} com atualização do processo.` : '',
+          scheduledReturnAt: index % 2 === 0 ? new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + index + 1) : null,
+          critical: process.status !== 'ativo',
+          actorEmail: process.owner?.email ?? 'admin@juridico.com',
+        },
+      });
+
+      await prisma.atendimento.create({
+        data: {
+          processId: process.id,
+          clientId,
+          subject: subjects[(index + 2) % subjects.length],
+          summary: `Segundo contato registrado na carteira para o cliente ${process.client}.`,
+          notes: '',
+          occurredAt: secondDate,
+          channel: channels[(index + 2) % channels.length],
+          type: types[(index + 1) % types.length],
+          status: index % 2 === 0 ? 'sem_resposta' : 'aberto',
+          priority: index % 2 === 0 ? 'media' : 'baixa',
+          responsible,
+          nextStep: `Consolidar retorno e registrar encaminhamento do processo ${process.title}.`,
+          scheduledReturnAt: null,
+          critical: false,
+          actorEmail: process.owner?.email ?? 'admin@juridico.com',
+        },
+      });
+    }
+  }
 }
 
 seedData().catch((err) => {
@@ -252,6 +329,30 @@ function canManageClients(role: string) {
   return role === 'ADM' || role === 'ADV';
 }
 
+function canReadProcess(user: UserToken, process: { ownerId: number }) {
+  return user.role === 'ADM' || user.role === 'FIN' || process.ownerId === user.sub;
+}
+
+async function assertProcessAccess(user: UserToken, processId: number) {
+  const process = await prisma.process.findUnique({
+    where: { id: processId },
+    include: {
+      owner: { select: { id: true, email: true, role: true } },
+      clientRecord: true,
+    },
+  });
+
+  if (!process) {
+    return { error: { status: 404, message: 'Processo nao encontrado' } as const };
+  }
+
+  if (!canReadProcess(user, process)) {
+    return { error: { status: 403, message: 'Acesso negado' } as const };
+  }
+
+  return { process };
+}
+
 function buildClientPayload(client: any) {
   const processItems = client.processes.map((process: any) => ({
     id: process.id,
@@ -261,7 +362,7 @@ function buildClientPayload(client: any) {
     status: process.status,
     ownerId: process.ownerId,
     owner: process.owner,
-    lastAttendanceAt: process.atendimentos[0]?.date.toISOString() ?? null,
+    lastAttendanceAt: process.atendimentos[0]?.occurredAt.toISOString() ?? null,
     pendingDocumentsCount: process.documentos.filter((documento: any) => documento.status === 'pendente').length,
   }));
 
@@ -294,6 +395,36 @@ function buildClientPayload(client: any) {
       pendingAttendance,
       pendingItems,
     },
+  };
+}
+
+function buildAttendancePayload(attendance: any) {
+  const process = attendance.process;
+  const client = attendance.clientRecord ?? process?.clientRecord ?? null;
+  const owner = process?.owner ?? null;
+
+  return {
+    id: attendance.id,
+    processId: attendance.processId ?? null,
+    processLabel: attendance.processId ? `#${attendance.processId}` : '—',
+    processTitle: process?.title ?? '',
+    clientId: client?.id ?? attendance.clientId ?? null,
+    client: client?.name ?? process?.client ?? 'Cliente não informado',
+    canal: attendance.channel,
+    tipo: attendance.type,
+    assunto: attendance.subject,
+    resumo: attendance.summary,
+    observacoes: attendance.notes ?? '',
+    status: attendance.status,
+    priority: attendance.priority,
+    responsavel: attendance.responsible ?? getResponsibleLabel(attendance.actorEmail) ?? owner?.email?.split('@')[0] ?? 'sem-responsavel',
+    area: process?.phase ?? client?.legalArea ?? 'Civel',
+    dataHora: attendance.occurredAt.toISOString(),
+    proximoPasso: attendance.nextStep ?? '',
+    retornoAgendado: attendance.scheduledReturnAt ? attendance.scheduledReturnAt.toISOString().slice(0, 10) : null,
+    critico: Boolean(attendance.critical),
+    actorEmail: attendance.actorEmail,
+    owner,
   };
 }
 
@@ -342,7 +473,7 @@ app.get('/clients', async (req, res) => {
       processes: {
         include: {
           owner: { select: { id: true, email: true, role: true } },
-          atendimentos: { orderBy: { date: 'desc' }, take: 1 },
+          atendimentos: { orderBy: { occurredAt: 'desc' }, take: 1 },
           documentos: true,
         },
         orderBy: { id: 'desc' },
@@ -364,7 +495,7 @@ app.get('/clients/:id', async (req, res) => {
       processes: {
         include: {
           owner: { select: { id: true, email: true, role: true } },
-          atendimentos: { orderBy: { date: 'desc' }, take: 1 },
+          atendimentos: { orderBy: { occurredAt: 'desc' }, take: 1 },
           documentos: true,
         },
         orderBy: { id: 'desc' },
@@ -406,7 +537,7 @@ app.post('/clients', async (req, res) => {
       processes: {
         include: {
           owner: { select: { id: true, email: true, role: true } },
-          atendimentos: { orderBy: { date: 'desc' }, take: 1 },
+          atendimentos: { orderBy: { occurredAt: 'desc' }, take: 1 },
           documentos: true,
         },
       },
@@ -452,7 +583,7 @@ app.put('/clients/:id', async (req, res) => {
       processes: {
         include: {
           owner: { select: { id: true, email: true, role: true } },
-          atendimentos: { orderBy: { date: 'desc' }, take: 1 },
+          atendimentos: { orderBy: { occurredAt: 'desc' }, take: 1 },
           documentos: true,
         },
       },
@@ -467,6 +598,215 @@ app.put('/clients/:id', async (req, res) => {
   }
 
   res.json(buildClientPayload(updated));
+});
+
+app.get('/attendances', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const attendances = await prisma.atendimento.findMany({
+    where: decoded.role === 'ADM' || decoded.role === 'FIN'
+      ? undefined
+      : {
+          OR: [
+            { actorEmail: decoded.email },
+            { process: { ownerId: decoded.sub } },
+            { responsible: getResponsibleLabel(decoded.email) },
+          ],
+        },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+      clientRecord: true,
+    },
+    orderBy: { occurredAt: 'desc' },
+  });
+
+  res.json(attendances.map((attendance) => buildAttendancePayload(attendance)));
+});
+
+app.get('/attendances/:id', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const attendance = await prisma.atendimento.findUnique({
+    where: { id: Number(req.params.id) },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+      clientRecord: true,
+    },
+  });
+
+  if (!attendance) return res.status(404).send({ message: 'Atendimento não encontrado' });
+  if (attendance.process && !canReadProcess(decoded, attendance.process)) {
+    return res.status(403).send({ message: 'Acesso negado' });
+  }
+
+  res.json(buildAttendancePayload(attendance));
+});
+
+app.post('/attendances', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const {
+    processId,
+    clientId,
+    client,
+    canal,
+    tipo,
+    assunto,
+    resumo,
+    observacoes,
+    status,
+    priority,
+    responsavel,
+    proximoPasso,
+    retornoAgendado,
+    dataHora,
+    critical,
+  } = req.body;
+
+  if (!assunto || typeof assunto !== 'string' || !assunto.trim()) {
+    return res.status(400).send({ message: 'Assunto do atendimento é obrigatório' });
+  }
+
+  let processRecord: any = null;
+  if (processId) {
+    const access = await assertProcessAccess(decoded, Number(processId));
+    if (access.error) return res.status(access.error.status).send({ message: access.error.message });
+    processRecord = access.process;
+  }
+
+  let linkedClientId: number | null = null;
+  if (clientId) {
+    const existingClient = await clientStore.findUnique({ where: { id: Number(clientId) } });
+    if (!existingClient) return res.status(404).send({ message: 'Cliente não encontrado' });
+    linkedClientId = existingClient.id;
+  } else if (processRecord?.clientId) {
+    linkedClientId = processRecord.clientId;
+  } else if (typeof client === 'string' && client.trim()) {
+    const linkedClient = await clientStore.upsert({
+      where: { name: client.trim() },
+      update: {},
+      create: {
+        name: client.trim(),
+        type: 'PF',
+        status: 'ativo',
+        legalArea: processRecord?.phase ?? null,
+        responsible: responsavel || getResponsibleLabel(decoded.email),
+        notes: 'Cliente criado automaticamente a partir de um atendimento.',
+      },
+    });
+    linkedClientId = linkedClient.id;
+  }
+
+  const created = await prisma.atendimento.create({
+    data: {
+      processId: processRecord?.id ?? null,
+      clientId: linkedClientId,
+      subject: assunto.trim(),
+      summary: typeof resumo === 'string' ? resumo.trim() : '',
+      notes: typeof observacoes === 'string' ? observacoes.trim() : null,
+      occurredAt: dataHora ? new Date(dataHora) : new Date(),
+      channel: canal || 'interno',
+      type: tipo || 'rotina',
+      status: status || 'aberto',
+      priority: priority || 'media',
+      responsible: responsavel || getResponsibleLabel(decoded.email),
+      nextStep: typeof proximoPasso === 'string' ? proximoPasso.trim() : null,
+      scheduledReturnAt: retornoAgendado ? new Date(retornoAgendado) : null,
+      critical: Boolean(critical ?? (processRecord?.status && processRecord.status !== 'ativo')),
+      actorEmail: decoded.email,
+    },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+      clientRecord: true,
+    },
+  });
+
+  res.status(201).json(buildAttendancePayload(created));
+});
+
+app.put('/attendances/:id', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const current = await prisma.atendimento.findUnique({
+    where: { id: Number(req.params.id) },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+      clientRecord: true,
+    },
+  });
+
+  if (!current) return res.status(404).send({ message: 'Atendimento não encontrado' });
+  if (current.process && !canReadProcess(decoded, current.process)) {
+    return res.status(403).send({ message: 'Acesso negado' });
+  }
+
+  const {
+    canal,
+    tipo,
+    assunto,
+    resumo,
+    observacoes,
+    status,
+    priority,
+    responsavel,
+    proximoPasso,
+    retornoAgendado,
+    dataHora,
+    critical,
+  } = req.body;
+
+  const updated = await prisma.atendimento.update({
+    where: { id: current.id },
+    data: {
+      subject: typeof assunto === 'string' && assunto.trim() ? assunto.trim() : current.subject,
+      summary: typeof resumo === 'string' ? resumo.trim() : current.summary,
+      notes: observacoes === undefined ? current.notes : (typeof observacoes === 'string' ? observacoes.trim() : null),
+      occurredAt: dataHora ? new Date(dataHora) : current.occurredAt,
+      channel: canal ?? current.channel,
+      type: tipo ?? current.type,
+      status: status ?? current.status,
+      priority: priority ?? current.priority,
+      responsible: responsavel ?? current.responsible,
+      nextStep: proximoPasso === undefined ? current.nextStep : (typeof proximoPasso === 'string' ? proximoPasso.trim() : null),
+      scheduledReturnAt: retornoAgendado === undefined ? current.scheduledReturnAt : (retornoAgendado ? new Date(retornoAgendado) : null),
+      critical: critical ?? current.critical,
+    },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+      clientRecord: true,
+    },
+  });
+
+  res.json(buildAttendancePayload(updated));
 });
 
 app.get('/permissions', (req, res) => {
@@ -689,23 +1029,61 @@ app.post('/processes/:id/documentos', async (req, res) => {
 app.get('/processes/:id/atendimentos', async (req, res) => {
   const decoded = getUserFromReq(req);
   if (!decoded) return res.status(401).send({ message: 'Token nao fornecido ou invalido' });
-  const process = await prisma.process.findUnique({ where: { id: Number(req.params.id) } });
-  if (!process) return res.status(404).send({ message: 'Processo nao encontrado' });
-  if (decoded.role !== 'ADM' && decoded.role !== 'FIN' && process.ownerId !== decoded.sub) return res.status(403).send({ message: 'Acesso negado' });
-  const data = await prisma.atendimento.findMany({ where: { processId: Number(req.params.id) }, orderBy: { date: 'desc' } });
-  res.json(data);
+  const access = await assertProcessAccess(decoded, Number(req.params.id));
+  if (access.error) return res.status(access.error.status).send({ message: access.error.message });
+  const data = await prisma.atendimento.findMany({
+    where: { processId: Number(req.params.id) },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+      clientRecord: true,
+    },
+    orderBy: { occurredAt: 'desc' },
+  });
+  res.json(data.map((item) => buildAttendancePayload(item)));
 });
 
 app.post('/processes/:id/atendimentos', async (req, res) => {
   const decoded = getUserFromReq(req);
   if (!decoded) return res.status(401).send({ message: 'Token nao fornecido ou invalido' });
-  const process = await prisma.process.findUnique({ where: { id: Number(req.params.id) } });
-  if (!process) return res.status(404).send({ message: 'Processo nao encontrado' });
-  if (decoded.role !== 'ADM' && decoded.role !== 'FIN' && process.ownerId !== decoded.sub) return res.status(403).send({ message: 'Acesso negado' });
-  const { title, description } = req.body;
-  if (!title || !description) return res.status(400).send({ message: 'title e description sao obrigatorios' });
-  const item = await prisma.atendimento.create({ data: { processId: Number(req.params.id), title, description, actorEmail: decoded.email } });
-  res.status(201).json(item);
+  const access = await assertProcessAccess(decoded, Number(req.params.id));
+  if (access.error) return res.status(access.error.status).send({ message: access.error.message });
+
+  const { title, description, ...rest } = req.body;
+  const process = access.process;
+  const item = await prisma.atendimento.create({
+    data: {
+      processId: process.id,
+      clientId: process.clientId ?? process.clientRecord?.id ?? null,
+      subject: typeof rest.assunto === 'string' && rest.assunto.trim() ? rest.assunto.trim() : title,
+      summary: typeof rest.resumo === 'string' ? rest.resumo.trim() : description,
+      notes: typeof rest.observacoes === 'string' ? rest.observacoes.trim() : null,
+      occurredAt: rest.dataHora ? new Date(rest.dataHora) : new Date(),
+      channel: rest.canal || 'interno',
+      type: rest.tipo || 'rotina',
+      status: rest.status || 'aberto',
+      priority: rest.priority || 'media',
+      responsible: rest.responsavel || getResponsibleLabel(decoded.email),
+      nextStep: typeof rest.proximoPasso === 'string' ? rest.proximoPasso.trim() : null,
+      scheduledReturnAt: rest.retornoAgendado ? new Date(rest.retornoAgendado) : null,
+      critical: Boolean(rest.critical ?? (process.status !== 'ativo')),
+      actorEmail: decoded.email,
+    },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+      clientRecord: true,
+    },
+  });
+  res.status(201).json(buildAttendancePayload(item));
 });
 app.get('/', (req, res) => {
   res.send({ message: 'SaaS Jurídico API v1' });

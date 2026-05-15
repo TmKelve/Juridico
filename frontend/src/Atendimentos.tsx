@@ -22,7 +22,7 @@ import {
   User,
   X,
 } from 'lucide-react';
-import { api } from './api';
+import { api, type ApiAttendance } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import './Atendimentos.css';
 
@@ -135,19 +135,6 @@ const EMPTY_FORM: NewAtendForm = {
 const AREAS = ['Trabalhista', 'Civel', 'Tributario', 'Empresarial', 'Previdenciario'];
 const CANAIS: Canal[] = ['whatsapp', 'telefone', 'email', 'presencial', 'portal', 'interno'];
 const TIPOS: TipoAtendimento[] = ['consulta', 'urgencia', 'rotina', 'triagem', 'acompanhamento'];
-const ASSUNTOS = [
-  'Dúvida sobre andamento do processo',
-  'Solicitação de documentos pendentes',
-  'Informações sobre data de audiência',
-  'Prazo e pagamento de custas',
-  'Resultado de diligência judicial',
-  'Atualização de dados de contato',
-  'Urgência: notificação recebida',
-  'Solicitação de extensão de prazo',
-  'Conferência de petição',
-  'Orientação sobre acordo extrajudicial',
-];
-
 const STATUS_CFG: Record<AtendStatus, { label: string; variant: string }> = {
   aberto:            { label: 'Aberto',              variant: 'info'    },
   resolvido:         { label: 'Resolvido',            variant: 'success' },
@@ -188,6 +175,29 @@ function formatDateShort(iso: string) {
   return new Date(`${iso}T00:00:00`).toLocaleDateString('pt-BR');
 }
 
+function mapApiAttendance(item: ApiAttendance): AtendimentoItem {
+  return {
+    id: String(item.id),
+    processId: item.processId ?? 0,
+    processLabel: item.processLabel,
+    processTitle: item.processTitle,
+    client: item.client,
+    canal: item.canal,
+    tipo: item.tipo,
+    assunto: item.assunto,
+    resumo: item.resumo,
+    observacoes: item.observacoes,
+    status: item.status,
+    priority: item.priority,
+    responsavel: item.responsavel,
+    area: item.area,
+    dataHora: item.dataHora,
+    proximoPasso: item.proximoPasso,
+    retornoAgendado: item.retornoAgendado,
+    critico: item.critico,
+  };
+}
+
 function isSameDate(iso: string, date: Date) {
   return iso.slice(0, 10) === toIsoDate(date);
 }
@@ -197,77 +207,6 @@ function isWithinDays(iso: string, days: number) {
   const now = new Date();
   const diff = (from.getTime() - now.getTime()) / 864e5;
   return diff <= days && diff >= -days;
-}
-
-// ─── mock data builder ────────────────────────────────────────────────────────
-
-function makeAtendimentos(processes: ProcessRecord[], userEmail: string): AtendimentoItem[] {
-  const base = new Date();
-  const ownerLabel = userEmail.split('@')[0];
-
-  return processes.flatMap((process, index) => {
-    const area = AREAS[(process.id + index) % AREAS.length];
-    const isCritico = (process.id + index) % 5 === 0;
-    const d1 = addDays(base, -((process.id + index) % 8));
-    const d2 = addDays(base, -((process.id + index * 2) % 14));
-
-    const a1: AtendimentoItem = {
-      id: `atd-${process.id}-1`,
-      processId: process.id,
-      processLabel: `#${process.id}`,
-      processTitle: process.title,
-      client: process.client,
-      canal: CANAIS[(process.id + index) % CANAIS.length],
-      tipo: TIPOS[(process.id + index) % TIPOS.length],
-      assunto: ASSUNTOS[(process.id + index) % ASSUNTOS.length],
-      resumo: `Cliente entrou em contato via ${CANAL_LABEL[CANAIS[(process.id + index) % CANAIS.length]]} solicitando ${ASSUNTOS[(process.id + index) % ASSUNTOS.length].toLowerCase()}.`,
-      observacoes: 'Cliente demonstrou preocupação com o prazo. Necessário retorno em até 24h.',
-      status: (
-        (process.id + index) % 5 === 0 ? 'sem_resposta' :
-        (process.id + index) % 4 === 0 ? 'aguardando_cliente' :
-        (process.id + index) % 3 === 0 ? 'resolvido' : 'aberto'
-      ) as AtendStatus,
-      priority: isCritico ? 'alta' : (process.id + index) % 3 === 0 ? 'media' : 'baixa',
-      responsavel: ownerLabel,
-      area,
-      dataHora: `${toIsoDate(d1)}T${String(9 + (process.id % 9)).padStart(2, '0')}:${String((process.id * 7) % 60).padStart(2, '0')}:00`,
-      proximoPasso: (process.id + index) % 4 === 0
-        ? ''
-        : `Retornar com posicionamento sobre ${ASSUNTOS[(process.id + index + 1) % ASSUNTOS.length].toLowerCase()}.`,
-      retornoAgendado: (process.id + index) % 3 === 0
-        ? toIsoDate(addDays(base, (process.id % 5) + 1))
-        : null,
-      critico: isCritico,
-    };
-
-    const a2: AtendimentoItem = {
-      id: `atd-${process.id}-2`,
-      processId: process.id,
-      processLabel: `#${process.id}`,
-      processTitle: process.title,
-      client: process.client,
-      canal: CANAIS[(process.id + index + 2) % CANAIS.length],
-      tipo: TIPOS[(process.id + index + 1) % TIPOS.length],
-      assunto: ASSUNTOS[(process.id + index + 3) % ASSUNTOS.length],
-      resumo: `Segundo contato do cliente sobre andamento geral do processo ${process.title}.`,
-      observacoes: 'Cliente solicita posicionamento até o fim da semana.',
-      status: (
-        (process.id + index) % 7 === 0 ? 'agendado' :
-        (process.id + index) % 2 === 0 ? 'aberto' : 'aguardando_cliente'
-      ) as AtendStatus,
-      priority: (process.id + index) % 2 === 0 ? 'media' : 'baixa',
-      responsavel: ownerLabel,
-      area,
-      dataHora: `${toIsoDate(d2)}T${String(13 + (process.id % 5)).padStart(2, '0')}:${String((process.id * 11) % 60).padStart(2, '0')}:00`,
-      proximoPasso: `Agendar reunião de alinhamento com ${process.client}.`,
-      retornoAgendado: (process.id + index) % 7 === 0
-        ? toIsoDate(addDays(base, 3))
-        : null,
-      critico: false,
-    };
-
-    return [a1, a2];
-  });
 }
 
 // ─── sub-components ────────────────────────────────────────────────────────────
@@ -368,17 +307,28 @@ export function Atendimentos({ user }: AtendimentosProps) {
     setLoading(true);
     setError('');
     try {
-      const res = await api.getProcesses();
-      if (res.status !== 200 || !Array.isArray(res.data)) {
-        setError(res.error || 'Não foi possível carregar atendimentos.');
+      const [processesRes, attendancesRes] = await Promise.all([
+        api.getProcesses(),
+        api.getAttendances(),
+      ]);
+
+      if (processesRes.status !== 200 || !Array.isArray(processesRes.data)) {
+        setError(processesRes.error || 'Não foi possível carregar atendimentos.');
         setLoading(false);
         return;
       }
+
+      if (attendancesRes.status !== 200 || !Array.isArray(attendancesRes.data)) {
+        setError(attendancesRes.error || 'Não foi possível carregar atendimentos.');
+        setLoading(false);
+        return;
+      }
+
       const scoped = isAdv
-        ? (res.data as ProcessRecord[]).filter((p) => p.ownerId === user.id)
-        : (res.data as ProcessRecord[]);
+        ? (processesRes.data as ProcessRecord[]).filter((p) => p.ownerId === user.id)
+        : (processesRes.data as ProcessRecord[]);
       setProcesses(scoped);
-      const items = makeAtendimentos(scoped, user.email);
+      const items = (attendancesRes.data as ApiAttendance[]).map(mapApiAttendance);
       setAtendimentos(items);
       trackEvent('atendimentos_loaded', { count: items.length, role: user.role });
     } catch (err) {
@@ -430,17 +380,35 @@ export function Atendimentos({ user }: AtendimentosProps) {
     setSuccess('Filtro salvo.');
   }
 
-  function markResolved(id: string) {
-    setAtendimentos((prev) => prev.map((a) => a.id === id ? { ...a, status: 'resolvido' } : a));
+  async function markResolved(id: string) {
+    const res = await api.updateAttendance(Number(id), { status: 'resolvido' });
+    if (res.status !== 200) {
+      setError(res.error || 'Não foi possível atualizar o atendimento.');
+      return;
+    }
+
+    const updated = mapApiAttendance(res.data as ApiAttendance);
+    setAtendimentos((prev) => prev.map((a) => a.id === id ? updated : a));
     setOpenMenuId(null);
-    if (selectedItem?.id === id) setSelectedItem((prev) => prev ? { ...prev, status: 'resolvido' } : null);
+    if (selectedItem?.id === id) setSelectedItem(updated);
     setSuccess('Atendimento marcado como resolvido.');
   }
 
-  function scheduleReturn(id: string) {
+  async function scheduleReturn(id: string) {
     const tomorrow = toIsoDate(addDays(new Date(), 1));
-    setAtendimentos((prev) => prev.map((a) => a.id === id ? { ...a, status: 'agendado', retornoAgendado: tomorrow } : a));
+    const res = await api.updateAttendance(Number(id), {
+      status: 'agendado',
+      retornoAgendado: tomorrow,
+    });
+    if (res.status !== 200) {
+      setError(res.error || 'Não foi possível agendar o retorno.');
+      return;
+    }
+
+    const updated = mapApiAttendance(res.data as ApiAttendance);
+    setAtendimentos((prev) => prev.map((a) => a.id === id ? updated : a));
     setOpenMenuId(null);
+    if (selectedItem?.id === id) setSelectedItem(updated);
     setSuccess('Retorno agendado para amanhã.');
   }
 
@@ -468,13 +436,10 @@ export function Atendimentos({ user }: AtendimentosProps) {
     trackEvent('atendimentos_exported', { count: items.length });
   }
 
-  function submitForm(ev: React.FormEvent) {
+  async function submitForm(ev: React.FormEvent) {
     ev.preventDefault();
-    const newItem: AtendimentoItem = {
-      id: `atd-new-${Date.now()}`,
-      processId: Number(form.processId) || 0,
-      processLabel: form.processId ? `#${form.processId}` : '—',
-      processTitle: processes.find((p) => String(p.id) === form.processId)?.title || '',
+    const res = await api.createAttendance({
+      processId: form.processId ? Number(form.processId) : undefined,
       client: form.client,
       canal: (form.canal as Canal) || 'interno',
       tipo: (form.tipo as TipoAtendimento) || 'rotina',
@@ -482,14 +447,18 @@ export function Atendimentos({ user }: AtendimentosProps) {
       resumo: form.resumo,
       observacoes: form.observacoes,
       status: (form.status as AtendStatus) || 'aberto',
-      priority: 'media',
       responsavel: form.responsavel || user.email.split('@')[0],
-      area: 'Civel',
-      dataHora: form.dataHora || new Date().toISOString(),
       proximoPasso: form.proximoPasso,
-      retornoAgendado: form.retornoAgendado || null,
-      critico: false,
-    };
+      retornoAgendado: form.retornoAgendado || undefined,
+      dataHora: form.dataHora || undefined,
+    });
+
+    if (res.status !== 201) {
+      setError(res.error || 'Não foi possível registrar o atendimento.');
+      return;
+    }
+
+    const newItem = mapApiAttendance(res.data as ApiAttendance);
     setAtendimentos((prev) => [newItem, ...prev]);
     setShowForm(false);
     setForm(EMPTY_FORM);
