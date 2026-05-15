@@ -1,5 +1,6 @@
 import { AlertCircle, BarChart2, CheckCircle2, Clock, DollarSign, Scale, Users } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useContextFeed } from '../hooks/useContextFeed';
 import { useDashboardHomeData } from '../hooks/useDashboardHomeData';
 import { useKpiActions } from '../hooks/useKpiActions';
@@ -17,6 +18,7 @@ interface DashboardContainerProps {
 }
 
 export function DashboardContainer({ user }: DashboardContainerProps) {
+  const navigate = useNavigate();
   const { profile, items, loading, error } = useDashboardHomeData(user.role, user.id, user.email);
   const { agenda, movements, alerts } = useContextFeed(items);
   const { onKpiClick, onShortcutClick, onQueueOpen } = useKpiActions();
@@ -55,6 +57,36 @@ export function DashboardContainer({ user }: DashboardContainerProps) {
         : []),
     ];
   }, [items, profile]);
+
+  const hero = useMemo(() => {
+    const overdueCount = items.filter((item) => item.type === 'atrasados').length;
+    const todayCount = items.filter((item) => item.type === 'hoje').length;
+    const pausedCount = items.filter((item) => item.status === 'pausado').length;
+    const agendaToday = agenda.length;
+    const titleByProfile: Record<string, string> = {
+      ADV: 'Meu Dia',
+      ADM: 'Visão do Escritório',
+      FIN: 'Operação Financeira',
+      ATD: 'Atendimento do Dia',
+    };
+    const subtitleByProfile: Record<string, string> = {
+      ADV: 'Priorize prazos, avance pendências e reduza gargalos da sua carteira.',
+      ADM: 'Enxergue carga, bloqueios e urgências antes que virem atraso operacional.',
+      FIN: 'Monitore execução, retornos e pontos que travam cobrança ou andamento.',
+      ATD: 'Acompanhe retornos, agenda e fila de processos com ação pendente.',
+    };
+
+    return {
+      title: titleByProfile[profile] || 'Home Operacional',
+      subtitle: subtitleByProfile[profile] || 'Acompanhe a fila operacional e ataque o que exige ação primeiro.',
+      insights: [
+        `${todayCount} item(ns) exigem atuação hoje`,
+        `${overdueCount} atraso(s) pedem correção imediata`,
+        `${pausedCount} processo(s) estão sem avanço`,
+        `${agendaToday} compromisso(s) no dia`,
+      ],
+    };
+  }, [agenda.length, items, profile]);
 
   const phaseSeries = useMemo<ChartSeries[]>(() => {
     const phaseTotals = items.reduce((acc: Record<string, number>, item) => {
@@ -137,6 +169,21 @@ export function DashboardContainer({ user }: DashboardContainerProps) {
       )}
 
       <DashboardShell
+        header={(
+          <section className="dashboard-hero" aria-label="Resumo do dia">
+            <div className="dashboard-hero-copy">
+              <div className="dashboard-hero-eyebrow">Painel de responsabilidades</div>
+              <h2>{hero.title}</h2>
+              <p>{hero.subtitle}</p>
+            </div>
+
+            <div className="dashboard-hero-insights" aria-label="Insights do dia">
+              {hero.insights.map((insight) => (
+                <span key={insight} className="dashboard-hero-chip">{insight}</span>
+              ))}
+            </div>
+          </section>
+        )}
         kpi={<KpiStrip kpis={kpis} onKpiClick={onKpiClick} />}
         operational={(
           <OperationalQueueContainer
@@ -168,21 +215,45 @@ export function DashboardContainer({ user }: DashboardContainerProps) {
               <div>
                 <small>Detalhes rápidos</small>
                 <h3 id="drawer-title">Processo #{selectedItem.id}</h3>
+                <div className="quick-drawer-meta">
+                  <span className="quick-drawer-chip">{selectedItem.phase}</span>
+                  <span className={`sla-badge sla-${selectedItem.type === 'atrasados' ? 'urgent' : selectedItem.type === 'hoje' ? 'today' : 'ok'}`}>
+                    {selectedItem.sla}
+                  </span>
+                </div>
               </div>
               <button ref={closeDrawerRef} className="btn-secondary" onClick={closeItemDrawer}>
                 Fechar
               </button>
             </header>
             <div className="quick-drawer-body">
-              <p><strong>Título:</strong> {selectedItem.title}</p>
-              <p><strong>Cliente:</strong> {selectedItem.client}</p>
-              <p><strong>Etapa:</strong> {selectedItem.phase}</p>
-              <p><strong>Responsável:</strong> {selectedItem.owner}</p>
-              <p><strong>SLA:</strong> {selectedItem.sla}</p>
-              <p><strong>Pendências:</strong> {selectedItem.pendingSummary}</p>
+              <section className="quick-drawer-section">
+                <small className="quick-drawer-label">Próxima ação</small>
+                <p className="quick-drawer-primary-text">{selectedItem.pendingSummary}</p>
+              </section>
+
+              <section className="quick-drawer-grid">
+                <div>
+                  <small className="quick-drawer-label">Cliente</small>
+                  <p>{selectedItem.client}</p>
+                </div>
+                <div>
+                  <small className="quick-drawer-label">Responsável</small>
+                  <p>{selectedItem.owner}</p>
+                </div>
+                <div>
+                  <small className="quick-drawer-label">Status</small>
+                  <p>{selectedItem.status}</p>
+                </div>
+                <div>
+                  <small className="quick-drawer-label">Fila</small>
+                  <p>{selectedItem.type === 'hoje' ? 'Atuação hoje' : selectedItem.type === 'atrasados' ? 'Atrasado' : 'Próximo período'}</p>
+                </div>
+              </section>
+
               <div className="quick-drawer-actions">
-                <button className="btn-primary">Registrar andamento</button>
-                <button className="btn-ghost">Ir para processo completo</button>
+                <button className="btn-primary" onClick={() => navigate(`/processos/${selectedItem.id}`)}>Abrir processo completo</button>
+                <button className="btn-ghost" onClick={() => navigate('/atendimentos')}>Registrar atendimento</button>
               </div>
             </div>
           </aside>
@@ -190,6 +261,4 @@ export function DashboardContainer({ user }: DashboardContainerProps) {
       )}
     </>
   );
-
-  return <div />;
 }

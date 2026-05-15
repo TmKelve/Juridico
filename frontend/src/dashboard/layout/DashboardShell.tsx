@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 interface DashboardShellProps {
+  header?: ReactNode;
   kpi: ReactNode;
   operational: ReactNode;
   context: ReactNode;
@@ -8,9 +9,10 @@ interface DashboardShellProps {
   support: ReactNode;
 }
 
-export function DashboardShell({ kpi, operational, context, analytics, support }: DashboardShellProps) {
+export function DashboardShell({ header, kpi, operational, context, analytics, support }: DashboardShellProps) {
   return (
     <div className="dashboard-page">
+      {header}
       {kpi}
       <section className="operational-core" aria-label="Núcleo operacional">
         {operational}

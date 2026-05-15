@@ -1,4 +1,4 @@
-import { PlusCircle, CalendarDays, SlidersHorizontal, LayoutGrid } from 'lucide-react';
+import { CalendarDays, Clock3, PlusCircle, Scale } from 'lucide-react';
 import type { AgendaItem, AlertItem, MovementItem } from '../types';
 import { CriticalAlertsWidget } from '../widgets/CriticalAlertsWidget';
 import { RecentMovementsWidget } from '../widgets/RecentMovementsWidget';
@@ -20,8 +20,8 @@ export function ContextRailContainer({ agenda, movements, alerts, onShortcutClic
         <div className="action-tile-grid">
           <ActionTile icon={PlusCircle} label="Nova Tarefa" onClick={() => onShortcutClick('nova_tarefa')} />
           <ActionTile icon={CalendarDays} label="Ver Agenda" onClick={() => onShortcutClick('ver_agenda')} />
-          <ActionTile icon={SlidersHorizontal} label="Filtro Avançado" onClick={() => onShortcutClick('filtro_avancado')} />
-          <ActionTile icon={LayoutGrid} label="Menu Utilitário" onClick={() => onShortcutClick('menu_utilitario')} />
+          <ActionTile icon={Clock3} label="Ver Prazos" onClick={() => onShortcutClick('ver_prazos')} />
+          <ActionTile icon={Scale} label="Ver Processos" onClick={() => onShortcutClick('ver_processos')} />
         </div>
       </SectionCard>
 
