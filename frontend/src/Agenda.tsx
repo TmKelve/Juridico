@@ -18,23 +18,13 @@ import {
   X,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { api } from './api';
+import { api, type ApiAgendaEvent } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import { ProcessCombobox } from './ProcessCombobox';
 import './Agenda.css';
 
 interface AgendaProps {
   user: { id: number; email: string; role: string };
-}
-
-interface ProcessRecord {
-  id: number;
-  title: string;
-  client: string;
-  phase: string;
-  status: string;
-  ownerId: number;
-  owner?: { id: number; email: string; role: string };
 }
 
 type AgendaView = 'dia' | 'semana' | 'mes' | 'lista';
@@ -54,7 +44,7 @@ type AgendaEventStatus = 'agendado' | 'confirmado' | 'atencao' | 'realizado' | '
 type AgendaPriority = 'alta' | 'media' | 'baixa';
 
 interface AgendaEvent {
-  id: string;
+  id: number;
   title: string;
   type: AgendaEventType;
   status: AgendaEventStatus;
@@ -63,7 +53,7 @@ interface AgendaEvent {
   startTime: string;
   endTime: string;
   client: string;
-  processId: number;
+  processId: number | null;
   processLabel: string;
   responsible: string;
   locationOrChannel: string;
@@ -200,72 +190,21 @@ function isOverlap(a: AgendaEvent, b: AgendaEvent) {
   return a.startTime === b.startTime;
 }
 
-function makeAgendaEvents(processes: ProcessRecord[], user: AgendaProps['user']) {
-  const now = new Date();
+function mapApiAgendaEvent(event: ApiAgendaEvent): AgendaEvent {
+  return {
+    ...event,
+    locationOrChannel: event.locationOrChannel || CHANNELS[0],
+    notes: event.notes || '',
+  };
+}
 
-  return processes.flatMap((process, index) => {
-    const owner = process.owner?.email || user.email;
-    const shift = ((process.id + index * 2) % 12) - 4;
-    const baseDate = addDays(now, shift);
-    const dateIso = toIsoDate(baseDate);
-
-    const timeBase = TIME_RANGES[(process.id + index) % TIME_RANGES.length];
-    const plusIndex = (TIME_RANGES.findIndex((t) => t === timeBase) + 1) % TIME_RANGES.length;
-    const endBase = TIME_RANGES[plusIndex];
-
-    const typeA = EVENT_TYPES[(process.id + index) % EVENT_TYPES.length];
-    const typeB = EVENT_TYPES[(process.id + index + 3) % EVENT_TYPES.length];
-
-    const first: AgendaEvent = {
-      id: `ag-${process.id}-a`,
-      title: `${EVENT_TYPE_LABEL[typeA]} - ${process.title}`,
-      type: typeA,
-      status: process.status === 'concluido' ? 'realizado' : 'agendado',
-      priority: (process.id + index) % 3 === 0 ? 'alta' : (process.id + index) % 2 === 0 ? 'media' : 'baixa',
-      date: dateIso,
-      startTime: timeBase,
-      endTime: endBase,
-      client: process.client,
-      processId: process.id,
-      processLabel: `#${process.id} - ${process.title}`,
-      responsible: owner,
-      locationOrChannel: CHANNELS[(process.id + index) % CHANNELS.length],
-      notes: 'Validar documentos de apoio e confirmar estrategia processual antes do horario.',
-      origin: typeA === 'prazo_calendario' ? 'publicacao' : typeA === 'retorno_agendado' ? 'atendimento' : 'processo',
-      isAudience: typeA === 'audiencia',
-      isReturn: typeA === 'retorno_agendado',
-      isDeadline: typeA === 'prazo_calendario',
-      requiresAttention: typeA === 'audiencia' || typeA === 'retorno_agendado' || typeA === 'prazo_calendario',
-    };
-
-    const secondDate = toIsoDate(addDays(baseDate, ((process.id + index) % 4) - 1));
-    const secondStart = TIME_RANGES[(process.id + index + 2) % TIME_RANGES.length];
-    const secondEnd = TIME_RANGES[(process.id + index + 3) % TIME_RANGES.length];
-
-    const second: AgendaEvent = {
-      id: `ag-${process.id}-b`,
-      title: `${EVENT_TYPE_LABEL[typeB]} - ${process.client}`,
-      type: typeB,
-      status: (process.id + index) % 5 === 0 ? 'confirmado' : 'agendado',
-      priority: (process.id + index) % 4 === 0 ? 'alta' : 'media',
-      date: secondDate,
-      startTime: secondStart,
-      endTime: secondEnd,
-      client: process.client,
-      processId: process.id,
-      processLabel: `#${process.id} - ${process.title}`,
-      responsible: owner,
-      locationOrChannel: CHANNELS[(process.id + index + 2) % CHANNELS.length],
-      notes: 'Consolidar proximo passo do caso e registrar atualizacao para equipe interna.',
-      origin: typeB === 'evento_manual' ? 'manual' : 'processo',
-      isAudience: typeB === 'audiencia',
-      isReturn: typeB === 'retorno_agendado',
-      isDeadline: typeB === 'prazo_calendario',
-      requiresAttention: typeB === 'audiencia' || typeB === 'retorno_agendado' || typeB === 'prazo_calendario',
-    };
-
-    return [first, second];
-  });
+function normalizeAgendaEvent(event: AgendaEvent, now: Date) {
+  const status = normalizeStatus(event, now);
+  return {
+    ...event,
+    status,
+    requiresAttention: event.requiresAttention || status === 'atencao',
+  };
 }
 
 export function Agenda({ user }: AgendaProps) {
@@ -281,8 +220,6 @@ export function Agenda({ user }: AgendaProps) {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedEvent, setSelectedEvent] = useState<AgendaEvent | null>(null);
 
-  const isAdv = user.role === 'ADV';
-
   useEffect(() => {
     trackPageView('agenda', { role: user.role });
     loadAgenda();
@@ -297,27 +234,15 @@ export function Agenda({ user }: AgendaProps) {
     setError('');
 
     try {
-      const res = await api.getProcesses();
+      const res = await api.getAgenda();
       if (res.status !== 200 || !Array.isArray(res.data)) {
         setError(res.error || 'Nao foi possivel carregar agenda.');
         setLoading(false);
         return;
       }
 
-      const scoped = isAdv
-        ? (res.data as ProcessRecord[]).filter((process) => process.ownerId === user.id)
-        : (res.data as ProcessRecord[]);
-
-      const mapped = makeAgendaEvents(scoped, user);
       const now = new Date();
-      const normalized = mapped.map((event) => {
-        const status = normalizeStatus(event, now);
-        return {
-          ...event,
-          status,
-          requiresAttention: event.requiresAttention || status === 'atencao',
-        };
-      });
+      const normalized = (res.data as ApiAgendaEvent[]).map((event) => normalizeAgendaEvent(mapApiAgendaEvent(event), now));
 
       setEvents(normalized);
       trackEvent('agenda_loaded', { count: normalized.length, role: user.role });
@@ -371,41 +296,101 @@ export function Agenda({ user }: AgendaProps) {
     trackEvent('agenda_exported', { count: items.length });
   }
 
-  function markAsDone(id: string) {
-    setEvents((prev) => prev.map((event) => (event.id === id ? { ...event, status: 'realizado' } : event)));
-    setSelectedEvent((prev) => (prev && prev.id === id ? { ...prev, status: 'realizado' } : prev));
+  function mergeUpdatedEvent(updated: ApiAgendaEvent) {
+    const next = normalizeAgendaEvent(mapApiAgendaEvent(updated), new Date());
+    setEvents((prev) => prev.map((event) => (event.id === next.id ? next : event)));
+    setSelectedEvent((prev) => (prev && prev.id === next.id ? next : prev));
+  }
+
+  async function createQuickEvent(type: AgendaEventType) {
+    const labelByType: Record<AgendaEventType, string> = {
+      audiencia: 'Audiência de acompanhamento',
+      prazo_calendario: 'Prazo operacional',
+      reuniao_cliente: 'Reunião com cliente',
+      retorno_agendado: 'Retorno com cliente',
+      compromisso_interno: 'Compromisso interno',
+      diligencia: 'Diligência externa',
+      protocolo: 'Protocolo',
+      tarefa_horario: 'Tarefa com horário',
+      evento_manual: 'Evento manual',
+    };
+
+    const channelByType: Record<AgendaEventType, string> = {
+      audiencia: 'Fórum',
+      prazo_calendario: 'Operação interna',
+      reuniao_cliente: 'Teams',
+      retorno_agendado: 'Telefone',
+      compromisso_interno: 'Interno',
+      diligencia: 'Presencial',
+      protocolo: 'Tribunal',
+      tarefa_horario: 'Interno',
+      evento_manual: 'A definir',
+    };
+
+    const referenceDate = toIsoDate(selectedDate);
+    const createRes = await api.createAgendaEvent({
+      title: labelByType[type],
+      type,
+      date: referenceDate,
+      startTime: type === 'audiencia' ? '10:00' : type === 'retorno_agendado' ? '14:00' : '09:00',
+      endTime: type === 'audiencia' ? '11:00' : type === 'retorno_agendado' ? '15:00' : '10:00',
+      priority: type === 'audiencia' || type === 'retorno_agendado' ? 'alta' : 'media',
+      locationOrChannel: channelByType[type],
+      origin: type === 'retorno_agendado' ? 'atendimento' : 'manual',
+    });
+
+    if (createRes.status !== 201) {
+      setError(createRes.error || 'Nao foi possivel criar evento.');
+      return;
+    }
+
+    const next = normalizeAgendaEvent(mapApiAgendaEvent(createRes.data as ApiAgendaEvent), new Date());
+    setEvents((prev) => [...prev, next]);
+    setSelectedEvent(next);
+    setSuccess('Evento criado na agenda.');
+    trackEvent('agenda_event_created', { type });
+  }
+
+  async function markAsDone(id: number) {
+    const response = await api.updateAgendaEvent(id, { status: 'realizado' });
+    if (response.status !== 200) {
+      setError(response.error || 'Nao foi possivel marcar evento como realizado.');
+      return;
+    }
+
+    mergeUpdatedEvent(response.data as ApiAgendaEvent);
     setSuccess('Evento marcado como realizado.');
     trackEvent('agenda_event_done', { id });
   }
 
-  function cancelEvent(id: string) {
-    setEvents((prev) => prev.map((event) => (event.id === id ? { ...event, status: 'cancelado' } : event)));
-    setSelectedEvent((prev) => (prev && prev.id === id ? { ...prev, status: 'cancelado' } : prev));
+  async function cancelEvent(id: number) {
+    const response = await api.updateAgendaEvent(id, { status: 'cancelado' });
+    if (response.status !== 200) {
+      setError(response.error || 'Nao foi possivel cancelar evento.');
+      return;
+    }
+
+    mergeUpdatedEvent(response.data as ApiAgendaEvent);
     setSuccess('Evento cancelado.');
     trackEvent('agenda_event_cancelled', { id });
   }
 
-  function rescheduleEvent(id: string) {
-    setEvents((prev) => prev.map((event) => {
-      if (event.id !== id) return event;
-      const nextDate = addDays(new Date(`${event.date}T00:00:00`), 1);
-      return {
-        ...event,
-        date: toIsoDate(nextDate),
-        status: event.status === 'cancelado' ? 'agendado' : event.status,
-      };
-    }));
+  async function rescheduleEvent(id: number) {
+    const current = events.find((event) => event.id === id);
+    if (!current) return;
 
-    setSelectedEvent((prev) => {
-      if (!prev || prev.id !== id) return prev;
-      const nextDate = addDays(new Date(`${prev.date}T00:00:00`), 1);
-      return {
-        ...prev,
-        date: toIsoDate(nextDate),
-        status: prev.status === 'cancelado' ? 'agendado' : prev.status,
-      };
+    const nextDate = addDays(new Date(`${current.date}T00:00:00`), 1);
+    const response = await api.updateAgendaEvent(id, {
+      date: toIsoDate(nextDate),
+      status: current.status === 'cancelado' ? 'agendado' : current.status,
     });
 
+    if (response.status !== 200) {
+      setError(response.error || 'Nao foi possivel remarcar evento.');
+      return;
+    }
+
+    mergeUpdatedEvent(response.data as ApiAgendaEvent);
     setSuccess('Evento remarcado para o proximo dia.');
     trackEvent('agenda_event_rescheduled', { id });
   }
@@ -456,7 +441,11 @@ export function Agenda({ user }: AgendaProps) {
   const responsibles = useMemo(() => Array.from(new Set(events.map((event) => event.responsible))), [events]);
   const processes = useMemo(() => {
     const map = new Map<string, string>();
-    events.forEach((event) => map.set(String(event.processId), event.processLabel));
+    events.forEach((event) => {
+      if (event.processId) {
+        map.set(String(event.processId), event.processLabel);
+      }
+    });
     return Array.from(map.entries()).map(([id, label]) => ({ id, label }));
   }, [events]);
   const processOptions = useMemo(
@@ -540,15 +529,15 @@ export function Agenda({ user }: AgendaProps) {
         </div>
 
         <div className="agenda-header-actions" role="toolbar" aria-label="Acoes da agenda">
-          <button className="btn-primary" onClick={() => setSuccess('Fluxo de novo compromisso iniciado.')} aria-label="Novo compromisso">
+          <button className="btn-primary" onClick={() => createQuickEvent('compromisso_interno')} aria-label="Novo compromisso">
             <Plus size={14} aria-hidden="true" />
             Novo Compromisso
           </button>
-          <button className="btn-secondary" onClick={() => setSuccess('Fluxo de nova audiencia iniciado.')} aria-label="Nova audiencia">
+          <button className="btn-secondary" onClick={() => createQuickEvent('audiencia')} aria-label="Nova audiencia">
             <CalendarClock size={14} aria-hidden="true" />
             Nova Audiencia
           </button>
-          <button className="btn-secondary" onClick={() => setSuccess('Fluxo de novo retorno iniciado.')} aria-label="Novo retorno">
+          <button className="btn-secondary" onClick={() => createQuickEvent('retorno_agendado')} aria-label="Novo retorno">
             <UserRound size={14} aria-hidden="true" />
             Novo Retorno
           </button>
@@ -726,7 +715,7 @@ export function Agenda({ user }: AgendaProps) {
         <section className="agenda-empty" role="status">
           <h3>Nenhum evento cadastrado</h3>
           <p>Crie compromissos, audiencias e retornos para iniciar sua agenda.</p>
-          <button className="btn-primary" onClick={() => setSuccess('Fluxo de novo compromisso iniciado.')}>Novo Compromisso</button>
+          <button className="btn-primary" onClick={() => createQuickEvent('compromisso_interno')}>Novo Compromisso</button>
         </section>
       )}
 
@@ -933,7 +922,12 @@ export function Agenda({ user }: AgendaProps) {
                 <X size={13} aria-hidden="true" />
                 Cancelar
               </button>
-              <button className="btn-ghost" onClick={() => navigate(`/processos/${selectedEvent.processId}`)} aria-label="Abrir processo">
+              <button
+                className="btn-ghost"
+                onClick={() => selectedEvent.processId && navigate(`/processos/${selectedEvent.processId}`)}
+                aria-label="Abrir processo"
+                disabled={!selectedEvent.processId}
+              >
                 <ExternalLink size={13} aria-hidden="true" />
                 Abrir processo
               </button>

@@ -3,6 +3,7 @@ import cors from 'cors';
 import bcrypt from 'bcrypt';
 import { PrismaClient } from '@prisma/client';
 import { signUserToken, verifyToken, type UserToken } from './auth';
+import { buildAgendaPayload } from './agenda.contract';
 import { buildTaskPayload } from './tasks.contract';
 
 const app = express();
@@ -357,6 +358,100 @@ async function seedData() {
       });
     }
   }
+
+  const agendaCount = await prisma.agendaEvent.count();
+  if (agendaCount === 0) {
+    const seededProcesses = await prisma.process.findMany({
+      include: {
+        owner: { select: { email: true } },
+        clientRecord: true,
+        atendimentos: { orderBy: { occurredAt: 'asc' } },
+        tasks: { orderBy: { dueDate: 'asc' } },
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    for (const [index, process] of seededProcesses.entries()) {
+      const baseDate = new Date();
+      baseDate.setDate(baseDate.getDate() + index);
+      baseDate.setHours(9 + index, 0, 0, 0);
+
+      const audienceEnd = new Date(baseDate);
+      audienceEnd.setHours(audienceEnd.getHours() + 1);
+
+      await prisma.agendaEvent.create({
+        data: {
+          title: `Audiência de acompanhamento - ${process.client}`,
+          eventType: 'audiencia',
+          status: process.status === 'ativo' ? 'agendado' : 'confirmado',
+          priority: index % 2 === 0 ? 'alta' : 'media',
+          startAt: baseDate,
+          endAt: audienceEnd,
+          processId: process.id,
+          clientId: process.clientId ?? process.clientRecord?.id ?? null,
+          responsible: getResponsibleLabel(process.owner?.email) ?? 'admin',
+          locationOrChannel: index % 2 === 0 ? 'Fórum trabalhista' : 'Tribunal regional',
+          notes: 'Evento inicial da agenda para validar audiência e calendário operacional.',
+          origin: 'processo',
+          createdBy: getResponsibleLabel(process.owner?.email) ?? 'admin',
+        },
+      });
+
+      const firstAttendance = process.atendimentos.find((attendance) => attendance.scheduledReturnAt);
+      if (firstAttendance?.scheduledReturnAt) {
+        const returnStart = new Date(firstAttendance.scheduledReturnAt);
+        returnStart.setHours(14, 0, 0, 0);
+        const returnEnd = new Date(returnStart);
+        returnEnd.setHours(returnEnd.getHours() + 1);
+
+        await prisma.agendaEvent.create({
+          data: {
+            title: `Retorno com ${process.client}`,
+            eventType: 'retorno_agendado',
+            status: 'agendado',
+            priority: firstAttendance.critical ? 'alta' : 'media',
+            startAt: returnStart,
+            endAt: returnEnd,
+            processId: process.id,
+            clientId: process.clientId ?? process.clientRecord?.id ?? null,
+            attendanceId: firstAttendance.id,
+            responsible: firstAttendance.responsible ?? getResponsibleLabel(process.owner?.email) ?? 'admin',
+            locationOrChannel: firstAttendance.channel || 'Telefone',
+            notes: firstAttendance.nextStep || 'Retorno programado a partir da carteira de atendimentos.',
+            origin: 'atendimento',
+            createdBy: getResponsibleLabel(process.owner?.email) ?? 'admin',
+          },
+        });
+      }
+
+      const firstTask = process.tasks[0];
+      if (firstTask) {
+        const taskStart = new Date(firstTask.dueDate);
+        taskStart.setHours(11 + (index % 3), 0, 0, 0);
+        const taskEnd = new Date(taskStart);
+        taskEnd.setHours(taskEnd.getHours() + 1);
+
+        await prisma.agendaEvent.create({
+          data: {
+            title: firstTask.title,
+            eventType: 'tarefa_horario',
+            status: firstTask.status === 'concluida' ? 'realizado' : 'agendado',
+            priority: firstTask.priority === 'critica' ? 'alta' : firstTask.priority,
+            startAt: taskStart,
+            endAt: taskEnd,
+            processId: process.id,
+            clientId: process.clientId ?? process.clientRecord?.id ?? null,
+            taskId: firstTask.id,
+            responsible: firstTask.owner,
+            locationOrChannel: 'Operação interna',
+            notes: firstTask.notes || firstTask.description,
+            origin: firstTask.origin === 'atendimento' ? 'atendimento' : 'processo',
+            createdBy: firstTask.createdBy,
+          },
+        });
+      }
+    }
+  }
 }
 
 seedData().catch((err) => {
@@ -479,6 +574,24 @@ function canReadTask(user: UserToken, task: { createdBy: string; owner: string; 
     task.createdBy === getResponsibleLabel(user.email) ||
     task.owner === getResponsibleLabel(user.email) ||
     (task.process ? canReadProcess(user, task.process) : false)
+  );
+}
+
+function canReadAgendaEvent(user: UserToken, event: {
+  createdBy: string;
+  responsible?: string | null;
+  process?: { ownerId: number } | null;
+  attendance?: { actorEmail: string } | null;
+  task?: { createdBy: string; owner: string; process?: { ownerId: number } | null } | null;
+}) {
+  return (
+    user.role === 'ADM' ||
+    user.role === 'FIN' ||
+    event.createdBy === getResponsibleLabel(user.email) ||
+    event.responsible === getResponsibleLabel(user.email) ||
+    (event.process ? canReadProcess(user, event.process) : false) ||
+    (event.attendance ? event.attendance.actorEmail === user.email : false) ||
+    (event.task ? canReadTask(user, event.task) : false)
   );
 }
 
@@ -1060,6 +1173,263 @@ app.put('/tasks/:id', async (req, res) => {
   });
 
   res.json(buildTaskPayload(updated));
+});
+
+app.get('/agenda', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const ownerLabel = getResponsibleLabel(decoded.email);
+  const events = await prisma.agendaEvent.findMany({
+    where: decoded.role === 'ADM' || decoded.role === 'FIN'
+      ? undefined
+      : {
+          OR: [
+            { createdBy: ownerLabel ?? decoded.email },
+            { responsible: ownerLabel ?? decoded.email },
+            { process: { ownerId: decoded.sub } },
+            { attendance: { actorEmail: decoded.email } },
+            { task: { owner: ownerLabel ?? decoded.email } },
+          ],
+        },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+      clientRecord: true,
+      attendance: {
+        include: {
+          process: { select: { ownerId: true } },
+        },
+      },
+      task: {
+        include: {
+          process: { select: { ownerId: true } },
+        },
+      },
+    },
+    orderBy: [
+      { startAt: 'asc' },
+      { createdAt: 'desc' },
+    ],
+  });
+
+  res.json(events.map((event) => buildAgendaPayload(event)));
+});
+
+app.get('/agenda/:id', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const event = await prisma.agendaEvent.findUnique({
+    where: { id: Number(req.params.id) },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+      clientRecord: true,
+      attendance: {
+        include: {
+          process: { select: { ownerId: true } },
+        },
+      },
+      task: {
+        include: {
+          process: { select: { ownerId: true } },
+        },
+      },
+    },
+  });
+
+  if (!event) return res.status(404).send({ message: 'Evento não encontrado' });
+  if (!canReadAgendaEvent(decoded, event)) return res.status(403).send({ message: 'Acesso negado' });
+
+  res.json(buildAgendaPayload(event));
+});
+
+app.post('/agenda', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const {
+    title,
+    type,
+    status,
+    priority,
+    date,
+    startTime,
+    endTime,
+    processId,
+    clientId,
+    client,
+    responsible,
+    locationOrChannel,
+    notes,
+    origin,
+    attendanceId,
+    taskId,
+  } = req.body;
+
+  const eventType = typeof type === 'string' && type.trim() ? type.trim() : 'evento_manual';
+  const eventDate = typeof date === 'string' && date ? date : new Date().toISOString().slice(0, 10);
+  const eventStartTime = typeof startTime === 'string' && startTime ? startTime : '10:00';
+  const eventEndTime = typeof endTime === 'string' && endTime ? endTime : '11:00';
+
+  let processRecord: any = null;
+  if (processId) {
+    const access = await assertProcessAccess(decoded, Number(processId));
+    if (access.error) return res.status(access.error.status).send({ message: access.error.message });
+    processRecord = access.process;
+  }
+
+  let attendanceRecord: any = null;
+  if (attendanceId) {
+    attendanceRecord = await prisma.atendimento.findUnique({
+      where: { id: Number(attendanceId) },
+      include: { process: { select: { ownerId: true } } },
+    });
+    if (!attendanceRecord) return res.status(404).send({ message: 'Atendimento não encontrado' });
+    if (attendanceRecord.process && !canReadProcess(decoded, attendanceRecord.process)) {
+      return res.status(403).send({ message: 'Acesso negado' });
+    }
+  }
+
+  let taskRecord: any = null;
+  if (taskId) {
+    taskRecord = await prisma.task.findUnique({
+      where: { id: Number(taskId) },
+      include: { process: { select: { ownerId: true } } },
+    });
+    if (!taskRecord) return res.status(404).send({ message: 'Tarefa não encontrada' });
+    if (!canReadTask(decoded, taskRecord)) return res.status(403).send({ message: 'Acesso negado' });
+  }
+
+  let linkedClientId: number | null = processRecord?.clientId ?? attendanceRecord?.clientId ?? taskRecord?.clientId ?? null;
+  if (clientId) {
+    const existingClient = await clientStore.findUnique({ where: { id: Number(clientId) } });
+    if (!existingClient) return res.status(404).send({ message: 'Cliente não encontrado' });
+    linkedClientId = existingClient.id;
+  } else if (typeof client === 'string' && client.trim()) {
+    const linkedClient = await clientStore.upsert({
+      where: { name: client.trim() },
+      update: {},
+      create: {
+        name: client.trim(),
+        type: 'PF',
+        status: 'ativo',
+        legalArea: processRecord?.phase ?? null,
+        responsible: responsible || getResponsibleLabel(decoded.email),
+        notes: 'Cliente criado automaticamente a partir de um evento de agenda.',
+      },
+    });
+    linkedClientId = linkedClient.id;
+  }
+
+  const processTitle = processRecord?.title ?? taskRecord?.title ?? attendanceRecord?.subject ?? 'Compromisso';
+  const created = await prisma.agendaEvent.create({
+    data: {
+      title: typeof title === 'string' && title.trim() ? title.trim() : `${eventType.replace(/_/g, ' ')} - ${processTitle}`,
+      eventType,
+      status: status || 'agendado',
+      priority: priority || (eventType === 'audiencia' ? 'alta' : 'media'),
+      startAt: new Date(`${eventDate}T${eventStartTime}:00`),
+      endAt: new Date(`${eventDate}T${eventEndTime}:00`),
+      processId: processRecord?.id ?? taskRecord?.processId ?? attendanceRecord?.processId ?? null,
+      clientId: linkedClientId,
+      attendanceId: attendanceRecord?.id ?? null,
+      taskId: taskRecord?.id ?? null,
+      responsible: responsible || taskRecord?.owner || attendanceRecord?.responsible || getResponsibleLabel(decoded.email),
+      locationOrChannel: locationOrChannel || attendanceRecord?.channel || 'A definir',
+      notes: typeof notes === 'string' ? notes.trim() : (attendanceRecord?.nextStep || taskRecord?.notes || ''),
+      origin: origin || (attendanceRecord ? 'atendimento' : taskRecord ? 'processo' : 'manual'),
+      createdBy: getResponsibleLabel(decoded.email) || decoded.email,
+    },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+      clientRecord: true,
+      attendance: {
+        include: {
+          process: { select: { ownerId: true } },
+        },
+      },
+      task: {
+        include: {
+          process: { select: { ownerId: true } },
+        },
+      },
+    },
+  });
+
+  res.status(201).json(buildAgendaPayload(created));
+});
+
+app.put('/agenda/:id', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const current = await prisma.agendaEvent.findUnique({
+    where: { id: Number(req.params.id) },
+    include: {
+      process: { select: { ownerId: true } },
+      attendance: { select: { actorEmail: true, process: { select: { ownerId: true } } } },
+      task: { select: { createdBy: true, owner: true, process: { select: { ownerId: true } } } },
+      clientRecord: true,
+    },
+  });
+
+  if (!current) return res.status(404).send({ message: 'Evento não encontrado' });
+  if (!canReadAgendaEvent(decoded, current)) return res.status(403).send({ message: 'Acesso negado' });
+
+  const { title, status, priority, date, startTime, endTime, responsible, locationOrChannel, notes } = req.body;
+  const nextDate = typeof date === 'string' && date ? date : current.startAt.toISOString().slice(0, 10);
+  const nextStartTime = typeof startTime === 'string' && startTime ? startTime : current.startAt.toISOString().slice(11, 16);
+  const nextEndTime = typeof endTime === 'string' && endTime ? endTime : current.endAt.toISOString().slice(11, 16);
+
+  const updated = await prisma.agendaEvent.update({
+    where: { id: current.id },
+    data: {
+      title: typeof title === 'string' && title.trim() ? title.trim() : current.title,
+      status: status ?? current.status,
+      priority: priority ?? current.priority,
+      startAt: new Date(`${nextDate}T${nextStartTime}:00`),
+      endAt: new Date(`${nextDate}T${nextEndTime}:00`),
+      responsible: responsible ?? current.responsible,
+      locationOrChannel: locationOrChannel ?? current.locationOrChannel,
+      notes: notes === undefined ? current.notes : (typeof notes === 'string' ? notes.trim() : null),
+    },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+      clientRecord: true,
+      attendance: {
+        include: {
+          process: { select: { ownerId: true } },
+        },
+      },
+      task: {
+        include: {
+          process: { select: { ownerId: true } },
+        },
+      },
+    },
+  });
+
+  res.json(buildAgendaPayload(updated));
 });
 
 app.get('/permissions', (req, res) => {

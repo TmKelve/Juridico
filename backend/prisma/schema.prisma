@@ -31,6 +31,7 @@ model Client {
   processes  Process[]
   atendimentos Atendimento[]
   tasks      Task[]
+  agendaEvents AgendaEvent[]
 }
 
 model Process {
@@ -48,6 +49,7 @@ model Process {
   documentos   Documento[]
   atendimentos Atendimento[]
   tasks        Task[]
+  agendaEvents AgendaEvent[]
 }
 
 model Andamento {
@@ -100,6 +102,7 @@ model Atendimento {
   actorEmail        String
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
+  agendaEvents      AgendaEvent[]
 }
 
 model Task {
@@ -124,4 +127,30 @@ model Task {
   immediateAction   Boolean   @default(false)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
+  agendaEvents      AgendaEvent[]
+}
+
+model AgendaEvent {
+  id                Int          @id @default(autoincrement())
+  title             String
+  eventType         String
+  status            String       @default("agendado")
+  priority          String       @default("media")
+  startAt           DateTime
+  endAt             DateTime
+  processId         Int?
+  process           Process?     @relation(fields: [processId], references: [id])
+  clientId          Int?
+  clientRecord      Client?      @relation(fields: [clientId], references: [id])
+  attendanceId      Int?
+  attendance        Atendimento? @relation(fields: [attendanceId], references: [id])
+  taskId            Int?
+  task              Task?        @relation(fields: [taskId], references: [id])
+  responsible       String?
+  locationOrChannel String?
+  notes             String?
+  origin            String       @default("manual")
+  createdBy         String
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 }

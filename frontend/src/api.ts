@@ -107,6 +107,33 @@ export interface ApiTask {
   immediateAction: boolean;
 }
 
+export interface ApiAgendaEvent {
+  id: number;
+  title: string;
+  type: 'audiencia' | 'prazo_calendario' | 'reuniao_cliente' | 'retorno_agendado' | 'compromisso_interno' | 'diligencia' | 'protocolo' | 'tarefa_horario' | 'evento_manual';
+  status: 'agendado' | 'confirmado' | 'atencao' | 'realizado' | 'cancelado';
+  priority: 'alta' | 'media' | 'baixa';
+  date: string;
+  startTime: string;
+  endTime: string;
+  clientId: number | null;
+  client: string;
+  processId: number | null;
+  processLabel: string;
+  processTitle: string;
+  responsible: string;
+  locationOrChannel: string;
+  notes: string;
+  origin: 'processo' | 'publicacao' | 'atendimento' | 'manual';
+  createdBy: string;
+  attendanceId: number | null;
+  taskId: number | null;
+  isAudience: boolean;
+  isReturn: boolean;
+  isDeadline: boolean;
+  requiresAttention: boolean;
+}
+
 interface LoginResponse {
   user: ApiUser;
 }
@@ -360,4 +387,43 @@ export const api = {
     immediateAction: boolean;
   }>) =>
     apiClient<ApiTask>(`/tasks/${id}`, { method: 'PUT', body: data }),
+
+  getAgenda: () =>
+    apiClient<ApiAgendaEvent[]>('/agenda'),
+
+  getAgendaEvent: (id: number) =>
+    apiClient<ApiAgendaEvent>(`/agenda/${id}`),
+
+  createAgendaEvent: (data: {
+    title?: string;
+    type?: ApiAgendaEvent['type'];
+    status?: ApiAgendaEvent['status'];
+    priority?: ApiAgendaEvent['priority'];
+    date?: string;
+    startTime?: string;
+    endTime?: string;
+    processId?: number;
+    clientId?: number;
+    client?: string;
+    responsible?: string;
+    locationOrChannel?: string;
+    notes?: string;
+    origin?: ApiAgendaEvent['origin'];
+    attendanceId?: number;
+    taskId?: number;
+  }) =>
+    apiClient<ApiAgendaEvent>('/agenda', { method: 'POST', body: data }),
+
+  updateAgendaEvent: (id: number, data: Partial<{
+    title: string;
+    status: ApiAgendaEvent['status'];
+    priority: ApiAgendaEvent['priority'];
+    date: string;
+    startTime: string;
+    endTime: string;
+    responsible: string;
+    locationOrChannel: string;
+    notes: string;
+  }>) =>
+    apiClient<ApiAgendaEvent>(`/agenda/${id}`, { method: 'PUT', body: data }),
 };

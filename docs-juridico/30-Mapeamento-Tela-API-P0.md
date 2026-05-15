@@ -59,6 +59,10 @@ Carteiras operacionais:
 - `GET /tasks/:id`
 - `POST /tasks`
 - `PUT /tasks/:id`
+- `GET /agenda`
+- `GET /agenda/:id`
+- `POST /agenda`
+- `PUT /agenda/:id`
 
 Processos e agregados por processo:
 
@@ -183,6 +187,32 @@ Campos observados:
 - `owner`
 - `createdBy`
 - `notes`
+
+Origem:
+
+- direto da API
+
+### Agenda Event
+
+Campos observados:
+
+- `id`
+- `title`
+- `type`
+- `status`
+- `priority`
+- `date`
+- `startTime`
+- `endTime`
+- `clientId`
+- `client`
+- `processId`
+- `processLabel`
+- `processTitle`
+- `responsible`
+- `locationOrChannel`
+- `notes`
+- `origin`
 
 Origem:
 
@@ -363,18 +393,20 @@ Persistencia:
 
 ### Agenda
 
-Endpoint consumido hoje:
+Endpoints:
 
-- `GET /processes`
+- `GET /agenda`
+- `GET /agenda/:id`
+- `POST /agenda`
+- `PUT /agenda/:id`
 
 Origem:
 
-- derivada localmente a partir de processos
+- direta da API
 
-Gap:
+Persistencia:
 
-- nao existe `GET /agenda`
-- eventos ainda nao sao entidade persistente autonoma
+- `AgendaEvent` agora e entidade persistente autonoma
 
 ### Publicacoes E Intimacoes
 
@@ -422,14 +454,13 @@ Gap:
 
 - Prazos
 - Documentos
-- Agenda
 - Publicacoes e Intimacoes
 - Modelos de Pecas
 
 ## 7. Conflitos E Gaps Reais
 
-- O frontend ja expande varias telas P0, mas o backend ainda nao tem entidades dedicadas para `Agenda`, `Publicacoes` e `Modelos de Pecas`.
-- `Agenda`, `Publicacoes` e `Modelos de Pecas` ainda nao possuem tabela ou endpoint dedicados.
+- O frontend ja expande varias telas P0, mas o backend ainda nao tem entidades dedicadas para `Publicacoes` e `Modelos de Pecas`.
+- `Publicacoes` e `Modelos de Pecas` ainda nao possuem tabela ou endpoint dedicados.
 - `Dashboard`, `Prazos`, `Documentos` e outras telas seguem dependentes de `GET /processes` como fonte universal, o que cria acoplamento alto.
 - `GET /permissions` retorna apenas lista simples de strings, insuficiente para politica granular de producao.
 
@@ -444,7 +475,7 @@ Grupo A - migracao estrutural sem ampliar dominio:
 
 Grupo B - evolucao de contrato:
 
-- criar entidades reais para `Client`, `Task`, `Event`, `Publication`, `Template`
+- criar entidades reais para `Client`, `Task`, `Publication`, `Template`
 - criar endpoints dedicados por modulo
 
 Recomendacao:
