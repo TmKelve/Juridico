@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   Calendar,
@@ -95,6 +95,12 @@ interface NewAtendForm {
   proximoPasso: string;
   retornoAgendado: string;
   responsavel: string;
+}
+
+interface AtendimentosRouteState {
+  openForm?: boolean;
+  source?: 'clientes';
+  prefill?: Partial<NewAtendForm>;
 }
 
 const EMPTY_FILTERS: AtendimentoFilters = {
@@ -302,6 +308,7 @@ function CanalIcon({ canal }: { canal: Canal }) {
 // ─── main component ────────────────────────────────────────────────────────────
 
 export function Atendimentos({ user }: AtendimentosProps) {
+  const location = useLocation();
   const navigate = useNavigate();
 
   const [atendimentos, setAtendimentos]   = useState<AtendimentoItem[]>([]);
@@ -338,6 +345,24 @@ export function Atendimentos({ user }: AtendimentosProps) {
       return () => clearTimeout(t);
     }
   }, [success]);
+
+  useEffect(() => {
+    const routeState = location.state as AtendimentosRouteState | null;
+    if (!routeState?.openForm) return;
+
+    setForm({
+      ...EMPTY_FORM,
+      responsavel: user.email.split('@')[0],
+      ...routeState.prefill,
+    });
+    setShowForm(true);
+
+    if (routeState.prefill?.client) {
+      setSuccess(`Novo atendimento preparado para ${routeState.prefill.client}.`);
+    }
+
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate, user.email]);
 
   async function loadData() {
     setLoading(true);

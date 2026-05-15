@@ -62,7 +62,7 @@ interface ClientFilters {
   tipo: string;
   period: string;
   comProcessoAtivo: boolean;
-  comAtendimentoPendente: boolean;
+  aguardandoRetorno: boolean;
   comDocumentoFaltante: boolean;
 }
 
@@ -96,7 +96,7 @@ const EMPTY_FILTERS: ClientFilters = {
   tipo: '',
   period: '',
   comProcessoAtivo: false,
-  comAtendimentoPendente: false,
+  aguardandoRetorno: false,
   comDocumentoFaltante: false,
 };
 
@@ -197,12 +197,12 @@ type DetailTab = typeof DETAIL_TABS[number];
 function ClientDetailView({
   client,
   onClose,
-  onRegisterAtendimento,
+  onGoToAtendimento,
   onOpenProcesso,
 }: {
   client: ClientItem;
   onClose: () => void;
-  onRegisterAtendimento: (id: string) => void;
+  onGoToAtendimento: (client: ClientItem) => void;
   onOpenProcesso: (processId: number) => void;
 }) {
   const [activeTab, setActiveTab] = useState<DetailTab>('Visão Geral');
@@ -233,18 +233,20 @@ function ClientDetailView({
         </div>
 
         {/* Tabs */}
-        <div className="cli-detail-tabs" role="tablist" aria-label="Seções do cliente">
-          {DETAIL_TABS.map((tab) => (
-            <button
-              key={tab}
-              role="tab"
-              aria-selected={activeTab === tab}
-              className={`cli-detail-tab${activeTab === tab ? ' cli-detail-tab--active' : ''}`}
-              onClick={() => setActiveTab(tab)}
-            >
-              {tab}
-            </button>
-          ))}
+        <div className="cli-detail-tabs-shell">
+          <div className="cli-detail-tabs" role="tablist" aria-label="Seções do cliente">
+            {DETAIL_TABS.map((tab) => (
+              <button
+                key={tab}
+                role="tab"
+                aria-selected={activeTab === tab}
+                className={`cli-detail-tab${activeTab === tab ? ' cli-detail-tab--active' : ''}`}
+                onClick={() => setActiveTab(tab)}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Tab panels */}
@@ -404,7 +406,7 @@ function ClientDetailView({
               </p>
               <button
                 className="btn-primary"
-                onClick={() => onRegisterAtendimento(client.id)}
+                onClick={() => onGoToAtendimento(client)}
                 aria-label="Registrar novo atendimento para este cliente"
               >
                 <Plus size={13} /> Registrar atendimento
@@ -449,7 +451,7 @@ function ClientDetailView({
         <div className="cli-detail-foot">
           <button
             className="btn-primary"
-            onClick={() => onRegisterAtendimento(client.id)}
+            onClick={() => onGoToAtendimento(client)}
             aria-label="Registrar atendimento para este cliente"
           >
             <MessageSquare size={13} /> Registrar atendimento
@@ -542,6 +544,24 @@ export function Clients({ user }: ClientsProps) {
     setSuccess('Filtros limpos.');
   }
 
+  function goToAtendimento(client?: ClientItem) {
+    navigate('/atendimentos', {
+      state: {
+        openForm: true,
+        source: 'clientes',
+        prefill: client ? {
+          client: client.nome,
+          processId: client.processos[0] ? String(client.processos[0].id) : '',
+          responsavel: client.responsavel !== 'Não definido' ? client.responsavel : user.email.split('@')[0],
+          assunto: client.atendimentoPendente ? 'Retorno pendente do cliente' : '',
+          proximoPasso: client.atendimentoPendente ? 'Retornar contato com o cliente e registrar desdobramentos.' : '',
+        } : {
+          responsavel: user.email.split('@')[0],
+        },
+      },
+    });
+  }
+
   function saveFilters() {
     localStorage.setItem('lexora_cli_filter', JSON.stringify(filters));
     setSuccess('Filtro salvo.');
@@ -627,8 +647,8 @@ export function Clients({ user }: ClientsProps) {
       }
 
       if (filters.comProcessoAtivo     && c.processos.length === 0)       return false;
-      if (filters.comAtendimentoPendente && !c.atendimentoPendente)        return false;
-      if (filters.comDocumentoFaltante  && c.documentosFaltantes === 0)    return false;
+      if (filters.aguardandoRetorno && !c.atendimentoPendente)            return false;
+      if (filters.comDocumentoFaltante  && c.documentosFaltantes === 0)  return false;
 
       return true;
     });
@@ -732,7 +752,7 @@ export function Clients({ user }: ClientsProps) {
                   </button>
                 </li>
                 <li role="none">
-                  <button role="menuitem" onClick={() => { setSuccess(`Atendimento registrado para ${c.nome}.`); setOpenMenuId(null); }}>
+                  <button role="menuitem" onClick={() => { goToAtendimento(c); setOpenMenuId(null); }}>
                     <MessageSquare size={13} /> Registrar atendimento
                   </button>
                 </li>
@@ -783,7 +803,7 @@ export function Clients({ user }: ClientsProps) {
           </button>
           <button
             className="btn-secondary"
-            onClick={() => { setSuccess('Atendimento registrado com sucesso.'); trackEvent('header_register_atd'); }}
+            onClick={() => { goToAtendimento(); trackEvent('header_register_atd'); }}
             aria-label="Registrar atendimento rápido"
           >
             <MessageSquare size={14} /> Registrar Atendimento
@@ -828,10 +848,16 @@ export function Clients({ user }: ClientsProps) {
           <p>Com processo ativo</p>
           <strong>{loading ? '—' : kpis.comProc}</strong>
         </div>
-        <div className="cli-kpi-card cli-kpi-card--warning">
+        <button
+          type="button"
+          className={`cli-kpi-card cli-kpi-card--warning cli-kpi-card--button${filters.aguardandoRetorno ? ' cli-kpi-card--selected' : ''}`}
+          onClick={() => updateFilter('aguardandoRetorno', !filters.aguardandoRetorno)}
+          aria-pressed={filters.aguardandoRetorno}
+          aria-label="Filtrar clientes aguardando retorno"
+        >
           <p>Aguardando retorno</p>
           <strong>{loading ? '—' : kpis.aguard}</strong>
-        </div>
+        </button>
         <div className="cli-kpi-card cli-kpi-card--danger">
           <p>Pendência documental</p>
           <strong>{loading ? '—' : kpis.docFalt}</strong>
@@ -913,11 +939,11 @@ export function Clients({ user }: ClientsProps) {
           <label className="cli-checkline">
             <input
               type="checkbox"
-              checked={filters.comAtendimentoPendente}
-              onChange={(e) => updateFilter('comAtendimentoPendente', e.target.checked)}
-              aria-label="Mostrar apenas clientes com atendimento pendente"
+              checked={filters.aguardandoRetorno}
+              onChange={(e) => updateFilter('aguardandoRetorno', e.target.checked)}
+              aria-label="Mostrar apenas clientes aguardando retorno"
             />
-            Atendimento pendente
+            Aguardando retorno
           </label>
           <label className="cli-checkline">
             <input
@@ -1132,10 +1158,9 @@ export function Clients({ user }: ClientsProps) {
         <ClientDetailView
           client={selectedClient}
           onClose={() => setSelectedClient(null)}
-          onRegisterAtendimento={(id) => {
-            setSuccess(`Atendimento registrado para cliente ${id}.`);
+          onGoToAtendimento={(client) => {
             setSelectedClient(null);
-            navigate('/atendimentos');
+            goToAtendimento(client);
           }}
           onOpenProcesso={(processId) => {
             setSelectedClient(null);
