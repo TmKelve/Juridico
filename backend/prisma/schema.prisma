@@ -30,6 +30,7 @@ model Client {
   createdAt  DateTime  @default(now())
   processes  Process[]
   atendimentos Atendimento[]
+  tasks      Task[]
 }
 
 model Process {
@@ -46,6 +47,7 @@ model Process {
   prazos       Prazo[]
   documentos   Documento[]
   atendimentos Atendimento[]
+  tasks        Task[]
 }
 
 model Andamento {
@@ -96,6 +98,30 @@ model Atendimento {
   scheduledReturnAt DateTime?
   critical          Boolean   @default(false)
   actorEmail        String
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+model Task {
+  id                Int       @id @default(autoincrement())
+  title             String
+  description       String
+  processId         Int?
+  process           Process?  @relation(fields: [processId], references: [id])
+  clientId          Int?
+  clientRecord      Client?   @relation(fields: [clientId], references: [id])
+  clientName        String?
+  origin            String    @default("interno")
+  dueDate           DateTime
+  status            String    @default("pendente")
+  priority          String    @default("media")
+  owner             String
+  createdBy         String
+  notes             String?
+  linkedToDeadline  Boolean   @default(false)
+  linkedToPublication Boolean @default(false)
+  linkedToDocument  Boolean   @default(false)
+  immediateAction   Boolean   @default(false)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 }

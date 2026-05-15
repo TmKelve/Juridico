@@ -3,6 +3,7 @@ import cors from 'cors';
 import bcrypt from 'bcrypt';
 import { PrismaClient } from '@prisma/client';
 import { signUserToken, verifyToken, type UserToken } from './auth';
+import { buildTaskPayload } from './tasks.contract';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -313,6 +314,49 @@ async function seedData() {
       });
     }
   }
+
+  const taskCount = await prisma.task.count();
+  if (taskCount === 0) {
+    const seededProcesses = await prisma.process.findMany({
+      include: {
+        owner: { select: { email: true } },
+        clientRecord: true,
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    const origins = ['processo', 'prazo', 'documento', 'publicacao', 'atendimento', 'interno'] as const;
+    const priorities = ['baixa', 'media', 'alta', 'critica'] as const;
+    const statuses = ['pendente', 'em_andamento', 'aguardando', 'concluida', 'atrasada'] as const;
+
+    for (const [index, process] of seededProcesses.entries()) {
+      const ownerLabel = getResponsibleLabel(process.owner?.email) ?? 'admin';
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + (index - 1));
+      dueDate.setHours(0, 0, 0, 0);
+
+      await prisma.task.create({
+        data: {
+          title: `Acompanhar ${process.title}`,
+          description: `Executar ação operacional vinculada ao processo ${process.title}.`,
+          processId: process.id,
+          clientId: process.clientId ?? process.clientRecord?.id ?? null,
+          clientName: process.client,
+          origin: origins[index % origins.length],
+          dueDate,
+          status: statuses[index % statuses.length],
+          priority: priorities[index % priorities.length],
+          owner: ownerLabel,
+          createdBy: ownerLabel,
+          notes: index % 2 === 0 ? 'Validar próximos passos com o cliente.' : 'Conferir documentação antes do retorno.',
+          linkedToDeadline: index % 3 === 0,
+          linkedToPublication: index % 4 === 0,
+          linkedToDocument: index % 5 === 0,
+          immediateAction: index % 2 === 0,
+        },
+      });
+    }
+  }
 }
 
 seedData().catch((err) => {
@@ -426,6 +470,16 @@ function buildAttendancePayload(attendance: any) {
     actorEmail: attendance.actorEmail,
     owner,
   };
+}
+
+function canReadTask(user: UserToken, task: { createdBy: string; owner: string; process?: { ownerId: number } | null }) {
+  return (
+    user.role === 'ADM' ||
+    user.role === 'FIN' ||
+    task.createdBy === getResponsibleLabel(user.email) ||
+    task.owner === getResponsibleLabel(user.email) ||
+    (task.process ? canReadProcess(user, task.process) : false)
+  );
 }
 
 app.post('/auth/login', async (req, res) => {
@@ -807,6 +861,205 @@ app.put('/attendances/:id', async (req, res) => {
   });
 
   res.json(buildAttendancePayload(updated));
+});
+
+app.get('/tasks', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const ownerLabel = getResponsibleLabel(decoded.email);
+  const tasks = await prisma.task.findMany({
+    where: decoded.role === 'ADM' || decoded.role === 'FIN'
+      ? undefined
+      : {
+          OR: [
+            { createdBy: ownerLabel ?? decoded.email },
+            { owner: ownerLabel ?? decoded.email },
+            { process: { ownerId: decoded.sub } },
+          ],
+        },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+      clientRecord: true,
+    },
+    orderBy: [
+      { dueDate: 'asc' },
+      { createdAt: 'desc' },
+    ],
+  });
+
+  res.json(tasks.map((task) => buildTaskPayload(task)));
+});
+
+app.get('/tasks/:id', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const task = await prisma.task.findUnique({
+    where: { id: Number(req.params.id) },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+      clientRecord: true,
+    },
+  });
+
+  if (!task) return res.status(404).send({ message: 'Tarefa não encontrada' });
+  if (!canReadTask(decoded, task)) return res.status(403).send({ message: 'Acesso negado' });
+
+  res.json(buildTaskPayload(task));
+});
+
+app.post('/tasks', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const {
+    title,
+    description,
+    processId,
+    client,
+    origin,
+    owner,
+    priority,
+    dueDate,
+    status,
+    notes,
+    immediateAction,
+  } = req.body;
+
+  if (!title || typeof title !== 'string' || !title.trim()) {
+    return res.status(400).send({ message: 'Título da tarefa é obrigatório' });
+  }
+
+  let processRecord: any = null;
+  if (processId) {
+    const access = await assertProcessAccess(decoded, Number(processId));
+    if (access.error) return res.status(access.error.status).send({ message: access.error.message });
+    processRecord = access.process;
+  }
+
+  let linkedClientId: number | null = processRecord?.clientId ?? null;
+  let linkedClientName = processRecord?.client ?? null;
+
+  if (typeof client === 'string' && client.trim()) {
+    const linkedClient = await clientStore.upsert({
+      where: { name: client.trim() },
+      update: {},
+      create: {
+        name: client.trim(),
+        type: 'PF',
+        status: 'ativo',
+        legalArea: processRecord?.phase ?? null,
+        responsible: owner || getResponsibleLabel(decoded.email),
+        notes: 'Cliente criado automaticamente a partir de uma tarefa.',
+      },
+    });
+    linkedClientId = linkedClient.id;
+    linkedClientName = linkedClient.name;
+  }
+
+  const ownerLabel = owner || getResponsibleLabel(decoded.email) || decoded.email;
+  const createdBy = getResponsibleLabel(decoded.email) || decoded.email;
+  const taskOrigin = origin || 'interno';
+
+  const created = await prisma.task.create({
+    data: {
+      title: title.trim(),
+      description: typeof description === 'string' ? description.trim() : '',
+      processId: processRecord?.id ?? null,
+      clientId: linkedClientId,
+      clientName: linkedClientName,
+      origin: taskOrigin,
+      dueDate: dueDate ? new Date(dueDate) : new Date(),
+      status: status || 'pendente',
+      priority: priority || 'media',
+      owner: ownerLabel,
+      createdBy,
+      notes: typeof notes === 'string' ? notes.trim() : (typeof description === 'string' ? description.trim() : ''),
+      linkedToDeadline: taskOrigin === 'prazo',
+      linkedToPublication: taskOrigin === 'publicacao',
+      linkedToDocument: taskOrigin === 'documento',
+      immediateAction: Boolean(immediateAction ?? (priority === 'critica')),
+    },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+      clientRecord: true,
+    },
+  });
+
+  res.status(201).json(buildTaskPayload(created));
+});
+
+app.put('/tasks/:id', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const current = await prisma.task.findUnique({
+    where: { id: Number(req.params.id) },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+      clientRecord: true,
+    },
+  });
+
+  if (!current) return res.status(404).send({ message: 'Tarefa não encontrada' });
+  if (!canReadTask(decoded, current)) return res.status(403).send({ message: 'Acesso negado' });
+
+  const {
+    title,
+    description,
+    owner,
+    priority,
+    dueDate,
+    status,
+    notes,
+    immediateAction,
+  } = req.body;
+
+  const updated = await prisma.task.update({
+    where: { id: current.id },
+    data: {
+      title: typeof title === 'string' && title.trim() ? title.trim() : current.title,
+      description: typeof description === 'string' ? description.trim() : current.description,
+      owner: owner ?? current.owner,
+      priority: priority ?? current.priority,
+      dueDate: dueDate ? new Date(dueDate) : current.dueDate,
+      status: status ?? current.status,
+      notes: notes === undefined ? current.notes : (typeof notes === 'string' ? notes.trim() : null),
+      immediateAction: immediateAction ?? current.immediateAction,
+    },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+      clientRecord: true,
+    },
+  });
+
+  res.json(buildTaskPayload(updated));
 });
 
 app.get('/permissions', (req, res) => {

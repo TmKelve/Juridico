@@ -85,6 +85,28 @@ export interface ApiAttendance {
   owner?: ApiUser;
 }
 
+export interface ApiTask {
+  id: number;
+  title: string;
+  description: string;
+  processId: number | null;
+  processLabel: string;
+  processTitle: string;
+  clientId: number | null;
+  client: string;
+  origin: 'processo' | 'prazo' | 'documento' | 'publicacao' | 'atendimento' | 'interno';
+  dueDate: string;
+  status: 'pendente' | 'em_andamento' | 'aguardando' | 'concluida' | 'atrasada';
+  priority: 'baixa' | 'media' | 'alta' | 'critica';
+  owner: string;
+  createdBy: string;
+  notes: string;
+  linkedToDeadline: boolean;
+  linkedToPublication: boolean;
+  linkedToDocument: boolean;
+  immediateAction: boolean;
+}
+
 interface LoginResponse {
   user: ApiUser;
 }
@@ -305,4 +327,37 @@ export const api = {
 
   createAtendimento: (processId: number, data: { title: string; description: string }) =>
     apiClient<ApiAttendance>(`/processes/${processId}/atendimentos`, { method: 'POST', body: data }),
+
+  getTasks: () =>
+    apiClient<ApiTask[]>('/tasks'),
+
+  getTask: (id: number) =>
+    apiClient<ApiTask>(`/tasks/${id}`),
+
+  createTask: (data: {
+    title: string;
+    description?: string;
+    processId?: number;
+    client?: string;
+    origin?: ApiTask['origin'];
+    owner?: string;
+    priority?: ApiTask['priority'];
+    dueDate?: string;
+    status?: ApiTask['status'];
+    notes?: string;
+    immediateAction?: boolean;
+  }) =>
+    apiClient<ApiTask>('/tasks', { method: 'POST', body: data }),
+
+  updateTask: (id: number, data: Partial<{
+    title: string;
+    description: string;
+    owner: string;
+    priority: ApiTask['priority'];
+    dueDate: string;
+    status: ApiTask['status'];
+    notes: string;
+    immediateAction: boolean;
+  }>) =>
+    apiClient<ApiTask>(`/tasks/${id}`, { method: 'PUT', body: data }),
 };

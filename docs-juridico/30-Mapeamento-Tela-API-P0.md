@@ -45,6 +45,21 @@ Administracao:
 
 - `GET /users`
 
+Carteiras operacionais:
+
+- `GET /clients`
+- `GET /clients/:id`
+- `POST /clients`
+- `PUT /clients/:id`
+- `GET /attendances`
+- `GET /attendances/:id`
+- `POST /attendances`
+- `PUT /attendances/:id`
+- `GET /tasks`
+- `GET /tasks/:id`
+- `POST /tasks`
+- `PUT /tasks/:id`
+
 Processos e agregados por processo:
 
 - `GET /processes`
@@ -145,6 +160,29 @@ Campos observados:
 - `description`
 - `date`
 - `actorEmail`
+
+Origem:
+
+- direto da API
+
+### Task
+
+Campos observados:
+
+- `id`
+- `title`
+- `description`
+- `processId`
+- `processLabel`
+- `processTitle`
+- `client`
+- `origin`
+- `dueDate`
+- `status`
+- `priority`
+- `owner`
+- `createdBy`
+- `notes`
 
 Origem:
 
@@ -308,18 +346,20 @@ Observacao:
 
 ### Tarefas
 
-Endpoint consumido hoje:
+Endpoints:
 
-- `GET /processes`
+- `GET /tasks`
+- `GET /tasks/:id`
+- `POST /tasks`
+- `PUT /tasks/:id`
 
 Origem:
 
-- derivada localmente a partir de processos
+- direta da API
 
-Gap:
+Persistencia:
 
-- nao existe `GET /tasks`
-- tarefas ainda nao sao entidade persistente no backend atual
+- `Task` agora e entidade persistente autonoma
 
 ### Agenda
 
@@ -382,18 +422,15 @@ Gap:
 
 - Prazos
 - Documentos
-- Atendimentos
-- Clientes
-- Tarefas
 - Agenda
 - Publicacoes e Intimacoes
 - Modelos de Pecas
 
 ## 7. Conflitos E Gaps Reais
 
-- O frontend ja expande varias telas P0, mas o backend ainda tem apenas `Process`, `Andamento`, `Prazo`, `Documento`, `Atendimento` como entidades reais.
-- `Clientes`, `Tarefas`, `Agenda`, `Publicacoes` e `Modelos de Pecas` ainda nao possuem tabela ou endpoint dedicados.
-- `Dashboard`, `Prazos`, `Documentos`, `Clientes` e outras telas dependem de `GET /processes` como fonte universal, o que cria acoplamento alto.
+- O frontend ja expande varias telas P0, mas o backend ainda nao tem entidades dedicadas para `Agenda`, `Publicacoes` e `Modelos de Pecas`.
+- `Agenda`, `Publicacoes` e `Modelos de Pecas` ainda nao possuem tabela ou endpoint dedicados.
+- `Dashboard`, `Prazos`, `Documentos` e outras telas seguem dependentes de `GET /processes` como fonte universal, o que cria acoplamento alto.
 - `GET /permissions` retorna apenas lista simples de strings, insuficiente para politica granular de producao.
 
 ## 8. Implicacao Para Postgres
@@ -445,4 +482,4 @@ Evidencia observada em 12/05/2026:
 1. Escolher um schema Prisma soberano.
 2. Congelar o dominio atual do Grupo A.
 3. Criar plano de migracao SQLite -> Postgres sem ampliar entidades.
-4. Em paralelo, abrir backlog de contratos dedicados para `Clients`, `Tasks`, `Agenda` e `Publicacoes`.
+4. Em paralelo, abrir backlog de contratos dedicados para `Agenda`, `Publicacoes` e `Modelos de Pecas`.

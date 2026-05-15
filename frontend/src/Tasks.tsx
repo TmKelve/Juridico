@@ -18,7 +18,7 @@ import {
   UserRoundPlus,
   X,
 } from 'lucide-react';
-import { api } from './api';
+import { api, type ApiTask } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import './Tasks.css';
 
@@ -145,12 +145,6 @@ function toIsoDate(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
-function addDays(date: Date, days: number) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-}
-
 function formatDate(iso: string) {
   return new Date(`${iso}T00:00:00`).toLocaleDateString('pt-BR');
 }
@@ -169,43 +163,31 @@ function daysDiffFromToday(iso: string) {
   return Math.floor((due - now) / 86400000);
 }
 
-function makeTasks(processes: ProcessRecord[], userEmail: string): TaskItem[] {
-  const owner = userEmail.split('@')[0];
-  const base = new Date();
-  const statuses: TaskStatus[] = ['pendente', 'em_andamento', 'aguardando', 'concluida', 'atrasada'];
-  const priorities: TaskPriority[] = ['baixa', 'media', 'alta', 'critica'];
-  const origins: TaskOrigin[] = ['processo', 'prazo', 'documento', 'publicacao', 'atendimento', 'interno'];
+function mapApiTask(task: ApiTask, userEmail: string): TaskItem {
+  const actorLabel = userEmail.split('@')[0];
 
-  return processes.slice(0, 20).map((p, idx) => {
-    const due = toIsoDate(addDays(base, (idx % 11) - 4));
-    const status = statuses[idx % statuses.length];
-    const priority = priorities[idx % priorities.length];
-    const origin = origins[idx % origins.length];
-    const delegated = idx % 3 === 0;
-
-    return {
-      id: `tsk-${p.id}`,
-      title: `${ORIGIN_LABEL[origin]}: ${p.title}`,
-      description: 'Executar ação operacional com validação jurídica e retorno para o cliente quando necessário.',
-      processId: p.id,
-      processLabel: `#${p.id}`,
-      processTitle: p.title,
-      client: p.client,
-      origin,
-      dueDate: due,
-      status: status === 'atrasada' && !isOverdue(due) ? 'pendente' : status,
-      priority,
-      owner: delegated ? `equipe-${(idx % 4) + 1}` : owner,
-      createdBy: owner,
-      delegatedByMe: delegated,
-      isMine: !delegated,
-      notes: idx % 2 === 0 ? 'Aguardar documento complementar para avanço.' : 'Priorizar alinhamento com cliente até o fim do dia.',
-      linkedToDeadline: origin === 'prazo',
-      linkedToPublication: origin === 'publicacao',
-      linkedToDocument: origin === 'documento',
-      immediateAction: priority === 'critica' || status === 'atrasada',
-    };
-  });
+  return {
+    id: String(task.id),
+    title: task.title,
+    description: task.description,
+    processId: task.processId,
+    processLabel: task.processLabel,
+    processTitle: task.processTitle,
+    client: task.client,
+    origin: task.origin,
+    dueDate: task.dueDate,
+    status: task.status,
+    priority: task.priority,
+    owner: task.owner,
+    createdBy: task.createdBy,
+    delegatedByMe: task.createdBy === actorLabel && task.owner !== actorLabel,
+    isMine: task.owner === actorLabel,
+    notes: task.notes,
+    linkedToDeadline: task.linkedToDeadline,
+    linkedToPublication: task.linkedToPublication,
+    linkedToDocument: task.linkedToDocument,
+    immediateAction: task.immediateAction,
+  };
 }
 
 function StatusBadge({ status }: { status: TaskStatus }) {
@@ -264,17 +246,23 @@ export function Tasks({ user }: TasksProps) {
     setLoading(true);
     setError('');
     try {
-      const res = await api.getProcesses();
-      if (res.status !== 200 || !Array.isArray(res.data)) {
-        setError(res.error || 'Não foi possível carregar tarefas.');
+      const [processesRes, tasksRes] = await Promise.all([api.getProcesses(), api.getTasks()]);
+      if (processesRes.status !== 200 || !Array.isArray(processesRes.data)) {
+        setError(processesRes.error || 'Não foi possível carregar tarefas.');
         setLoading(false);
         return;
       }
+      if (tasksRes.status !== 200 || !Array.isArray(tasksRes.data)) {
+        setError(tasksRes.error || 'Não foi possível carregar tarefas.');
+        setLoading(false);
+        return;
+      }
+
       const scoped = isAdv
-        ? (res.data as ProcessRecord[]).filter((p) => p.ownerId === user.id)
-        : (res.data as ProcessRecord[]);
+        ? (processesRes.data as ProcessRecord[]).filter((p) => p.ownerId === user.id)
+        : (processesRes.data as ProcessRecord[]);
       setProcesses(scoped);
-      const mapped = makeTasks(scoped, user.email);
+      const mapped = (tasksRes.data as ApiTask[]).map((task) => mapApiTask(task, user.email));
       setTasks(mapped);
       trackEvent('tasks_loaded', { count: mapped.length });
     } catch (err) {
@@ -299,20 +287,30 @@ export function Tasks({ user }: TasksProps) {
     setSuccess('Filtro salvo.');
   }
 
-  function markDone(id: string) {
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status: 'concluida' } : t)));
-    if (selected?.id === id) {
-      setSelected((prev) => (prev ? { ...prev, status: 'concluida' } : null));
+  async function markDone(id: string) {
+    const res = await api.updateTask(Number(id), { status: 'concluida' });
+    if (res.status !== 200 || !res.data) {
+      setError(res.error || 'Não foi possível concluir a tarefa.');
+      return;
     }
+
+    const next = mapApiTask(res.data, user.email);
+    setTasks((prev) => prev.map((t) => (t.id === id ? next : t)));
+    if (selected?.id === id) setSelected(next);
     setOpenMenuId(null);
     setSuccess('Tarefa concluída.');
   }
 
-  function reassign(id: string) {
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, owner: 'equipe-reatribuida', delegatedByMe: true } : t)));
-    if (selected?.id === id) {
-      setSelected((prev) => (prev ? { ...prev, owner: 'equipe-reatribuida', delegatedByMe: true } : null));
+  async function reassign(id: string) {
+    const res = await api.updateTask(Number(id), { owner: 'equipe-reatribuida' });
+    if (res.status !== 200 || !res.data) {
+      setError(res.error || 'Não foi possível reatribuir a tarefa.');
+      return;
     }
+
+    const next = mapApiTask(res.data, user.email);
+    setTasks((prev) => prev.map((t) => (t.id === id ? next : t)));
+    if (selected?.id === id) setSelected(next);
     setOpenMenuId(null);
     setSuccess('Tarefa reatribuída.');
   }
@@ -345,31 +343,29 @@ export function Tasks({ user }: TasksProps) {
     URL.revokeObjectURL(url);
   }
 
-  function submitForm(ev: React.FormEvent) {
+  async function submitForm(ev: React.FormEvent) {
     ev.preventDefault();
     const proc = processes.find((p) => String(p.id) === form.processId);
-    const newTask: TaskItem = {
-      id: `tsk-new-${Date.now()}`,
+    const res = await api.createTask({
       title: form.title,
       description: form.description,
-      processId: form.processId ? Number(form.processId) : null,
-      processLabel: proc ? `#${proc.id}` : '—',
-      processTitle: proc?.title || '',
-      client: form.client || proc?.client || 'Não informado',
+      processId: form.processId ? Number(form.processId) : undefined,
+      client: form.client || proc?.client || '',
       origin: form.origin,
+      owner: form.owner || undefined,
+      priority: form.priority,
       dueDate: form.dueDate || toIsoDate(new Date()),
       status: form.status,
-      priority: form.priority,
-      owner: form.owner || user.email.split('@')[0],
-      createdBy: user.email.split('@')[0],
-      delegatedByMe: Boolean(form.owner && form.owner !== user.email.split('@')[0]),
-      isMine: !form.owner || form.owner === user.email.split('@')[0],
       notes: form.description,
-      linkedToDeadline: form.origin === 'prazo',
-      linkedToPublication: form.origin === 'publicacao',
-      linkedToDocument: form.origin === 'documento',
       immediateAction: form.priority === 'critica',
-    };
+    });
+
+    if (res.status !== 201 || !res.data) {
+      setError(res.error || 'Não foi possível criar a tarefa.');
+      return;
+    }
+
+    const newTask = mapApiTask(res.data, user.email);
     setTasks((prev) => [newTask, ...prev]);
     setShowForm(false);
     setForm(EMPTY_FORM);
