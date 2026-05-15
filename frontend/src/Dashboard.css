@@ -39,6 +39,20 @@
   color: var(--neutral-600);
 }
 
+.dashboard-hero-date {
+  margin-bottom: var(--space-2);
+  color: var(--neutral-500);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.dashboard-hero-summary {
+  margin-top: var(--space-3);
+  color: var(--neutral-800);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
 .dashboard-hero-eyebrow {
   margin-bottom: var(--space-2);
   font-size: var(--font-size-xs);
@@ -699,6 +713,23 @@
   margin-top: 2px;
   color: var(--neutral-600);
   font-weight: var(--font-weight-regular);
+}
+
+.queue-context-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.queue-context-cell strong {
+  color: var(--neutral-800);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.queue-context-cell small {
+  color: var(--neutral-500);
+  font-size: var(--font-size-xs);
 }
 
 .context-column {

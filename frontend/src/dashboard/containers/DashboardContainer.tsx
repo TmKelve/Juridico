@@ -63,6 +63,12 @@ export function DashboardContainer({ user }: DashboardContainerProps) {
     const todayCount = items.filter((item) => item.type === 'hoje').length;
     const pausedCount = items.filter((item) => item.status === 'pausado').length;
     const agendaToday = agenda.length;
+    const now = new Date();
+    const longDate = new Intl.DateTimeFormat('pt-BR', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+    }).format(now);
     const titleByProfile: Record<string, string> = {
       ADV: 'Meu Dia',
       ADM: 'Visão do Escritório',
@@ -79,6 +85,8 @@ export function DashboardContainer({ user }: DashboardContainerProps) {
     return {
       title: titleByProfile[profile] || 'Home Operacional',
       subtitle: subtitleByProfile[profile] || 'Acompanhe a fila operacional e ataque o que exige ação primeiro.',
+      dateLabel: longDate.charAt(0).toUpperCase() + longDate.slice(1),
+      summary: `Você tem ${agendaToday} compromisso(s) no dia, ${todayCount} item(ns) para atuar hoje e ${overdueCount} atraso(s) exigindo correção.`,
       insights: [
         `${todayCount} item(ns) exigem atuação hoje`,
         `${overdueCount} atraso(s) pedem correção imediata`,
@@ -174,7 +182,9 @@ export function DashboardContainer({ user }: DashboardContainerProps) {
             <div className="dashboard-hero-copy">
               <div className="dashboard-hero-eyebrow">Painel de responsabilidades</div>
               <h2>{hero.title}</h2>
+              <div className="dashboard-hero-date">{hero.dateLabel}</div>
               <p>{hero.subtitle}</p>
+              <p className="dashboard-hero-summary">{hero.summary}</p>
             </div>
 
             <div className="dashboard-hero-insights" aria-label="Insights do dia">

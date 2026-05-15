@@ -111,8 +111,7 @@ export function ResponsibilityQueueTable({
           <thead>
             <tr>
               <th scope="col">Processo</th>
-              <th scope="col">Cliente</th>
-              <th scope="col">Etapa</th>
+              <th scope="col">Contexto</th>
               <th scope="col">Responsável</th>
               <th scope="col">SLA</th>
               <th scope="col">Ação</th>
@@ -139,11 +138,11 @@ export function ResponsibilityQueueTable({
                     <div>#{row.id} • {row.title}</div>
                     <small>{row.pendingSummary}</small>
                   </td>
-                  <td>{row.client}</td>
                   <td>
-                    <span className="queue-status-dot" data-status={row.status}>
-                      {row.phase}
-                    </span>
+                    <div className="queue-context-cell">
+                      <strong>{row.client}</strong>
+                      <small>{row.phase}</small>
+                    </div>
                   </td>
                   <td>{row.owner}</td>
                   <td>
