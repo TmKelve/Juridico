@@ -83,7 +83,7 @@ function setAuthCookie(res: express.Response, token: string) {
   res.cookie(authCookieName, `Bearer ${token}`, {
     httpOnly: true,
     secure: isProduction,
-    sameSite: 'strict',
+    sameSite: isProduction ? 'none' : 'strict',
     maxAge: 8 * 60 * 60 * 1000,
     path: '/',
   });
@@ -93,7 +93,7 @@ function clearAuthCookie(res: express.Response) {
   res.clearCookie(authCookieName, {
     httpOnly: true,
     secure: isProduction,
-    sameSite: 'strict',
+    sameSite: isProduction ? 'none' : 'strict',
     path: '/',
   });
 }
