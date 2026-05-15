@@ -7,6 +7,7 @@ import { signUserToken, verifyToken, type UserToken } from './auth';
 const app = express();
 const port = process.env.PORT || 3000;
 const prisma = new PrismaClient();
+const clientStore = (prisma as PrismaClient & { client: any }).client;
 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
 const isProduction = process.env.NODE_ENV === 'production';
 const authCookieName = 'Authorization';
@@ -98,6 +99,44 @@ function clearAuthCookie(res: express.Response) {
   });
 }
 
+function getResponsibleLabel(email?: string | null) {
+  if (!email) return null;
+  return email.split('@')[0];
+}
+
+async function syncClientsFromProcesses() {
+  const processes = await prisma.process.findMany({
+    include: { owner: { select: { email: true } } },
+  });
+
+  for (const process of processes) {
+    if (!process.client?.trim()) continue;
+
+    const client = await clientStore.upsert({
+      where: { name: process.client },
+      update: {
+        responsible: process.owner?.email ? getResponsibleLabel(process.owner.email) : undefined,
+        legalArea: process.phase || undefined,
+      },
+      create: {
+        name: process.client,
+        type: 'PJ',
+        status: 'ativo',
+        legalArea: process.phase,
+        responsible: process.owner?.email ? getResponsibleLabel(process.owner.email) : undefined,
+        notes: 'Cliente sincronizado a partir da carteira de processos.',
+      },
+    });
+
+    if ((process as { clientId?: number | null }).clientId !== client.id) {
+      await prisma.process.update({
+        where: { id: process.id },
+        data: { clientId: client.id },
+      });
+    }
+  }
+}
+
 async function seedData() {
   const count = await prisma.user.count();
   if (count === 0) {
@@ -167,11 +206,27 @@ async function seedData() {
     for (const process of sampleProcesses) {
       const ownerId = ownerByEmail.get(process.ownerEmail);
       if (!ownerId) continue;
+      const seededClient = await clientStore.upsert({
+        where: { name: process.client },
+        update: {
+          responsible: process.ownerEmail.split('@')[0],
+          legalArea: process.phase,
+        },
+        create: {
+          name: process.client,
+          type: 'PJ',
+          status: 'ativo',
+          legalArea: process.phase,
+          responsible: process.ownerEmail.split('@')[0],
+          notes: 'Cliente inicial criado a partir da seed do projeto.',
+        },
+      });
 
       await prisma.process.create({
         data: {
           title: process.title,
           client: process.client,
+          clientId: seededClient.id,
           phase: process.phase,
           status: process.status,
           ownerId,
@@ -179,6 +234,8 @@ async function seedData() {
       });
     }
   }
+
+  await syncClientsFromProcesses();
 }
 
 seedData().catch((err) => {
@@ -189,6 +246,55 @@ function getUserFromReq(req: express.Request): UserToken | null {
   const token = getAuthToken(req);
   if (!token) return null;
   return verifyToken(token);
+}
+
+function canManageClients(role: string) {
+  return role === 'ADM' || role === 'ADV';
+}
+
+function buildClientPayload(client: any) {
+  const processItems = client.processes.map((process: any) => ({
+    id: process.id,
+    title: process.title,
+    client: process.client,
+    phase: process.phase,
+    status: process.status,
+    ownerId: process.ownerId,
+    owner: process.owner,
+    lastAttendanceAt: process.atendimentos[0]?.date.toISOString() ?? null,
+    pendingDocumentsCount: process.documentos.filter((documento: any) => documento.status === 'pendente').length,
+  }));
+
+  const lastAttendanceAt = processItems
+    .map((process: any) => process.lastAttendanceAt)
+    .filter((value: string | null): value is string => Boolean(value))
+    .sort((left: string, right: string) => right.localeCompare(left))[0] ?? null;
+
+  const pendingDocumentsCount = processItems.reduce((accumulator: number, process: any) => accumulator + process.pendingDocumentsCount, 0);
+  const pendingAttendance = !lastAttendanceAt || ((Date.now() - new Date(lastAttendanceAt).getTime()) / 86400000) > 14;
+  const pendingItems = pendingDocumentsCount + (pendingAttendance ? 1 : 0);
+
+  return {
+    id: client.id,
+    name: client.name,
+    type: client.type,
+    cpfCnpj: client.cpfCnpj,
+    phone: client.phone,
+    email: client.email,
+    address: client.address,
+    status: client.status,
+    legalArea: client.legalArea,
+    responsible: client.responsible,
+    notes: client.notes,
+    createdAt: client.createdAt.toISOString(),
+    processes: processItems,
+    metrics: {
+      lastAttendanceAt,
+      pendingDocumentsCount,
+      pendingAttendance,
+      pendingItems,
+    },
+  };
 }
 
 app.post('/auth/login', async (req, res) => {
@@ -225,6 +331,142 @@ app.get('/users', async (req, res) => {
 
   const users = await prisma.user.findMany({ select: { id: true, email: true, role: true } });
   res.json(users);
+});
+
+app.get('/clients', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const clients = await clientStore.findMany({
+    include: {
+      processes: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          atendimentos: { orderBy: { date: 'desc' }, take: 1 },
+          documentos: true,
+        },
+        orderBy: { id: 'desc' },
+      },
+    },
+    orderBy: { name: 'asc' },
+  });
+
+  res.json(clients.map((client: any) => buildClientPayload(client)));
+});
+
+app.get('/clients/:id', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const client = await clientStore.findUnique({
+    where: { id: Number(req.params.id) },
+    include: {
+      processes: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          atendimentos: { orderBy: { date: 'desc' }, take: 1 },
+          documentos: true,
+        },
+        orderBy: { id: 'desc' },
+      },
+    },
+  });
+
+  if (!client) return res.status(404).send({ message: 'Cliente não encontrado' });
+  res.json(buildClientPayload(client));
+});
+
+app.post('/clients', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+  if (!canManageClients(decoded.role)) return res.status(403).send({ message: 'Acesso negado' });
+
+  const { name, type, cpfCnpj, phone, email, address, status, legalArea, responsible, notes } = req.body;
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    return res.status(400).send({ message: 'Nome do cliente é obrigatório' });
+  }
+
+  const existing = await clientStore.findUnique({ where: { name: name.trim() } });
+  if (existing) return res.status(409).send({ message: 'Já existe cliente com este nome' });
+
+  const created = await clientStore.create({
+    data: {
+      name: name.trim(),
+      type: type || 'PF',
+      cpfCnpj: cpfCnpj || null,
+      phone: phone || null,
+      email: email || null,
+      address: address || null,
+      status: status || 'ativo',
+      legalArea: legalArea || null,
+      responsible: responsible || getResponsibleLabel(decoded.email),
+      notes: notes || null,
+    },
+    include: {
+      processes: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          atendimentos: { orderBy: { date: 'desc' }, take: 1 },
+          documentos: true,
+        },
+      },
+    },
+  });
+
+  res.status(201).json(buildClientPayload(created));
+});
+
+app.put('/clients/:id', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+  if (!canManageClients(decoded.role)) return res.status(403).send({ message: 'Acesso negado' });
+
+  const clientId = Number(req.params.id);
+  const current = await clientStore.findUnique({ where: { id: clientId } });
+  if (!current) return res.status(404).send({ message: 'Cliente não encontrado' });
+
+  const { name, type, cpfCnpj, phone, email, address, status, legalArea, responsible, notes } = req.body;
+  const nextName = typeof name === 'string' ? name.trim() : current.name;
+  if (!nextName) return res.status(400).send({ message: 'Nome do cliente é obrigatório' });
+
+  if (nextName !== current.name) {
+    const duplicated = await clientStore.findUnique({ where: { name: nextName } });
+    if (duplicated) return res.status(409).send({ message: 'Já existe cliente com este nome' });
+  }
+
+  const updated = await clientStore.update({
+    where: { id: clientId },
+    data: {
+      name: nextName,
+      type: type ?? current.type,
+      cpfCnpj: cpfCnpj ?? current.cpfCnpj,
+      phone: phone ?? current.phone,
+      email: email ?? current.email,
+      address: address ?? current.address,
+      status: status ?? current.status,
+      legalArea: legalArea ?? current.legalArea,
+      responsible: responsible ?? current.responsible,
+      notes: notes ?? current.notes,
+    },
+    include: {
+      processes: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          atendimentos: { orderBy: { date: 'desc' }, take: 1 },
+          documentos: true,
+        },
+      },
+    },
+  });
+
+  if (nextName !== current.name) {
+    await prisma.process.updateMany({
+      where: { clientId },
+      data: { client: nextName },
+    });
+  }
+
+  res.json(buildClientPayload(updated));
 });
 
 app.get('/permissions', (req, res) => {
@@ -286,10 +528,27 @@ app.post('/processes', async (req, res) => {
   const { title, client, phase, status } = req.body;
   if (!title || !client || !phase || !status) return res.status(400).send({ message: 'Dados incompletos' });
 
+  const linkedClient = await clientStore.upsert({
+    where: { name: client.trim() },
+    update: {
+      responsible: getResponsibleLabel(decoded.email),
+      legalArea: phase,
+    },
+    create: {
+      name: client.trim(),
+      type: 'PJ',
+      status: 'ativo',
+      legalArea: phase,
+      responsible: getResponsibleLabel(decoded.email),
+      notes: 'Cliente criado automaticamente a partir de um processo.',
+    },
+  });
+
   const newProcess = await prisma.process.create({
     data: {
       title,
       client,
+      clientId: linkedClient.id,
       phase,
       status,
       ownerId: decoded.sub
@@ -309,11 +568,35 @@ app.put('/processes/:id', async (req, res) => {
   if (decoded.role !== 'ADM' && decoded.role !== 'FIN' && process.ownerId !== decoded.sub) return res.status(403).send({ message: 'Acesso negado' });
 
   const { title, client, phase, status } = req.body;
+  let nextClientId = (process as { clientId?: number | null }).clientId ?? null;
+  let nextClientName = process.client;
+
+  if (typeof client === 'string' && client.trim()) {
+    const linkedClient = await clientStore.upsert({
+      where: { name: client.trim() },
+      update: {
+        responsible: getResponsibleLabel(decoded.email),
+        legalArea: (phase ?? process.phase) as string,
+      },
+      create: {
+        name: client.trim(),
+        type: 'PJ',
+        status: 'ativo',
+        legalArea: (phase ?? process.phase) as string,
+        responsible: getResponsibleLabel(decoded.email),
+        notes: 'Cliente criado automaticamente a partir de uma atualização de processo.',
+      },
+    });
+    nextClientId = linkedClient.id;
+    nextClientName = client.trim();
+  }
+
   const updated = await prisma.process.update({
     where: { id: process.id },
     data: {
       title: title ?? process.title,
-      client: client ?? process.client,
+      client: nextClientName,
+      clientId: nextClientId,
       phase: phase ?? process.phase,
       status: status ?? process.status
     },

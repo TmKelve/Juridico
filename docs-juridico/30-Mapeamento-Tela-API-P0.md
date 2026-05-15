@@ -287,18 +287,24 @@ Gap:
 
 ### Clientes
 
-Endpoint consumido hoje:
+Endpoints:
 
-- `GET /processes`
+- `GET /clients`
+- `POST /clients`
+- `GET /clients/:id`
+- `PUT /clients/:id`
 
 Origem:
 
-- derivada localmente a partir de processos
+- direta da API com metricas derivadas no backend
 
-Gap:
+Persistencia:
 
-- nao existe `GET /clients`
-- clientes nao sao entidade persistente autonoma no backend atual
+- `Client` agora e entidade persistente autonoma
+
+Observacao:
+
+- o vinculo basico com `Process` passa a usar `clientId`, preservando o campo textual `client` como compatibilidade de transicao
 
 ### Tarefas
 

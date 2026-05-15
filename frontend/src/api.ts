@@ -27,6 +27,40 @@ export interface ApiProcess {
   owner?: ApiUser;
 }
 
+export interface ApiClientProcess {
+  id: number;
+  title: string;
+  client: string;
+  phase: string;
+  status: string;
+  ownerId: number;
+  owner?: ApiUser;
+  lastAttendanceAt: string | null;
+  pendingDocumentsCount: number;
+}
+
+export interface ApiClient {
+  id: number;
+  name: string;
+  type: 'PF' | 'PJ';
+  cpfCnpj: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  status: 'ativo' | 'inativo' | 'prospecto' | 'encerrado';
+  legalArea: string | null;
+  responsible: string | null;
+  notes: string | null;
+  createdAt: string;
+  processes: ApiClientProcess[];
+  metrics: {
+    lastAttendanceAt: string | null;
+    pendingDocumentsCount: number;
+    pendingAttendance: boolean;
+    pendingItems: number;
+  };
+}
+
 interface LoginResponse {
   user: ApiUser;
 }
@@ -116,6 +150,46 @@ export const api = {
 
   getUsers: () =>
     apiClient<ApiUser[]>('/users'),
+
+  getClients: () =>
+    apiClient<ApiClient[]>('/clients'),
+
+  getClient: (id: number) =>
+    apiClient<ApiClient>(`/clients/${id}`),
+
+  createClient: (data: {
+    name: string;
+    type: 'PF' | 'PJ';
+    cpfCnpj?: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+    status?: 'ativo' | 'inativo' | 'prospecto' | 'encerrado';
+    legalArea?: string;
+    responsible?: string;
+    notes?: string;
+  }) =>
+    apiClient<ApiClient>('/clients', {
+      method: 'POST',
+      body: data,
+    }),
+
+  updateClient: (id: number, data: Partial<{
+    name: string;
+    type: 'PF' | 'PJ';
+    cpfCnpj: string;
+    phone: string;
+    email: string;
+    address: string;
+    status: 'ativo' | 'inativo' | 'prospecto' | 'encerrado';
+    legalArea: string;
+    responsible: string;
+    notes: string;
+  }>) =>
+    apiClient<ApiClient>(`/clients/${id}`, {
+      method: 'PUT',
+      body: data,
+    }),
 
   getHome: () =>
     apiClient<{ profile: string; home: { menu: string[]; cards: string[] } }>('/home'),

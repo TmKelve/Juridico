@@ -15,10 +15,28 @@ model User {
   processes Process[]
 }
 
+model Client {
+  id         Int       @id @default(autoincrement())
+  name       String    @unique
+  type       String    @default("PF")
+  cpfCnpj    String?
+  phone      String?
+  email      String?
+  address    String?
+  status     String    @default("ativo")
+  legalArea  String?
+  responsible String?
+  notes      String?
+  createdAt  DateTime  @default(now())
+  processes  Process[]
+}
+
 model Process {
   id           Int           @id @default(autoincrement())
   title        String
   client       String
+  clientId     Int?
+  clientRecord Client?       @relation(fields: [clientId], references: [id])
   phase        String
   status       String
   ownerId      Int

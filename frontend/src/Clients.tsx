@@ -22,22 +22,12 @@ import {
   User,
   X,
 } from 'lucide-react';
-import { api } from './api';
+import { api, type ApiClient } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import './Clients.css';
 
 interface ClientsProps {
   user: { id: number; email: string; role: string };
-}
-
-interface ProcessRecord {
-  id: number;
-  title: string;
-  client: string;
-  phase: string;
-  status: string;
-  ownerId: number;
-  owner?: { id: number; email: string; role: string };
 }
 
 type ClientStatus = 'ativo' | 'inativo' | 'prospecto' | 'encerrado';
@@ -125,16 +115,6 @@ const EMPTY_FORM: NewClientForm = {
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-function toIsoDate(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
-
-function addDays(date: Date, days: number) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
-}
-
 function formatDate(iso: string) {
   return new Date(`${iso}T00:00:00`).toLocaleDateString('pt-BR');
 }
@@ -154,83 +134,30 @@ function isWithinDays(iso: string, days: number) {
   return diff >= 0 && diff <= days;
 }
 
-// ─── mock data builder ────────────────────────────────────────────────────────
-
-const NOMES_PF = [
-  'Ana Beatriz Ferreira', 'Carlos Eduardo Souza', 'Mariana Gonçalves Lima',
-  'Roberto Alves Pereira', 'Fernanda Castro Ramos', 'Lucas Mendes Oliveira',
-  'Patrícia Nunes Vieira', 'Diego Carvalho Santos', 'Juliana Rocha Martins',
-  'Thiago Barbosa Costa',
-];
-
-const NOMES_PJ = [
-  'Construtora Alpha Ltda', 'Distribuidora Beta S.A.', 'Logística Gama ME',
-  'Indústria Delta EPP', 'Comércio Epsilon Ltda',
-];
-
-function makeClients(processes: ProcessRecord[], userEmail: string): ClientItem[] {
-  const base = new Date();
-  const owner = userEmail.split('@')[0];
-
-  const allNames = [...NOMES_PF, ...NOMES_PJ];
-  const usedNames = new Set<string>();
-
-  const clientMap = new Map<string, ClientItem>();
-
-  processes.forEach((process, idx) => {
-    const nameIdx = process.id % allNames.length;
-    let nome = allNames[nameIdx];
-    if (usedNames.has(nome)) {
-      nome = allNames[(nameIdx + 3) % allNames.length];
-    }
-    usedNames.add(nome);
-
-    const tipo: ClientType = NOMES_PJ.includes(nome) ? 'PJ' : 'PF';
-    const area = AREAS[(process.id + idx) % AREAS.length];
-    const statusKeys: ClientStatus[] = ['ativo', 'ativo', 'ativo', 'inativo', 'prospecto'];
-    const status: ClientStatus = statusKeys[(process.id + idx) % statusKeys.length];
-    const pendencias = (process.id + idx) % 4;
-    const docsF = (process.id * 2 + idx) % 3;
-    const atdPend = (process.id + idx) % 3 === 0;
-    const ultimoAtendimento = (process.id + idx) % 5 !== 0
-      ? toIsoDate(addDays(base, -((process.id * 3 + idx) % 20)))
-      : null;
-
-    const clientId = `cli-${process.id}`;
-
-    if (clientMap.has(clientId)) {
-      const existing = clientMap.get(clientId)!;
-      existing.processos.push({
-        id: process.id,
-        label: `#${process.id}`,
-        title: process.title,
-        status: process.status,
-      });
-    } else {
-      clientMap.set(clientId, {
-        id: clientId,
-        nome,
-        tipo,
-        cpfCnpj: tipo === 'PF'
-          ? `${String(process.id * 11).padStart(3, '0')}.${String(process.id * 7).padStart(3, '0')}.${String(process.id * 3).padStart(3, '0')}-${String(process.id % 99).padStart(2, '0')}`
-          : `${String(process.id * 11).padStart(2, '0')}.${String(process.id * 7).padStart(3, '0')}.${String(process.id * 3).padStart(3, '0')}/0001-${String(process.id % 99).padStart(2, '0')}`,
-        telefone: `(11) 9${String(7000 + process.id * 13).slice(0, 4)}-${String(1000 + process.id * 7).slice(0, 4)}`,
-        email: `${nome.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z.]/g, '').slice(0, 20)}@email.com.br`,
-        status,
-        areaJuridica: area,
-        responsavel: owner,
-        processos: [{ id: process.id, label: `#${process.id}`, title: process.title, status: process.status }],
-        ultimoAtendimento,
-        pendencias,
-        documentosFaltantes: docsF,
-        atendimentoPendente: atdPend,
-        observacoes: 'Cliente em acompanhamento regular. Verificar pendências antes do próximo contato.',
-        createdAt: toIsoDate(addDays(base, -((process.id * 5 + idx * 3) % 365))),
-      });
-    }
-  });
-
-  return [...clientMap.values()];
+function mapClientRecord(client: ApiClient): ClientItem {
+  return {
+    id: String(client.id),
+    nome: client.name,
+    tipo: client.type,
+    cpfCnpj: client.cpfCnpj || '',
+    telefone: client.phone || '—',
+    email: client.email || '—',
+    status: client.status,
+    areaJuridica: client.legalArea || 'Não definida',
+    responsavel: client.responsible || 'Não definido',
+    processos: client.processes.map((process) => ({
+      id: process.id,
+      label: `#${process.id}`,
+      title: process.title,
+      status: process.status,
+    })),
+    ultimoAtendimento: client.metrics.lastAttendanceAt ? client.metrics.lastAttendanceAt.slice(0, 10) : null,
+    pendencias: client.metrics.pendingItems,
+    documentosFaltantes: client.metrics.pendingDocumentsCount,
+    atendimentoPendente: client.metrics.pendingAttendance,
+    observacoes: client.notes || '',
+    createdAt: client.createdAt.slice(0, 10),
+  };
 }
 
 // ─── sub-components ────────────────────────────────────────────────────────────
@@ -569,7 +496,6 @@ export function Clients({ user }: ClientsProps) {
   const [showForm, setShowForm]         = useState(false);
   const [form, setForm]                 = useState<NewClientForm>(EMPTY_FORM);
 
-  const isAdv = user.role === 'ADV';
   const ITEMS_PER_PAGE = 15;
 
   useEffect(() => {
@@ -590,16 +516,13 @@ export function Clients({ user }: ClientsProps) {
     setLoading(true);
     setError('');
     try {
-      const res = await api.getProcesses();
+      const res = await api.getClients();
       if (res.status !== 200 || !Array.isArray(res.data)) {
         setError(res.error || 'Não foi possível carregar clientes.');
         setLoading(false);
         return;
       }
-      const scoped = isAdv
-        ? (res.data as ProcessRecord[]).filter((p) => p.ownerId === user.id)
-        : (res.data as ProcessRecord[]);
-      const items = makeClients(scoped, user.email);
+      const items = res.data.map(mapClientRecord);
       setClients(items);
       trackEvent('clients_loaded', { count: items.length, role: user.role });
     } catch (err) {
@@ -642,26 +565,28 @@ export function Clients({ user }: ClientsProps) {
     trackEvent('clients_exported', { count: items.length });
   }
 
-  function submitForm(ev: React.FormEvent) {
+  async function submitForm(ev: React.FormEvent) {
     ev.preventDefault();
-    const newClient: ClientItem = {
-      id: `cli-new-${Date.now()}`,
-      nome: form.nome,
-      tipo: form.tipo,
-      cpfCnpj: form.cpfCnpj,
-      telefone: form.telefone,
-      email: form.email,
+    setError('');
+    const res = await api.createClient({
+      name: form.nome,
+      type: form.tipo,
+      cpfCnpj: form.cpfCnpj || undefined,
+      phone: form.telefone || undefined,
+      email: form.email || undefined,
+      address: form.endereco || undefined,
       status: form.status,
-      areaJuridica: form.areaJuridica || 'Cível',
-      responsavel: form.responsavel || user.email.split('@')[0],
-      processos: [],
-      ultimoAtendimento: null,
-      pendencias: 0,
-      documentosFaltantes: 0,
-      atendimentoPendente: false,
-      observacoes: form.observacoes,
-      createdAt: toIsoDate(new Date()),
-    };
+      legalArea: form.areaJuridica || undefined,
+      responsible: form.responsavel || undefined,
+      notes: form.observacoes || undefined,
+    });
+
+    if (res.status !== 201) {
+      setError(res.error || 'Não foi possível cadastrar o cliente.');
+      return;
+    }
+
+    const newClient = mapClientRecord(res.data);
     setClients((prev) => [newClient, ...prev]);
     setShowForm(false);
     setForm(EMPTY_FORM);
