@@ -320,6 +320,16 @@ export function Tasks({ user }: TasksProps) {
     setSuccess('Comentário registrado na tarefa.');
   }
 
+  function applyKpiFilter(target: 'today' | 'overdue' | 'high' | 'delegated' | 'doneWeek') {
+    setFilters(() => {
+      if (target === 'today') return { ...EMPTY_FILTERS, period: 'hoje' };
+      if (target === 'overdue') return { ...EMPTY_FILTERS, prazo: 'atrasado' };
+      if (target === 'high') return { ...EMPTY_FILTERS, priority: 'alta' };
+      if (target === 'delegated') return { ...EMPTY_FILTERS, scope: 'delegada_por_mim' };
+      return { ...EMPTY_FILTERS, status: 'concluida', period: '7' };
+    });
+  }
+
   function exportCsv(items: TaskItem[]) {
     const header = ['Tarefa', 'Processo', 'Cliente', 'Origem', 'Prazo', 'Status', 'Prioridade', 'Responsável'];
     const rows = items.map((t) => [
@@ -437,6 +447,14 @@ export function Tasks({ user }: TasksProps) {
   const totalPages = Math.max(1, Math.ceil(sorted.length / ITEMS_PER_PAGE));
   const pageItems = sorted.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
   const hasActiveFilters = Object.values(filters).some((v) => (typeof v === 'boolean' ? v : v !== ''));
+  const activeKpi = useMemo(() => {
+    if (filters.period === 'hoje') return 'today';
+    if (filters.prazo === 'atrasado') return 'overdue';
+    if (filters.priority === 'alta') return 'high';
+    if (filters.scope === 'delegada_por_mim') return 'delegated';
+    if (filters.status === 'concluida' && filters.period === '7') return 'doneWeek';
+    return null;
+  }, [filters]);
 
   const kanbanColumns = useMemo(() => {
     const columns: Array<{ status: TaskStatus; title: string }> = [
@@ -467,11 +485,10 @@ export function Tasks({ user }: TasksProps) {
           <strong>{t.title}</strong>
           <span>{t.description}</span>
         </td>
-        <td>
-          <span className="tsk-process">{t.processLabel}</span>
-          <span className="tsk-process-title">{t.processTitle || 'Sem vínculo'}</span>
+        <td className="tsk-col-context">
+          <strong>{t.client}</strong>
+          <span>{t.processLabel} • {t.processTitle || 'Sem vínculo'}</span>
         </td>
-        <td>{t.client}</td>
         <td><OriginChip origin={t.origin} /></td>
         <td>
           <span className={`tsk-due${isOverdue(t.dueDate) && t.status !== 'concluida' ? ' tsk-due--overdue' : ''}`}>{formatDate(t.dueDate)}</span>
@@ -509,13 +526,11 @@ export function Tasks({ user }: TasksProps) {
     <div className="tasks-page" onClick={() => { if (openMenuId) setOpenMenuId(null); }}>
       <div className="tsk-header-card">
         <div>
-          <p className="tsk-eyebrow">Operação Diária</p>
-          <h2>Tarefas</h2>
-          <p className="tsk-subtitle">Priorize entregas, conclua ações críticas e acompanhe tarefas delegadas com vínculo direto ao contexto jurídico.</p>
+          <p className="tsk-eyebrow">Carteira Operacional</p>
+          <p className="tsk-subtitle">Priorize entregas críticas, redistribua carga e avance a fila com rastreabilidade por processo e cliente.</p>
         </div>
         <div className="tsk-header-actions">
           <button className="btn-primary" onClick={() => setShowForm(true)} aria-label="Criar nova tarefa"><Plus size={14} /> Nova Tarefa</button>
-          <button className="btn-secondary" onClick={() => setViewMode('kanban')} aria-label="Visualizar em kanban"><ClipboardCheck size={14} /> Ver Kanban</button>
           <button className="btn-secondary" onClick={() => exportCsv(sorted)} aria-label="Exportar tarefas"><Download size={14} /> Exportar</button>
         </div>
       </div>
@@ -535,11 +550,11 @@ export function Tasks({ user }: TasksProps) {
       )}
 
       <div className="tsk-kpis" aria-label="Indicadores de tarefas">
-        <div className="tsk-kpi-card"><p>Tarefas hoje</p><strong>{loading ? '—' : kpis.today}</strong></div>
-        <div className="tsk-kpi-card tsk-kpi-card--danger"><p>Atrasadas</p><strong>{loading ? '—' : kpis.overdue}</strong></div>
-        <div className="tsk-kpi-card tsk-kpi-card--warning"><p>Alta prioridade</p><strong>{loading ? '—' : kpis.high}</strong></div>
-        <div className="tsk-kpi-card"><p>Delegadas</p><strong>{loading ? '—' : kpis.delegated}</strong></div>
-        <div className="tsk-kpi-card tsk-kpi-card--success"><p>Concluídas semana</p><strong>{loading ? '—' : kpis.doneWeek}</strong></div>
+        <button type="button" className={`tsk-kpi-card${activeKpi === 'today' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('today')}><p>Tarefas hoje</p><strong>{loading ? '—' : kpis.today}</strong></button>
+        <button type="button" className={`tsk-kpi-card tsk-kpi-card--danger${activeKpi === 'overdue' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('overdue')}><p>Atrasadas</p><strong>{loading ? '—' : kpis.overdue}</strong></button>
+        <button type="button" className={`tsk-kpi-card tsk-kpi-card--warning${activeKpi === 'high' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('high')}><p>Alta prioridade</p><strong>{loading ? '—' : kpis.high}</strong></button>
+        <button type="button" className={`tsk-kpi-card${activeKpi === 'delegated' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('delegated')}><p>Delegadas</p><strong>{loading ? '—' : kpis.delegated}</strong></button>
+        <button type="button" className={`tsk-kpi-card tsk-kpi-card--success${activeKpi === 'doneWeek' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('doneWeek')}><p>Concluídas semana</p><strong>{loading ? '—' : kpis.doneWeek}</strong></button>
       </div>
 
       <div className="tsk-filters">
@@ -565,15 +580,10 @@ export function Tasks({ user }: TasksProps) {
         </div>
 
         <div className="tsk-filters-bottom">
+          {hasActiveFilters && <span className="tsk-filter-summary"><Filter size={12} /><strong>{filtered.length}</strong> de {tasks.length}</span>}
           <div className="tsk-filter-actions">
-            {hasActiveFilters && <span className="tsk-filter-summary"><Filter size={12} /><strong>{filtered.length}</strong> de {tasks.length}</span>}
             <button className="btn-ghost" onClick={clearFilters}><X size={13} /> Limpar filtros</button>
             <button className="btn-ghost" onClick={saveFilters}><Save size={13} /> Salvar filtro</button>
-          </div>
-
-          <div className="tsk-view-toggle" role="group" aria-label="Modo de visualização">
-            <button className={`tsk-view-btn${viewMode === 'lista' ? ' tsk-view-btn--active' : ''}`} onClick={() => setViewMode('lista')} aria-pressed={viewMode === 'lista'}><List size={13} /> Lista</button>
-            <button className={`tsk-view-btn${viewMode === 'kanban' ? ' tsk-view-btn--active' : ''}`} onClick={() => setViewMode('kanban')} aria-pressed={viewMode === 'kanban'}><ClipboardCheck size={13} /> Kanban</button>
           </div>
         </div>
       </div>
@@ -608,16 +618,25 @@ export function Tasks({ user }: TasksProps) {
           {filtered.length > 0 && viewMode === 'lista' && (
             <div className="tsk-table-card">
               <div className="tsk-table-header">
-                <span className="tsk-count-badge">{filtered.length} tarefa{filtered.length !== 1 ? 's' : ''}</span>
-                <div className="tsk-sort-controls">
-                  <label htmlFor="tsk-sort" className="sr-only">Ordenar por</label>
-                  <select id="tsk-sort" value={sortBy} onChange={(e) => setSortBy(e.target.value as SortField)}>
-                    <option value="prazo">Prazo</option>
-                    <option value="prioridade">Prioridade</option>
-                    <option value="status">Status</option>
-                    <option value="responsavel">Responsável</option>
-                  </select>
-                  <button className="btn-ghost tsk-sort-dir" onClick={() => setSortDesc((d) => !d)}>{sortDesc ? '↓' : '↑'}</button>
+                <div className="tsk-table-header-copy">
+                  <span className="tsk-count-badge">{filtered.length} tarefa{filtered.length !== 1 ? 's' : ''}</span>
+                  <p className="tsk-table-subtitle">Trabalhe a fila por prazo, prioridade e responsabilidade.</p>
+                </div>
+                <div className="tsk-table-header-controls">
+                  <div className="tsk-view-toggle" role="group" aria-label="Modo de visualização">
+                    <button className="tsk-view-btn tsk-view-btn--active" onClick={() => setViewMode('lista')} aria-pressed="true"><List size={13} /> Lista</button>
+                    <button className="tsk-view-btn" onClick={() => setViewMode('kanban')} aria-pressed="false"><ClipboardCheck size={13} /> Kanban</button>
+                  </div>
+                  <div className="tsk-sort-controls">
+                    <label htmlFor="tsk-sort" className="sr-only">Ordenar por</label>
+                    <select id="tsk-sort" value={sortBy} onChange={(e) => setSortBy(e.target.value as SortField)}>
+                      <option value="prazo">Prazo</option>
+                      <option value="prioridade">Prioridade</option>
+                      <option value="status">Status</option>
+                      <option value="responsavel">Responsável</option>
+                    </select>
+                    <button className="btn-ghost tsk-sort-dir" onClick={() => setSortDesc((d) => !d)}>{sortDesc ? '↓' : '↑'}</button>
+                  </div>
                 </div>
               </div>
 
@@ -626,8 +645,7 @@ export function Tasks({ user }: TasksProps) {
                   <thead>
                     <tr>
                       <th>Tarefa</th>
-                      <th>Processo</th>
-                      <th>Cliente</th>
+                      <th>Contexto</th>
                       <th>Origem</th>
                       <th>Prazo</th>
                       <th>Status</th>
