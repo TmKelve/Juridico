@@ -81,12 +81,25 @@ model Prazo {
 }
 
 model Documento {
-  id          Int     @id @default(autoincrement())
-  processId   Int
-  process     Process @relation(fields: [processId], references: [id])
-  title       String
-  description String
-  status      String  @default("pendente")
+  id                Int      @id @default(autoincrement())
+  processId         Int
+  process           Process  @relation(fields: [processId], references: [id])
+  title             String
+  description       String
+  status            String   @default("pendente")
+  category          String   @default("Checklist")
+  version           Int      @default(1)
+  isLatestVersion   Boolean  @default(true)
+  origin            String   @default("interno")
+  uploadedAt        DateTime @default(now())
+  responsible       String?
+  requiredChecklist Boolean  @default(false)
+  pendingForAdvance Boolean  @default(false)
+  mimeType          String   @default("application/octet-stream")
+  previewUrl        String?
+  createdBy         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model Atendimento {

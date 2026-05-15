@@ -335,15 +335,21 @@ Gap:
 
 Endpoint consumido hoje:
 
-- `GET /processes`
+- `GET /documents`
+- `GET /documents/:id`
+- `POST /documents`
+- `PUT /documents/:id`
+- compatibilidade mantida em:
+  - `GET /processes/:id/documentos`
+  - `POST /processes/:id/documentos`
 
 Origem:
 
-- derivada localmente a partir de processos
+- direta da API
 
 Gap:
 
-- nao existe `GET /documents` consolidado
+- ainda falta fechar upload real e fluxo de solicitacao externa ao cliente
 
 ### Atendimentos
 
@@ -458,7 +464,6 @@ Gap:
 
 ### Telas ainda sustentadas por derivacao local
 
-- Documentos
 - Publicacoes e Intimacoes
 - Modelos de Pecas
 
@@ -466,7 +471,7 @@ Gap:
 
 - O frontend ja expande varias telas P0, mas o backend ainda nao tem entidades dedicadas para `Publicacoes` e `Modelos de Pecas`.
 - `Publicacoes` e `Modelos de Pecas` ainda nao possuem tabela ou endpoint dedicados.
-- `Dashboard` e `Documentos` ainda seguem parcialmente dependentes de `GET /processes` como fonte universal, o que cria acoplamento alto.
+- `Dashboard` ainda segue parcialmente dependente de `GET /processes` como fonte universal, o que cria acoplamento alto.
 - `GET /permissions` retorna apenas lista simples de strings, insuficiente para politica granular de producao.
 
 ## 8. Implicacao Para Postgres

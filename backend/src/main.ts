@@ -5,6 +5,7 @@ import { PrismaClient } from '@prisma/client';
 import { signUserToken, verifyToken, type UserToken } from './auth';
 import { buildAgendaPayload } from './agenda.contract';
 import { buildDeadlinePayload } from './deadlines.contract';
+import { buildDocumentPayload } from './documents.contract';
 import { buildTaskPayload } from './tasks.contract';
 
 const app = express();
@@ -397,6 +398,67 @@ async function seedData() {
     }
   }
 
+  const documentCount = await prisma.documento.count();
+  if (documentCount === 0) {
+    const seededProcesses = await prisma.process.findMany({
+      include: {
+        owner: { select: { email: true } },
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    const categories = ['Peticao', 'Contrato', 'Prova', 'Financeiro', 'Checklist'] as const;
+    const origins = ['upload', 'cliente', 'publicacao', 'interno'] as const;
+    const statuses = ['pendente', 'aguardando_validacao', 'validado'] as const;
+    const mimeTypes = ['application/pdf', 'image/png', 'application/octet-stream'] as const;
+
+    for (const [index, process] of seededProcesses.entries()) {
+      const ownerLabel = getResponsibleLabel(process.owner?.email) ?? 'admin';
+      const uploadedAt = new Date();
+      uploadedAt.setDate(uploadedAt.getDate() - index);
+
+      await prisma.documento.create({
+        data: {
+          processId: process.id,
+          title: `Petição inicial - ${process.client}`,
+          description: 'Documento principal para protocolo e análise jurídica.',
+          status: statuses[index % statuses.length],
+          category: categories[index % categories.length],
+          version: 2,
+          isLatestVersion: true,
+          origin: origins[index % origins.length],
+          uploadedAt,
+          responsible: ownerLabel,
+          requiredChecklist: true,
+          pendingForAdvance: index % 2 === 0,
+          mimeType: mimeTypes[index % mimeTypes.length],
+          previewUrl: mimeTypes[index % mimeTypes.length] === 'application/octet-stream' ? null : '/lexora-logo.svg',
+          createdBy: ownerLabel,
+        },
+      });
+
+      await prisma.documento.create({
+        data: {
+          processId: process.id,
+          title: `Petição inicial - ${process.client}`,
+          description: 'Versão histórica preservada para rastreabilidade.',
+          status: 'validado',
+          category: categories[index % categories.length],
+          version: 1,
+          isLatestVersion: false,
+          origin: origins[(index + 1) % origins.length],
+          uploadedAt: new Date(uploadedAt.getTime() - 7 * 24 * 60 * 60 * 1000),
+          responsible: ownerLabel,
+          requiredChecklist: true,
+          pendingForAdvance: false,
+          mimeType: 'application/octet-stream',
+          previewUrl: null,
+          createdBy: ownerLabel,
+        },
+      });
+    }
+  }
+
   const agendaCount = await prisma.agendaEvent.count();
   if (agendaCount === 0) {
     const seededProcesses = await prisma.process.findMany({
@@ -626,6 +688,20 @@ function canReadDeadline(user: UserToken, deadline: {
     deadline.createdBy === getResponsibleLabel(user.email) ||
     deadline.responsible === getResponsibleLabel(user.email) ||
     (deadline.process ? canReadProcess(user, deadline.process) : false)
+  );
+}
+
+function canReadDocument(user: UserToken, document: {
+  createdBy?: string | null;
+  responsible?: string | null;
+  process?: { ownerId: number } | null;
+}) {
+  return (
+    user.role === 'ADM' ||
+    user.role === 'FIN' ||
+    document.createdBy === getResponsibleLabel(user.email) ||
+    document.responsible === getResponsibleLabel(user.email) ||
+    (document.process ? canReadProcess(user, document.process) : false)
   );
 }
 
@@ -1175,6 +1251,191 @@ app.put('/deadlines/:id', async (req, res) => {
   });
 
   res.json(buildDeadlinePayload(updated));
+});
+
+app.get('/documents', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const ownerLabel = getResponsibleLabel(decoded.email);
+  const documents = await prisma.documento.findMany({
+    where: decoded.role === 'ADM' || decoded.role === 'FIN'
+      ? undefined
+      : {
+          OR: [
+            { createdBy: ownerLabel ?? decoded.email },
+            { responsible: ownerLabel ?? decoded.email },
+            { process: { ownerId: decoded.sub } },
+          ],
+        },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+    },
+    orderBy: [
+      { uploadedAt: 'desc' },
+      { version: 'desc' },
+    ],
+  });
+
+  res.json(documents.map((document) => buildDocumentPayload(document)));
+});
+
+app.get('/documents/:id', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const document = await prisma.documento.findUnique({
+    where: { id: Number(req.params.id) },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+    },
+  });
+
+  if (!document) return res.status(404).send({ message: 'Documento não encontrado' });
+  if (!canReadDocument(decoded, document)) return res.status(403).send({ message: 'Acesso negado' });
+
+  res.json(buildDocumentPayload(document));
+});
+
+app.post('/documents', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const { title, processId, category, status, origin, responsible, notes, requiredChecklist, pendingForAdvance, mimeType, previewUrl } = req.body;
+
+  if (!title || typeof title !== 'string' || !title.trim()) {
+    return res.status(400).send({ message: 'Título do documento é obrigatório' });
+  }
+
+  if (!processId) {
+    return res.status(400).send({ message: 'Processo vinculado é obrigatório' });
+  }
+
+  const access = await assertProcessAccess(decoded, Number(processId));
+  if (access.error) return res.status(access.error.status).send({ message: access.error.message });
+
+  const processRecord = access.process;
+  const created = await prisma.documento.create({
+    data: {
+      processId: processRecord.id,
+      title: title.trim(),
+      description: typeof notes === 'string' ? notes.trim() : '',
+      status: status || 'pendente',
+      category: category || 'Checklist',
+      origin: origin || 'interno',
+      responsible: responsible || getResponsibleLabel(decoded.email) || decoded.email,
+      requiredChecklist: Boolean(requiredChecklist),
+      pendingForAdvance: Boolean(pendingForAdvance),
+      mimeType: mimeType || 'application/octet-stream',
+      previewUrl: typeof previewUrl === 'string' ? previewUrl : null,
+      createdBy: getResponsibleLabel(decoded.email) || decoded.email,
+    },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+    },
+  });
+
+  res.status(201).json(buildDocumentPayload(created));
+});
+
+app.put('/documents/:id', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const current = await prisma.documento.findUnique({
+    where: { id: Number(req.params.id) },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+    },
+  });
+
+  if (!current) return res.status(404).send({ message: 'Documento não encontrado' });
+  if (!canReadDocument(decoded, current)) return res.status(403).send({ message: 'Acesso negado' });
+
+  const { title, status, category, origin, responsible, notes, requiredChecklist, pendingForAdvance, mimeType, previewUrl, createNewVersion } = req.body;
+
+  if (createNewVersion) {
+    await prisma.documento.update({
+      where: { id: current.id },
+      data: { isLatestVersion: false },
+    });
+
+    const versioned = await prisma.documento.create({
+      data: {
+        processId: current.processId,
+        title: typeof title === 'string' && title.trim() ? title.trim() : current.title,
+        description: typeof notes === 'string' ? notes.trim() : current.description,
+        status: status || 'aguardando_validacao',
+        category: category || current.category,
+        version: current.version + 1,
+        isLatestVersion: true,
+        origin: origin || current.origin,
+        uploadedAt: new Date(),
+        responsible: responsible ?? current.responsible,
+        requiredChecklist: requiredChecklist ?? current.requiredChecklist,
+        pendingForAdvance: pendingForAdvance ?? current.pendingForAdvance,
+        mimeType: mimeType || current.mimeType,
+        previewUrl: previewUrl === undefined ? current.previewUrl : previewUrl,
+        createdBy: getResponsibleLabel(decoded.email) || decoded.email,
+      },
+      include: {
+        process: {
+          include: {
+            owner: { select: { id: true, email: true, role: true } },
+            clientRecord: true,
+          },
+        },
+      },
+    });
+
+    return res.json(buildDocumentPayload(versioned));
+  }
+
+  const updated = await prisma.documento.update({
+    where: { id: current.id },
+    data: {
+      title: typeof title === 'string' && title.trim() ? title.trim() : current.title,
+      description: notes === undefined ? current.description : (typeof notes === 'string' ? notes.trim() : current.description),
+      status: status ?? current.status,
+      category: category ?? current.category,
+      origin: origin ?? current.origin,
+      responsible: responsible ?? current.responsible,
+      requiredChecklist: requiredChecklist ?? current.requiredChecklist,
+      pendingForAdvance: pendingForAdvance ?? current.pendingForAdvance,
+      mimeType: mimeType ?? current.mimeType,
+      previewUrl: previewUrl === undefined ? current.previewUrl : previewUrl,
+    },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+    },
+  });
+
+  res.json(buildDocumentPayload(updated));
 });
 
 app.get('/tasks', async (req, res) => {
@@ -1866,8 +2127,22 @@ app.get('/processes/:id/documentos', async (req, res) => {
   const process = await prisma.process.findUnique({ where: { id: Number(req.params.id) } });
   if (!process) return res.status(404).send({ message: 'Processo nao encontrado' });
   if (decoded.role !== 'ADM' && decoded.role !== 'FIN' && process.ownerId !== decoded.sub) return res.status(403).send({ message: 'Acesso negado' });
-  const data = await prisma.documento.findMany({ where: { processId: Number(req.params.id) } });
-  res.json(data);
+  const data = await prisma.documento.findMany({
+    where: { processId: Number(req.params.id) },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+    },
+    orderBy: [
+      { uploadedAt: 'desc' },
+      { version: 'desc' },
+    ],
+  });
+  res.json(data.map((document) => buildDocumentPayload(document)));
 });
 
 app.post('/processes/:id/documentos', async (req, res) => {
@@ -1876,10 +2151,33 @@ app.post('/processes/:id/documentos', async (req, res) => {
   const process = await prisma.process.findUnique({ where: { id: Number(req.params.id) } });
   if (!process) return res.status(404).send({ message: 'Processo nao encontrado' });
   if (decoded.role !== 'ADM' && decoded.role !== 'FIN' && process.ownerId !== decoded.sub) return res.status(403).send({ message: 'Acesso negado' });
-  const { title, description } = req.body;
+  const { title, description, status, category, origin, responsible, requiredChecklist, pendingForAdvance, mimeType, previewUrl } = req.body;
   if (!title || !description) return res.status(400).send({ message: 'title e description sao obrigatorios' });
-  const item = await prisma.documento.create({ data: { processId: Number(req.params.id), title, description } });
-  res.status(201).json(item);
+  const item = await prisma.documento.create({
+    data: {
+      processId: Number(req.params.id),
+      title,
+      description,
+      status: status || 'pendente',
+      category: category || 'Checklist',
+      origin: origin || 'interno',
+      responsible: responsible || getResponsibleLabel(decoded.email) || decoded.email,
+      requiredChecklist: Boolean(requiredChecklist),
+      pendingForAdvance: Boolean(pendingForAdvance),
+      mimeType: mimeType || 'application/octet-stream',
+      previewUrl: typeof previewUrl === 'string' ? previewUrl : null,
+      createdBy: getResponsibleLabel(decoded.email) || decoded.email,
+    },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+    },
+  });
+  res.status(201).json(buildDocumentPayload(item));
 });
 
 app.get('/processes/:id/atendimentos', async (req, res) => {

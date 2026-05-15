@@ -17,22 +17,12 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import { api } from './api';
+import { api, type ApiDocument } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import './Documents.css';
 
 interface DocumentsProps {
   user: { id: number; email: string; role: string };
-}
-
-interface ProcessRecord {
-  id: number;
-  title: string;
-  client: string;
-  phase: string;
-  status: string;
-  ownerId: number;
-  owner?: { id: number; email: string; role: string };
 }
 
 type DocumentStatus = 'pendente' | 'aguardando_validacao' | 'validado' | 'rejeitado';
@@ -44,26 +34,7 @@ type SortDirection = 'asc' | 'desc';
 type DocOrigin = 'upload' | 'cliente' | 'publicacao' | 'interno';
 type DocCategory = 'Peticao' | 'Contrato' | 'Prova' | 'Financeiro' | 'Checklist';
 
-interface DocumentItem {
-  id: string;
-  name: string;
-  processId: number;
-  processLabel: string;
-  processTitle: string;
-  client: string;
-  category: DocCategory;
-  status: DocumentStatus;
-  version: number;
-  isLatestVersion: boolean;
-  origin: DocOrigin;
-  uploadedAt: string;
-  owner: string;
-  notes: string;
-  requiredChecklist: boolean;
-  pendingForAdvance: boolean;
-  mimeType: 'application/pdf' | 'image/png' | 'image/jpeg' | 'application/octet-stream';
-  previewUrl?: string;
-}
+type DocumentItem = ApiDocument;
 
 interface ChecklistItem {
   id: string;
@@ -101,63 +72,8 @@ const EMPTY_FILTERS: DocumentFilters = {
   requiredOnly: false,
 };
 
-function toIsoDate(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
-
-function addDays(date: Date, days: number) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-}
-
 function formatDate(iso: string) {
   return new Date(`${iso}T00:00:00`).toLocaleDateString('pt-BR');
-}
-
-function mapDocuments(processes: ProcessRecord[], userEmail: string) {
-  const base = new Date();
-
-  return processes.flatMap((process, index) => {
-    const owner = process.owner?.email || userEmail;
-
-    const primary: DocumentItem = {
-      id: `doc-${process.id}-1`,
-      name: `Peticao inicial - ${process.client}`,
-      processId: process.id,
-      processLabel: `#${process.id}`,
-      processTitle: process.title,
-      client: process.client,
-      category: CATEGORIES[(process.id + index) % CATEGORIES.length],
-      status: ((process.id + index) % 4 === 0 ? 'pendente' : (process.id + index) % 3 === 0 ? 'aguardando_validacao' : 'validado') as DocumentStatus,
-      version: 2,
-      isLatestVersion: true,
-      origin: ORIGINS[(process.id + index) % ORIGINS.length],
-      uploadedAt: toIsoDate(addDays(base, -((process.id + index) % 15))),
-      owner,
-      notes: 'Documento usado na fase atual e validado para audiencia.',
-      requiredChecklist: true,
-      pendingForAdvance: (process.id + index) % 5 === 0,
-      mimeType: (process.id + index) % 2 === 0 ? 'application/pdf' : 'image/png',
-      previewUrl: (process.id + index) % 2 === 0
-        ? 'data:application/pdf;base64,JVBERi0xLjQKJcTl8uXrCjEgMCBvYmoKPDwvVHlwZS9DYXRhbG9nL1BhZ2VzIDIgMCBSPj4KZW5kb2JqCjIgMCBvYmoKPDwvVHlwZS9QYWdlcy9LaWRzIFszIDAgUl0vQ291bnQgMT4+CmVuZG9iagozIDAgb2JqCjw8L1R5cGUvUGFnZS9QYXJlbnQgMiAwIFIvTWVkaWFCb3hbMCAwIDMwMCAxNDRdL0NvbnRlbnRzIDQgMCBSPj4KZW5kb2JqCjQgMCBvYmoKPDwvTGVuZ3RoIDQzPj5zdHJlYW0KQlQgL0YxIDEyIFRmIDUwIDEwMCBUZCAoUHJldmlldyBQREYpIFRqIEVUCmVuZHN0cmVhbQplbmRvYmoKNSAwIG9iago8PC9UeXBlL0ZvbnQvU3VidHlwZS9UeXBlMS9CYXNlRm9udC9IZWx2ZXRpY2E+PgplbmRvYmoKeHJlZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDE1IDAwMDAwIG4gCjAwMDAwMDAwNjYgMDAwMDAgbiAKMDAwMDAwMDEyNSAwMDAwMCBuIAowMDAwMDAwMjIxIDAwMDAwIG4gCjAwMDAwMDAzMTQgMDAwMDAgbiAKdHJhaWxlcgo8PC9TaXplIDYvUm9vdCAxIDAgUj4+CnN0YXJ0eHJlZgozOTYKJSVFT0Y='
-        : '/lexora-logo.svg',
-    };
-
-    const historical: DocumentItem = {
-      ...primary,
-      id: `doc-${process.id}-0`,
-      version: 1,
-      isLatestVersion: false,
-      uploadedAt: toIsoDate(addDays(base, -((process.id + index) % 20) - 10)),
-      notes: 'Versao historica mantida para rastreabilidade.',
-      status: 'validado',
-      mimeType: 'application/octet-stream',
-      previewUrl: undefined,
-    };
-
-    return [primary, historical];
-  });
 }
 
 export function Documents({ user }: DocumentsProps) {
@@ -173,7 +89,7 @@ export function Documents({ user }: DocumentsProps) {
   const [sortBy, setSortBy] = useState<SortField>('data');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [selectedDocument, setSelectedDocument] = useState<DocumentItem | null>(null);
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [page, setPage] = useState(1);
 
   const [checklist, setChecklist] = useState<ChecklistItem[]>([
@@ -183,7 +99,6 @@ export function Documents({ user }: DocumentsProps) {
     { id: 'chk-4', title: 'Contrato social atualizado', required: false, received: false, linkedDocumentId: null },
   ]);
 
-  const isAdv = user.role === 'ADV';
   const itemsPerPage = 10;
 
   useEffect(() => {
@@ -200,20 +115,16 @@ export function Documents({ user }: DocumentsProps) {
     setError('');
 
     try {
-      const res = await api.getProcesses();
+      const res = await api.getDocuments();
       if (res.status !== 200 || !Array.isArray(res.data)) {
         setError(res.error || 'Nao foi possivel carregar documentos.');
         setLoading(false);
         return;
       }
 
-      const scoped = isAdv
-        ? (res.data as ProcessRecord[]).filter((process) => process.ownerId === user.id)
-        : (res.data as ProcessRecord[]);
-
-      const mapped = mapDocuments(scoped, user.email);
-      setDocuments(mapped);
-      trackEvent('documents_loaded', { count: mapped.length, role: user.role });
+      const loadedDocuments = res.data as ApiDocument[];
+      setDocuments(loadedDocuments);
+      trackEvent('documents_loaded', { count: loadedDocuments.length, role: user.role });
     } catch (err) {
       setError((err as Error).message || 'Erro ao carregar documentos');
       captureException(err as Error, { context: 'loadDocuments' });
@@ -272,37 +183,48 @@ export function Documents({ user }: DocumentsProps) {
     trackEvent('documents_exported', { count: items.length });
   }
 
-  function validateDocument(id: string) {
-    setDocuments((prev) => prev.map((doc) => (doc.id === id ? { ...doc, status: 'validado' } : doc)));
+  async function validateDocument(id: number) {
+    const res = await api.updateDocument(id, { status: 'validado' });
+    if (res.status !== 200 || !res.data) {
+      setError(res.error || 'Nao foi possivel validar o documento.');
+      return;
+    }
+
+    setDocuments((prev) => prev.map((doc) => (doc.id === id ? res.data : doc)));
+    setSelectedDocument((prev) => (prev?.id === id ? res.data : prev));
     setSuccess('Documento validado.');
     setOpenMenuId(null);
   }
 
-  function rejectDocument(id: string) {
-    setDocuments((prev) => prev.map((doc) => (doc.id === id ? { ...doc, status: 'rejeitado' } : doc)));
+  async function rejectDocument(id: number) {
+    const res = await api.updateDocument(id, { status: 'rejeitado' });
+    if (res.status !== 200 || !res.data) {
+      setError(res.error || 'Nao foi possivel rejeitar o documento.');
+      return;
+    }
+
+    setDocuments((prev) => prev.map((doc) => (doc.id === id ? res.data : doc)));
+    setSelectedDocument((prev) => (prev?.id === id ? res.data : prev));
     setSuccess('Documento rejeitado para ajuste.');
     setOpenMenuId(null);
   }
 
-  function createNewVersion(id: string) {
-    setDocuments((prev) => {
-      const target = prev.find((doc) => doc.id === id);
-      if (!target) return prev;
+  async function createNewVersion(id: number) {
+    const target = documents.find((doc) => doc.id === id);
+    if (!target) return;
 
-      const nextVersion = target.version + 1;
-      const newDoc: DocumentItem = {
-        ...target,
-        id: `${target.processId}-${target.category.toLowerCase()}-v${nextVersion}-${Date.now()}`,
-        version: nextVersion,
-        isLatestVersion: true,
-        status: 'aguardando_validacao',
-        uploadedAt: toIsoDate(new Date()),
-        notes: 'Nova versao criada para revisao.',
-      };
-
-      return prev.map((doc) => (doc.id === id ? { ...doc, isLatestVersion: false } : doc)).concat(newDoc);
+    const res = await api.updateDocument(id, {
+      createNewVersion: true,
+      status: 'aguardando_validacao',
+      notes: 'Nova versao criada para revisao.',
     });
+    if (res.status !== 200 || !res.data) {
+      setError(res.error || 'Nao foi possivel criar nova versao.');
+      return;
+    }
 
+    setDocuments((prev) => prev.map((doc) => (doc.id === id ? { ...doc, isLatestVersion: false } : doc)).concat(res.data));
+    setSelectedDocument(res.data);
     setSuccess('Nova versao criada.');
     setOpenMenuId(null);
   }
@@ -648,7 +570,7 @@ export function Documents({ user }: DocumentsProps) {
                 >
                   <option value="">Nao vinculado</option>
                   {documents.map((doc) => (
-                    <option key={doc.id} value={doc.id}>{doc.name} ({doc.processLabel})</option>
+                    <option key={String(doc.id)} value={String(doc.id)}>{doc.name} ({doc.processLabel})</option>
                   ))}
                 </select>
               </label>
@@ -692,7 +614,7 @@ export function Documents({ user }: DocumentsProps) {
             <tbody>
               {pagedDocuments.map((doc) => (
                 <tr
-                  key={doc.id}
+                  key={String(doc.id)}
                   tabIndex={0}
                   role="button"
                   aria-label={`Abrir detalhe rapido do documento ${doc.name}`}
@@ -737,9 +659,9 @@ export function Documents({ user }: DocumentsProps) {
                       {openMenuId === doc.id && (
                         <div className="doc-row-menu" role="menu" aria-label="Menu de acoes">
                           <button onClick={() => setSelectedDocument(doc)}>Detalhe rapido</button>
-                          <button onClick={() => validateDocument(doc.id)}>Validar</button>
-                          <button onClick={() => rejectDocument(doc.id)}>Rejeitar</button>
-                          <button onClick={() => createNewVersion(doc.id)}>Versionar</button>
+                          <button onClick={() => void validateDocument(doc.id)}>Validar</button>
+                          <button onClick={() => void rejectDocument(doc.id)}>Rejeitar</button>
+                          <button onClick={() => void createNewVersion(doc.id)}>Versionar</button>
                         </div>
                       )}
                     </div>
@@ -762,7 +684,7 @@ export function Documents({ user }: DocumentsProps) {
       {!emptyWithoutData && !emptyWithFilter && viewMode === 'grade' && (
         <section className="documents-grid-shell" aria-label="Grade de documentos">
           {sortedDocuments.map((doc) => (
-            <article key={doc.id} className="document-card">
+            <article key={String(doc.id)} className="document-card">
               <button
                 className="document-card-preview"
                 onClick={() => setSelectedDocument(doc)}
@@ -821,9 +743,9 @@ export function Documents({ user }: DocumentsProps) {
               <div className="documents-drawer-actions">
                 <button className="btn-primary"><Eye size={14} aria-hidden="true" />Visualizar</button>
                 <button className="btn-secondary"><Download size={14} aria-hidden="true" />Baixar</button>
-                <button className="btn-secondary" onClick={() => validateDocument(selectedDocument.id)}>Validar</button>
-                <button className="btn-secondary" onClick={() => rejectDocument(selectedDocument.id)}>Rejeitar</button>
-                <button className="btn-secondary" onClick={() => createNewVersion(selectedDocument.id)}>Versionar</button>
+                <button className="btn-secondary" onClick={() => void validateDocument(selectedDocument.id)}>Validar</button>
+                <button className="btn-secondary" onClick={() => void rejectDocument(selectedDocument.id)}>Rejeitar</button>
+                <button className="btn-secondary" onClick={() => void createNewVersion(selectedDocument.id)}>Versionar</button>
                 <button className="btn-secondary" onClick={() => navigate(`/processos/${selectedDocument.processId}`)}>Abrir processo</button>
                 <button className="btn-secondary" onClick={requestDocumentMock}>Solicitar reenvio</button>
               </div>

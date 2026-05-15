@@ -152,6 +152,27 @@ export interface ApiDeadline {
   completedAt: string | null;
 }
 
+export interface ApiDocument {
+  id: number;
+  name: string;
+  processId: number;
+  processLabel: string;
+  processTitle: string;
+  client: string;
+  category: 'Peticao' | 'Contrato' | 'Prova' | 'Financeiro' | 'Checklist';
+  status: 'pendente' | 'aguardando_validacao' | 'validado' | 'rejeitado';
+  version: number;
+  isLatestVersion: boolean;
+  origin: 'upload' | 'cliente' | 'publicacao' | 'interno';
+  uploadedAt: string;
+  owner: string;
+  notes: string;
+  requiredChecklist: boolean;
+  pendingForAdvance: boolean;
+  mimeType: 'application/pdf' | 'image/png' | 'image/jpeg' | 'application/octet-stream';
+  previewUrl?: string;
+}
+
 interface LoginResponse {
   user: ApiUser;
 }
@@ -350,10 +371,57 @@ export const api = {
     apiClient<ApiDeadline>(`/deadlines/${id}`, { method: 'PUT', body: data }),
 
   getDocumentos: (processId: number) =>
-    apiClient<unknown[]>(`/processes/${processId}/documentos`),
+    apiClient<ApiDocument[]>(`/processes/${processId}/documentos`),
 
-  createDocumento: (processId: number, data: { title: string; description: string }) =>
+  createDocumento: (processId: number, data: {
+    title: string;
+    description: string;
+    status?: string;
+    category?: string;
+    origin?: string;
+    responsible?: string;
+    requiredChecklist?: boolean;
+    pendingForAdvance?: boolean;
+    mimeType?: string;
+    previewUrl?: string;
+  }) =>
     apiClient(`/processes/${processId}/documentos`, { method: 'POST', body: data }),
+
+  getDocuments: () =>
+    apiClient<ApiDocument[]>('/documents'),
+
+  getDocument: (id: number) =>
+    apiClient<ApiDocument>(`/documents/${id}`),
+
+  createDocument: (data: {
+    title: string;
+    processId: number;
+    category?: 'Peticao' | 'Contrato' | 'Prova' | 'Financeiro' | 'Checklist';
+    status?: 'pendente' | 'aguardando_validacao' | 'validado' | 'rejeitado';
+    origin?: 'upload' | 'cliente' | 'publicacao' | 'interno';
+    responsible?: string;
+    notes?: string;
+    requiredChecklist?: boolean;
+    pendingForAdvance?: boolean;
+    mimeType?: 'application/pdf' | 'image/png' | 'image/jpeg' | 'application/octet-stream';
+    previewUrl?: string;
+  }) =>
+    apiClient<ApiDocument>('/documents', { method: 'POST', body: data }),
+
+  updateDocument: (id: number, data: Partial<{
+    title: string;
+    status: 'pendente' | 'aguardando_validacao' | 'validado' | 'rejeitado';
+    category: 'Peticao' | 'Contrato' | 'Prova' | 'Financeiro' | 'Checklist';
+    origin: 'upload' | 'cliente' | 'publicacao' | 'interno';
+    responsible: string;
+    notes: string;
+    requiredChecklist: boolean;
+    pendingForAdvance: boolean;
+    mimeType: 'application/pdf' | 'image/png' | 'image/jpeg' | 'application/octet-stream';
+    previewUrl: string;
+    createNewVersion: boolean;
+  }>) =>
+    apiClient<ApiDocument>(`/documents/${id}`, { method: 'PUT', body: data }),
 
   getAttendances: () =>
     apiClient<ApiAttendance[]>('/attendances'),

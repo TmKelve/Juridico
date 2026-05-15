@@ -1,0 +1,15 @@
+-- AlterTable
+ALTER TABLE "Documento"
+ADD COLUMN     "category" TEXT NOT NULL DEFAULT 'Checklist',
+ADD COLUMN     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ADD COLUMN     "createdBy" TEXT,
+ADD COLUMN     "isLatestVersion" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN     "mimeType" TEXT NOT NULL DEFAULT 'application/octet-stream',
+ADD COLUMN     "origin" TEXT NOT NULL DEFAULT 'interno',
+ADD COLUMN     "pendingForAdvance" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "previewUrl" TEXT,
+ADD COLUMN     "requiredChecklist" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "responsible" TEXT,
+ADD COLUMN     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ADD COLUMN     "uploadedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ADD COLUMN     "version" INTEGER NOT NULL DEFAULT 1;
