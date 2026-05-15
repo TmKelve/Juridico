@@ -6,14 +6,19 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  ExternalLink,
   Filter,
+  FileText,
   MoreHorizontal,
   Plus,
   RefreshCw,
   Save,
   Search,
+  ShieldAlert,
+  TimerReset,
   X,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { api, type ApiDeadline } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import './Deadlines.css';
@@ -71,7 +76,29 @@ function formatDate(isoDate: string) {
   return new Date(`${isoDate}T00:00:00`).toLocaleDateString('pt-BR');
 }
 
+function getResponsibleLabel(email: string) {
+  return email.split('@')[0];
+}
+
+function getRelativeDueLabel(isoDate: string) {
+  const delta = diffInDays(isoDate, new Date());
+  if (delta < 0) return `Venceu há ${Math.abs(delta)} dia${Math.abs(delta) === 1 ? '' : 's'}`;
+  if (delta === 0) return 'Vence hoje';
+  if (delta === 1) return 'Vence amanhã';
+  return `Vence em ${delta} dias`;
+}
+
+function getQuickFilterState(filter: PeriodFilter | '' | 'criticos' | 'meus') {
+  if (filter === 'todos') return EMPTY_FILTERS;
+  if (filter === 'hoje') return { ...EMPTY_FILTERS, period: 'hoje' as PeriodFilter };
+  if (filter === 'atrasados') return { ...EMPTY_FILTERS, period: 'atrasados' as PeriodFilter };
+  if (filter === 'criticos') return { ...EMPTY_FILTERS, status: 'critico' };
+  if (filter === 'meus') return { ...EMPTY_FILTERS };
+  return EMPTY_FILTERS;
+}
+
 export function Deadlines({ user }: DeadlinesProps) {
+  const navigate = useNavigate();
   const [deadlines, setDeadlines] = useState<DeadlineItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -84,6 +111,7 @@ export function Deadlines({ user }: DeadlinesProps) {
   const [page, setPage] = useState(1);
   const [selectedDeadline, setSelectedDeadline] = useState<DeadlineItem | null>(null);
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   const itemsPerPage = 10;
 
@@ -126,6 +154,18 @@ export function Deadlines({ user }: DeadlinesProps) {
   function clearFilters() {
     setFilters(EMPTY_FILTERS);
     setSuccess('Filtros limpos.');
+  }
+
+  function applyQuickView(view: 'todos' | 'hoje' | 'atrasados' | 'criticos' | 'meus') {
+    if (view === 'meus') {
+      setFilters((prev) => ({
+        ...EMPTY_FILTERS,
+        responsible: getResponsibleLabel(user.email) ?? prev.responsible,
+      }));
+      return;
+    }
+
+    setFilters(getQuickFilterState(view));
   }
 
   function saveFilter() {
@@ -282,6 +322,13 @@ export function Deadlines({ user }: DeadlinesProps) {
     return <span className={`deadline-badge priority-${priority}`}>{labels[priority]}</span>;
   }
 
+  function renderRiskTone(item: DeadlineItem) {
+    if (item.status === 'atrasado') return 'danger';
+    if (item.status === 'critico') return 'warning';
+    if (item.status === 'concluido') return 'success';
+    return 'info';
+  }
+
   if (loading) {
     return (
       <section className="deadlines-page" aria-label="Prazos">
@@ -298,9 +345,9 @@ export function Deadlines({ user }: DeadlinesProps) {
       <header className="deadlines-header-card">
         <div>
           <p className="deadlines-eyebrow">Controle operacional</p>
-          <h2>Prazos</h2>
+          <h3>Priorize risco, conclua pendências e mova os casos sem perder prazo.</h3>
           <p className="deadlines-subtitle">
-            Visualize, priorize e conclua seus prazos com rapidez para manter todos os casos em movimento.
+            Use atalhos rápidos para entrar em atrasos, críticos e próximos vencimentos sem atravessar filtros pesados.
           </p>
         </div>
         <div className="deadlines-header-actions">
@@ -320,11 +367,31 @@ export function Deadlines({ user }: DeadlinesProps) {
       </header>
 
       <section className="deadlines-kpis" aria-label="Indicadores de prazos">
-        <article className="deadline-kpi-card"><p>Prazos hoje</p><strong>{kpis.today}</strong></article>
-        <article className="deadline-kpi-card"><p>Prazos esta semana</p><strong>{kpis.week}</strong></article>
-        <article className="deadline-kpi-card warning"><p>Prazos criticos</p><strong>{kpis.critical}</strong></article>
-        <article className="deadline-kpi-card danger"><p>Prazos atrasados</p><strong>{kpis.overdue}</strong></article>
-        <article className="deadline-kpi-card success"><p>Prazos concluidos</p><strong>{kpis.done}</strong></article>
+        <button type="button" className="deadline-kpi-card" onClick={() => applyQuickView('hoje')}>
+          <p>Prazos hoje</p>
+          <strong>{kpis.today}</strong>
+          <span>Filtrar vencimentos do dia</span>
+        </button>
+        <button type="button" className="deadline-kpi-card" onClick={() => setFilters({ ...EMPTY_FILTERS, period: 'semana' })}>
+          <p>Próximos 7 dias</p>
+          <strong>{kpis.week}</strong>
+          <span>Organizar a semana</span>
+        </button>
+        <button type="button" className="deadline-kpi-card warning" onClick={() => applyQuickView('criticos')}>
+          <p>Prazos críticos</p>
+          <strong>{kpis.critical}</strong>
+          <span>Vencem em até 48h</span>
+        </button>
+        <button type="button" className="deadline-kpi-card danger" onClick={() => applyQuickView('atrasados')}>
+          <p>Prazos atrasados</p>
+          <strong>{kpis.overdue}</strong>
+          <span>Exigem ação imediata</span>
+        </button>
+        <button type="button" className="deadline-kpi-card success" onClick={() => setFilters({ ...EMPTY_FILTERS, status: 'concluido' })}>
+          <p>Concluídos</p>
+          <strong>{kpis.done}</strong>
+          <span>Auditar entregas fechadas</span>
+        </button>
       </section>
 
       {error && (
@@ -343,16 +410,25 @@ export function Deadlines({ user }: DeadlinesProps) {
       )}
 
       <section className="deadlines-filters" aria-label="Busca e filtros de prazos">
+        <div className="deadline-quick-views">
+          <button type="button" className="quick-view-chip" onClick={() => applyQuickView('todos')}>Todos</button>
+          <button type="button" className="quick-view-chip" onClick={() => applyQuickView('hoje')}>Hoje</button>
+          <button type="button" className="quick-view-chip" onClick={() => applyQuickView('atrasados')}>Atrasados</button>
+          <button type="button" className="quick-view-chip" onClick={() => applyQuickView('criticos')}>Críticos</button>
+          <button type="button" className="quick-view-chip" onClick={() => setFilters({ ...EMPTY_FILTERS, dueInDays: '7' })}>Próximos 7 dias</button>
+          <button type="button" className="quick-view-chip" onClick={() => applyQuickView('meus')}>Meus prazos</button>
+        </div>
+
         <div className="filters-grid-top">
           <label className="deadline-field search">
-            <span>Busca</span>
+            <span>Busca principal</span>
             <div className="input-icon-wrap">
               <Search size={14} aria-hidden="true" />
               <input
                 type="search"
                 value={filters.query}
                 onChange={(event) => updateFilter('query', event.target.value)}
-                placeholder="Processo, cliente, descricao ou origem"
+                placeholder="Processo, cliente ou descrição"
               />
             </div>
           </label>
@@ -396,8 +472,16 @@ export function Deadlines({ user }: DeadlinesProps) {
               {owners.map((owner) => <option key={owner} value={owner}>{owner}</option>)}
             </select>
           </label>
+
+          <div className="deadline-filter-actions compact">
+            <button className="btn-ghost" onClick={() => setShowAdvancedFilters((prev) => !prev)}>
+              <Filter size={14} aria-hidden="true" />
+              {showAdvancedFilters ? 'Ocultar avançados' : 'Filtros avançados'}
+            </button>
+          </div>
         </div>
 
+        {showAdvancedFilters && (
         <div className="filters-grid-bottom">
           <label className="deadline-field">
             <span>Area juridica</span>
@@ -467,6 +551,7 @@ export function Deadlines({ user }: DeadlinesProps) {
             </button>
           </div>
         </div>
+        )}
 
         <div className="deadline-filter-summary">
           <strong>{sortedDeadlines.length}</strong> prazo(s) na visao atual.
@@ -491,16 +576,22 @@ export function Deadlines({ user }: DeadlinesProps) {
 
       {sortedDeadlines.length > 0 && viewMode === 'lista' && (
         <section className="deadlines-table-shell" aria-label="Lista de prazos">
+          <div className="deadlines-table-toolbar">
+            <div>
+              <strong>{sortedDeadlines.length}</strong>
+              <span> prazo(s) priorizados por risco e vencimento</span>
+            </div>
+            <button className="btn-ghost" onClick={() => setSortBy('status')}>
+              <ShieldAlert size={14} aria-hidden="true" />
+              Priorizar risco
+            </button>
+          </div>
           <table className="deadlines-table">
             <thead>
               <tr>
                 <th scope="col">Prazo</th>
-                <th scope="col">Processo</th>
-                <th scope="col">Cliente</th>
-                <th scope="col">Origem</th>
-                <th scope="col">Vencimento</th>
+                <th scope="col">Risco e vencimento</th>
                 <th scope="col">Status</th>
-                <th scope="col">Prioridade</th>
                 <th scope="col">Responsavel</th>
                 <th scope="col">Acoes</th>
               </tr>
@@ -527,16 +618,27 @@ export function Deadlines({ user }: DeadlinesProps) {
                   <td>
                     <div className="deadline-primary">
                       <strong>{item.title}</strong>
-                      <small>{item.area}</small>
+                      <small>{item.processTitle} · {item.client}</small>
+                      <span className="deadline-origin-line">{item.area} · {item.origin}</span>
                     </div>
                   </td>
-                  <td>{item.processLabel}</td>
-                  <td>{item.client}</td>
-                  <td>{item.origin}</td>
-                  <td>{formatDate(item.dueDate)}</td>
-                  <td>{statusBadge(item.status)}</td>
-                  <td>{priorityBadge(item.priority)}</td>
-                  <td>{item.owner}</td>
+                  <td>
+                    <div className={`deadline-risk-cell tone-${renderRiskTone(item)}`}>
+                      <strong>{getRelativeDueLabel(item.dueDate)}</strong>
+                      <small>{formatDate(item.dueDate)}</small>
+                    </div>
+                  </td>
+                  <td>
+                    <div className="deadline-status-stack">
+                      {statusBadge(item.status)}
+                      {priorityBadge(item.priority)}
+                    </div>
+                  </td>
+                  <td>
+                    <div className="deadline-owner-cell">
+                      <span>{item.owner}</span>
+                    </div>
+                  </td>
                   <td>
                     <div className="deadline-row-actions" onClick={(event) => event.stopPropagation()}>
                       <button
@@ -551,6 +653,9 @@ export function Deadlines({ user }: DeadlinesProps) {
                           <button onClick={() => setSelectedDeadline(item)}>Detalhe rapido</button>
                           <button onClick={() => concludeDeadline(item.id)}>Concluir prazo</button>
                           <button onClick={() => setSuccess('Edicao rapida iniciada.')}>Editar</button>
+                          <button onClick={() => navigate(`/processos/${item.processId}`)}>Abrir processo</button>
+                          <button onClick={() => navigate('/tarefas')}>Criar tarefa</button>
+                          <button onClick={() => setSuccess('Observação rápida iniciada.')}>Registrar observação</button>
                         </div>
                       )}
                     </div>
@@ -611,8 +716,9 @@ export function Deadlines({ user }: DeadlinesProps) {
           <aside className="deadline-drawer" role="dialog" aria-modal="true" aria-labelledby="deadline-drawer-title">
             <header>
               <div>
-                <small>Detalhe rapido</small>
+                <small>Detalhe do prazo</small>
                 <h3 id="deadline-drawer-title">{selectedDeadline.title}</h3>
+                <p className="deadline-drawer-context">{selectedDeadline.processTitle} · {selectedDeadline.client}</p>
               </div>
               <button className="icon-action" onClick={() => setSelectedDeadline(null)} aria-label="Fechar drawer">
                 <X size={15} aria-hidden="true" />
@@ -620,26 +726,62 @@ export function Deadlines({ user }: DeadlinesProps) {
             </header>
 
             <div className="deadline-drawer-body">
-              <dl>
-                <div><dt>Processo vinculado</dt><dd>{selectedDeadline.processLabel}</dd></div>
+              <section className="deadline-drawer-top-metrics">
+                <div>{statusBadge(selectedDeadline.status)}</div>
+                <div>{priorityBadge(selectedDeadline.priority)}</div>
+                <div className={`deadline-drawer-risk tone-${renderRiskTone(selectedDeadline)}`}>
+                  <TimerReset size={14} aria-hidden="true" />
+                  <span>{getRelativeDueLabel(selectedDeadline.dueDate)}</span>
+                </div>
+              </section>
+
+              <dl className="deadline-detail-grid">
+                <div><dt>Vencimento</dt><dd>{formatDate(selectedDeadline.dueDate)}</dd></div>
+                <div><dt>Processo</dt><dd>{selectedDeadline.processLabel}</dd></div>
                 <div><dt>Cliente</dt><dd>{selectedDeadline.client}</dd></div>
-                <div><dt>Origem</dt><dd>{selectedDeadline.origin}</dd></div>
-                <div><dt>Data de vencimento</dt><dd>{formatDate(selectedDeadline.dueDate)}</dd></div>
-                <div><dt>Status</dt><dd>{statusBadge(selectedDeadline.status)}</dd></div>
-                <div><dt>Prioridade</dt><dd>{priorityBadge(selectedDeadline.priority)}</dd></div>
                 <div><dt>Responsavel</dt><dd>{selectedDeadline.owner}</dd></div>
-                <div><dt>Observacoes</dt><dd>{selectedDeadline.notes}</dd></div>
+                <div><dt>Origem</dt><dd>{selectedDeadline.origin}</dd></div>
+                <div><dt>Area</dt><dd>{selectedDeadline.area}</dd></div>
               </dl>
 
-              <div className="deadline-drawer-actions">
+              <section className="deadline-checklist-card">
+                <header>
+                  <h4>Checklist operacional</h4>
+                </header>
+                <label><input type="checkbox" /> Validar anexos obrigatórios</label>
+                <label><input type="checkbox" /> Registrar protocolo</label>
+                <label><input type="checkbox" /> Atualizar andamento do processo</label>
+              </section>
+
+              <section className="deadline-notes-card">
+                <h4>Observações</h4>
+                <p>{selectedDeadline.notes || 'Sem observações registradas.'}</p>
+              </section>
+
+              <section className="deadline-history-card">
+                <h4>Histórico</h4>
+                <p>Criado no fluxo operacional da carteira.</p>
+                {selectedDeadline.completedAt && <p>Concluído em {new Date(selectedDeadline.completedAt).toLocaleDateString('pt-BR')}.</p>}
+              </section>
+
+              <div className="deadline-drawer-links">
+                <button className="btn-linklike" onClick={() => navigate(`/processos/${selectedDeadline.processId}`)}>
+                  <ExternalLink size={14} aria-hidden="true" />
+                  Abrir processo
+                </button>
+                <button className="btn-linklike" onClick={() => navigate('/tarefas')}>
+                  <FileText size={14} aria-hidden="true" />
+                  Criar tarefa
+                </button>
+              </div>
+
+              <div className="deadline-drawer-actions sticky">
                 <button className="btn-primary" onClick={() => concludeDeadline(selectedDeadline.id)}>
                   <CheckCircle2 size={15} aria-hidden="true" />
                   Concluir prazo
                 </button>
                 <button className="btn-secondary">Editar</button>
-                <button className="btn-secondary">Abrir processo</button>
-                <button className="btn-secondary">Criar tarefa</button>
-                <button className="btn-secondary">Registrar observacao</button>
+                <button className="btn-secondary">Mais ações</button>
               </div>
             </div>
           </aside>
