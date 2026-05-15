@@ -103,13 +103,16 @@
 }
 
 .tsk-kpi-card {
+  display: block;
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
   border-left: 3px solid var(--brand-300);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
+  min-height: 0;
   padding: var(--space-3) var(--space-4);
   text-align: left;
+  font: inherit;
   cursor: pointer;
   transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
 }
