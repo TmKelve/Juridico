@@ -1,4 +1,5 @@
 import { FileText } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import type { ResponsibilityItem } from '../types';
 import { SectionCard } from './SectionCard';
 import { RailWidgetItem } from './RailWidgetItem';
@@ -9,10 +10,16 @@ interface MissingDocumentsWidgetProps {
 }
 
 export function MissingDocumentsWidget({ items }: MissingDocumentsWidgetProps) {
+  const navigate = useNavigate();
   const missing = items.slice(0, 3);
 
   return (
-    <SectionCard title="Documentos Faltantes">
+    <SectionCard
+      title="Documentos pendentes"
+      meta={missing.length > 0 ? `${missing.length} item(ns) travando execução` : 'Nenhum bloqueio documental'}
+      action={<button className="btn-ghost btn-inline" onClick={() => navigate('/documentos')}>Abrir documentos</button>}
+      className="support-section-card"
+    >
       {missing.length > 0 ? (
         <ul className="rail-widget-list">
           {missing.map((item) => (
@@ -25,7 +32,7 @@ export function MissingDocumentsWidget({ items }: MissingDocumentsWidgetProps) {
           ))}
         </ul>
       ) : (
-        <EmptyState icon={FileText} title="Nenhum documento pendente" />
+        <EmptyState icon={FileText} title="Documentos em dia" description="Não há pendências obrigatórias no momento." />
       )}
     </SectionCard>
   );
