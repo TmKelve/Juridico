@@ -4,7 +4,7 @@ import { CriticalAlertsWidget } from '../widgets/CriticalAlertsWidget';
 import { RecentMovementsWidget } from '../widgets/RecentMovementsWidget';
 import { TodayAgendaWidget } from '../widgets/TodayAgendaWidget';
 import { SectionCard } from '../widgets/SectionCard';
-import { ActionTile } from '../widgets/ActionTile';
+import { ActionCard } from '../widgets/ActionCard';
 
 interface ContextRailContainerProps {
   agenda: AgendaItem[];
@@ -17,11 +17,31 @@ export function ContextRailContainer({ agenda, movements, alerts, onShortcutClic
   return (
     <aside className="context-column" aria-label="Coluna contextual">
       <SectionCard title="Ações Rápidas">
-        <div className="action-tile-grid">
-          <ActionTile icon={PlusCircle} label="Nova Tarefa" onClick={() => onShortcutClick('nova_tarefa')} />
-          <ActionTile icon={CalendarDays} label="Ver Agenda" onClick={() => onShortcutClick('ver_agenda')} />
-          <ActionTile icon={Clock3} label="Ver Prazos" onClick={() => onShortcutClick('ver_prazos')} />
-          <ActionTile icon={Scale} label="Ver Processos" onClick={() => onShortcutClick('ver_processos')} />
+        <div className="action-card-grid">
+          <ActionCard
+            icon={PlusCircle}
+            title="Nova Tarefa"
+            description="Criar pendência operacional"
+            onClick={() => onShortcutClick('nova_tarefa')}
+          />
+          <ActionCard
+            icon={CalendarDays}
+            title="Ver Agenda"
+            description="Abrir compromissos do dia"
+            onClick={() => onShortcutClick('ver_agenda')}
+          />
+          <ActionCard
+            icon={Clock3}
+            title="Ver Prazos"
+            description="Revisar vencimentos e urgências"
+            onClick={() => onShortcutClick('ver_prazos')}
+          />
+          <ActionCard
+            icon={Scale}
+            title="Ver Processos"
+            description="Entrar na carteira operacional"
+            onClick={() => onShortcutClick('ver_processos')}
+          />
         </div>
       </SectionCard>
 

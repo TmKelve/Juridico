@@ -131,6 +131,7 @@
   --radius-md: 6px;
   --radius-lg: 8px;
   --radius-xl: 10px;
+  --radius-2xl: 16px;
   --radius-full: 9999px;
 
   /* ─────────────────────────────────────────────────────────────── */
@@ -161,6 +162,9 @@
 
   /* Sombra de card — mais perceptível que shadow-sm, menos que shadow-md */
   --shadow-card: 0 1px 3px rgba(15, 23, 32, 0.08), 0 1px 2px rgba(15, 23, 32, 0.05);
+  --shadow-card-hover: 0 10px 24px rgba(15, 23, 32, 0.08), 0 4px 10px rgba(15, 23, 32, 0.05);
+  --surface-raised: var(--white);
+  --surface-muted: var(--neutral-50);
 
   /* Tipografia intermediária: 26px, entre 2xl(24px) e 3xl(30px) */
   --font-size-2_5xl: 26px;
@@ -168,6 +172,8 @@
   /* ─────────────────────────────────────────────────────────────────── */
   /* TOKENS DA SIDEBAR                                                   */
   /* ─────────────────────────────────────────────────────────────────── */
+  --topbar-height: 64px;
+  --sidebar-width-open: 252px;
   --sidebar-width:           252px;
   --sidebar-width-collapsed: 72px;
   --sidebar-item-h:          40px;
