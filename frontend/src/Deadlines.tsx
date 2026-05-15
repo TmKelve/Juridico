@@ -14,22 +14,12 @@ import {
   Search,
   X,
 } from 'lucide-react';
-import { api } from './api';
+import { api, type ApiDeadline } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import './Deadlines.css';
 
 interface DeadlinesProps {
   user: { id: number; email: string; role: string };
-}
-
-interface ProcessRecord {
-  id: number;
-  title: string;
-  client: string;
-  phase: string;
-  status: string;
-  ownerId: number;
-  owner?: { id: number; email: string; role: string };
 }
 
 type DeadlineStatus = 'aberto' | 'critico' | 'atrasado' | 'concluido';
@@ -39,20 +29,7 @@ type CalendarMode = 'dia' | 'semana' | 'mes';
 type PeriodFilter = 'todos' | 'hoje' | 'semana' | 'mes' | 'atrasados';
 type SortField = 'vencimento' | 'prioridade' | 'status';
 
-interface DeadlineItem {
-  id: string;
-  title: string;
-  processId: number;
-  processLabel: string;
-  client: string;
-  origin: 'publicacao' | 'audiencia' | 'interno' | 'cliente';
-  dueDate: string;
-  status: DeadlineStatus;
-  priority: Priority;
-  owner: string;
-  area: string;
-  notes: string;
-}
+type DeadlineItem = ApiDeadline;
 
 interface DeadlineFilters {
   query: string;
@@ -80,77 +57,14 @@ const EMPTY_FILTERS: DeadlineFilters = {
   dueInDays: '',
 };
 
-const ORIGINS: Array<DeadlineItem['origin']> = ['publicacao', 'audiencia', 'interno', 'cliente'];
-const AREAS = ['Trabalhista', 'Civel', 'Tributario', 'Empresarial', 'Previdenciario'];
+const ORIGINS: Array<ApiDeadline['origin']> = ['publicacao', 'audiencia', 'interno', 'cliente'];
 const STATUS_ORDER: Record<DeadlineStatus, number> = { atrasado: 0, critico: 1, aberto: 2, concluido: 3 };
 const PRIORITY_ORDER: Record<Priority, number> = { alta: 0, media: 1, baixa: 2 };
-
-function toIsoDate(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
-
-function addDays(date: Date, days: number) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-}
 
 function diffInDays(fromIso: string, toDate: Date) {
   const from = new Date(`${fromIso}T00:00:00`);
   const diff = from.getTime() - toDate.getTime();
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
-}
-
-function normalizeStatus(item: DeadlineItem, now: Date): DeadlineStatus {
-  if (item.status === 'concluido') return 'concluido';
-  const diff = diffInDays(item.dueDate, now);
-  if (diff < 0) return 'atrasado';
-  if (diff <= 1) return 'critico';
-  return 'aberto';
-}
-
-function makeDeadlines(processes: ProcessRecord[], user: DeadlinesProps['user']) {
-  const base = new Date();
-
-  return processes.flatMap((process, index) => {
-    const owner = process.owner?.email || user.email;
-    const processArea = AREAS[(process.id + index) % AREAS.length];
-
-    const firstDue = addDays(base, ((process.id + index) % 14) - 4);
-    const secondDue = addDays(base, ((process.id + index * 2) % 21) - 2);
-
-    const primary: DeadlineItem = {
-      id: `dl-${process.id}-a`,
-      title: `Prazo de manifestacao - ${process.title}`,
-      processId: process.id,
-      processLabel: `#${process.id} · ${process.title}`,
-      client: process.client,
-      origin: ORIGINS[(process.id + index) % ORIGINS.length],
-      dueDate: toIsoDate(firstDue),
-      status: 'aberto',
-      priority: firstDue <= addDays(base, 1) ? 'alta' : firstDue <= addDays(base, 5) ? 'media' : 'baixa',
-      owner,
-      area: processArea,
-      notes: 'Alinhar tese e validar anexos obrigatorios antes do protocolo.',
-    };
-
-    const secondary: DeadlineItem = {
-      id: `dl-${process.id}-b`,
-      title: `Checklist documental - ${process.client}`,
-      processId: process.id,
-      processLabel: `#${process.id} · ${process.title}`,
-      client: process.client,
-      origin: ORIGINS[(process.id + index + 1) % ORIGINS.length],
-      dueDate: toIsoDate(secondDue),
-      status: process.status === 'concluido' ? 'concluido' : 'aberto',
-      priority: secondDue <= addDays(base, 2) ? 'alta' : 'media',
-      owner,
-      area: processArea,
-      notes: 'Confirmar pendencias e retorno ao cliente.',
-    };
-
-    return [primary, secondary];
-  });
 }
 
 function formatDate(isoDate: string) {
@@ -169,9 +83,8 @@ export function Deadlines({ user }: DeadlinesProps) {
   const [sortBy, setSortBy] = useState<SortField>('vencimento');
   const [page, setPage] = useState(1);
   const [selectedDeadline, setSelectedDeadline] = useState<DeadlineItem | null>(null);
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
 
-  const isAdv = user.role === 'ADV';
   const itemsPerPage = 10;
 
   useEffect(() => {
@@ -188,22 +101,16 @@ export function Deadlines({ user }: DeadlinesProps) {
     setError('');
 
     try {
-      const res = await api.getProcesses();
+      const res = await api.getDeadlines();
       if (res.status !== 200 || !Array.isArray(res.data)) {
         setError(res.error || 'Nao foi possivel carregar prazos');
         setLoading(false);
         return;
       }
 
-      const scopedProcesses = isAdv
-        ? (res.data as ProcessRecord[]).filter((process) => process.ownerId === user.id)
-        : (res.data as ProcessRecord[]);
-
-      const mapped = makeDeadlines(scopedProcesses, user);
-      const now = new Date();
-      const normalized = mapped.map((item) => ({ ...item, status: normalizeStatus(item, now) }));
-      setDeadlines(normalized);
-      trackEvent('deadlines_loaded', { count: normalized.length, role: user.role });
+      const loadedDeadlines = res.data as ApiDeadline[];
+      setDeadlines(loadedDeadlines);
+      trackEvent('deadlines_loaded', { count: loadedDeadlines.length, role: user.role });
     } catch (err) {
       setError((err as Error).message || 'Erro ao carregar prazos');
       captureException(err as Error, { context: 'loadDeadlines' });
@@ -226,8 +133,15 @@ export function Deadlines({ user }: DeadlinesProps) {
     setSuccess('Filtro salvo.');
   }
 
-  function concludeDeadline(id: string) {
-    setDeadlines((prev) => prev.map((item) => (item.id === id ? { ...item, status: 'concluido' } : item)));
+  async function concludeDeadline(id: number) {
+    const res = await api.updateDeadline(id, { status: 'concluido' });
+    if (res.status !== 200 || !res.data) {
+      setError(res.error || 'Nao foi possivel concluir o prazo');
+      return;
+    }
+
+    setDeadlines((prev) => prev.map((item) => (item.id === id ? res.data : item)));
+    setSelectedDeadline((prev) => (prev?.id === id ? res.data : prev));
     setSuccess('Prazo concluido com sucesso.');
     setOpenMenuId(null);
   }
@@ -266,7 +180,7 @@ export function Deadlines({ user }: DeadlinesProps) {
     return deadlines.filter((item) => {
       if (filters.query) {
         const q = filters.query.toLowerCase();
-        const text = `${item.title} ${item.processLabel} ${item.client} ${item.origin}`.toLowerCase();
+        const text = `${item.title} ${item.processLabel} ${item.processTitle} ${item.client} ${item.origin} ${item.owner} ${item.notes}`.toLowerCase();
         if (!text.includes(q)) return false;
       }
 
@@ -332,7 +246,7 @@ export function Deadlines({ user }: DeadlinesProps) {
     deadlines.forEach((item) => map.set(String(item.processId), item.processLabel));
     return Array.from(map.entries()).map(([id, label]) => ({ id, label }));
   }, [deadlines]);
-  const areas = useMemo(() => Array.from(new Set(deadlines.map((item) => item.area))), [deadlines]);
+  const areas = useMemo(() => Array.from(new Set(deadlines.map((item) => item.area).filter(Boolean))), [deadlines]);
 
   const hasActiveFilter = useMemo(() => JSON.stringify(filters) !== JSON.stringify(EMPTY_FILTERS), [filters]);
 
@@ -594,7 +508,7 @@ export function Deadlines({ user }: DeadlinesProps) {
             <tbody>
               {pagedDeadlines.map((item) => (
                 <tr
-                  key={item.id}
+                  key={String(item.id)}
                   tabIndex={0}
                   role="button"
                   aria-label={`Abrir detalhe do prazo ${item.title}`}
@@ -679,7 +593,7 @@ export function Deadlines({ user }: DeadlinesProps) {
                 </header>
                 <div className="calendar-events">
                   {items.map((item) => (
-                    <button key={item.id} className="calendar-event" onClick={() => setSelectedDeadline(item)}>
+                    <button key={String(item.id)} className="calendar-event" onClick={() => setSelectedDeadline(item)}>
                       <span>{item.title}</span>
                       {statusBadge(item.status)}
                     </button>

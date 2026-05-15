@@ -315,15 +315,21 @@ Gap:
 
 Endpoint consumido hoje:
 
-- `GET /processes`
+- `GET /deadlines`
+- `GET /deadlines/:id`
+- `POST /deadlines`
+- `PUT /deadlines/:id`
+- compatibilidade mantida em:
+  - `GET /processes/:id/prazos`
+  - `POST /processes/:id/prazos`
 
 Origem:
 
-- derivada localmente a partir de processos
+- direta da API
 
 Gap:
 
-- nao existe `GET /deadlines` ou equivalente
+- ainda falta integrar a criacao/edicao completa da tela com workflow operacional mais rico
 
 ### Documentos
 
@@ -452,7 +458,6 @@ Gap:
 
 ### Telas ainda sustentadas por derivacao local
 
-- Prazos
 - Documentos
 - Publicacoes e Intimacoes
 - Modelos de Pecas
@@ -461,7 +466,7 @@ Gap:
 
 - O frontend ja expande varias telas P0, mas o backend ainda nao tem entidades dedicadas para `Publicacoes` e `Modelos de Pecas`.
 - `Publicacoes` e `Modelos de Pecas` ainda nao possuem tabela ou endpoint dedicados.
-- `Dashboard`, `Prazos`, `Documentos` e outras telas seguem dependentes de `GET /processes` como fonte universal, o que cria acoplamento alto.
+- `Dashboard` e `Documentos` ainda seguem parcialmente dependentes de `GET /processes` como fonte universal, o que cria acoplamento alto.
 - `GET /permissions` retorna apenas lista simples de strings, insuficiente para politica granular de producao.
 
 ## 8. Implicacao Para Postgres

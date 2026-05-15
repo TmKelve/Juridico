@@ -134,6 +134,24 @@ export interface ApiAgendaEvent {
   requiresAttention: boolean;
 }
 
+export interface ApiDeadline {
+  id: number;
+  title: string;
+  processId: number;
+  processLabel: string;
+  processTitle: string;
+  clientId: number | null;
+  client: string;
+  origin: 'publicacao' | 'audiencia' | 'interno' | 'cliente';
+  dueDate: string;
+  status: 'aberto' | 'critico' | 'atrasado' | 'concluido';
+  priority: 'baixa' | 'media' | 'alta';
+  owner: string;
+  area: string;
+  notes: string;
+  completedAt: string | null;
+}
+
 interface LoginResponse {
   user: ApiUser;
 }
@@ -297,10 +315,39 @@ export const api = {
     apiClient(`/processes/${processId}/andamentos`, { method: 'POST', body: data }),
 
   getPrazos: (processId: number) =>
-    apiClient<unknown[]>(`/processes/${processId}/prazos`),
+    apiClient<ApiDeadline[]>(`/processes/${processId}/prazos`),
 
-  createPrazo: (processId: number, data: { title: string; dueDate: string; priority?: string }) =>
+  createPrazo: (processId: number, data: { title: string; dueDate: string; priority?: string; status?: string; origin?: string; responsible?: string; notes?: string }) =>
     apiClient(`/processes/${processId}/prazos`, { method: 'POST', body: data }),
+
+  getDeadlines: () =>
+    apiClient<ApiDeadline[]>('/deadlines'),
+
+  getDeadline: (id: number) =>
+    apiClient<ApiDeadline>(`/deadlines/${id}`),
+
+  createDeadline: (data: {
+    title: string;
+    processId: number;
+    dueDate: string;
+    priority?: 'baixa' | 'media' | 'alta';
+    status?: 'aberto' | 'critico' | 'atrasado' | 'concluido';
+    origin?: 'publicacao' | 'audiencia' | 'interno' | 'cliente';
+    responsible?: string;
+    notes?: string;
+  }) =>
+    apiClient<ApiDeadline>('/deadlines', { method: 'POST', body: data }),
+
+  updateDeadline: (id: number, data: Partial<{
+    title: string;
+    dueDate: string;
+    priority: 'baixa' | 'media' | 'alta';
+    status: 'aberto' | 'critico' | 'atrasado' | 'concluido';
+    origin: 'publicacao' | 'audiencia' | 'interno' | 'cliente';
+    responsible: string;
+    notes: string;
+  }>) =>
+    apiClient<ApiDeadline>(`/deadlines/${id}`, { method: 'PUT', body: data }),
 
   getDocumentos: (processId: number) =>
     apiClient<unknown[]>(`/processes/${processId}/documentos`),

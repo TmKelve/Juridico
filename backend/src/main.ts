@@ -4,6 +4,7 @@ import bcrypt from 'bcrypt';
 import { PrismaClient } from '@prisma/client';
 import { signUserToken, verifyToken, type UserToken } from './auth';
 import { buildAgendaPayload } from './agenda.contract';
+import { buildDeadlinePayload } from './deadlines.contract';
 import { buildTaskPayload } from './tasks.contract';
 
 const app = express();
@@ -359,6 +360,43 @@ async function seedData() {
     }
   }
 
+  const deadlineCount = await prisma.prazo.count();
+  if (deadlineCount === 0) {
+    const seededProcesses = await prisma.process.findMany({
+      include: {
+        owner: { select: { email: true } },
+        clientRecord: true,
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    const origins = ['publicacao', 'audiencia', 'interno', 'cliente'] as const;
+    const priorities = ['baixa', 'media', 'alta'] as const;
+
+    for (const [index, process] of seededProcesses.entries()) {
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + (index - 1));
+      dueDate.setHours(0, 0, 0, 0);
+
+      await prisma.prazo.create({
+        data: {
+          processId: process.id,
+          title: `Prazo de manifestação - ${process.title}`,
+          dueDate,
+          status: index === 0 ? 'critico' : index === 1 ? 'aberto' : 'atrasado',
+          priority: priorities[index % priorities.length],
+          origin: origins[index % origins.length],
+          responsible: getResponsibleLabel(process.owner?.email) ?? 'admin',
+          legalArea: process.phase,
+          notes: index % 2 === 0
+            ? 'Validar documentação e protocolar antes do fim do expediente.'
+            : 'Consolidar retorno do cliente e revisar próximos passos.',
+          createdBy: getResponsibleLabel(process.owner?.email) ?? 'admin',
+        },
+      });
+    }
+  }
+
   const agendaCount = await prisma.agendaEvent.count();
   if (agendaCount === 0) {
     const seededProcesses = await prisma.process.findMany({
@@ -574,6 +612,20 @@ function canReadTask(user: UserToken, task: { createdBy: string; owner: string; 
     task.createdBy === getResponsibleLabel(user.email) ||
     task.owner === getResponsibleLabel(user.email) ||
     (task.process ? canReadProcess(user, task.process) : false)
+  );
+}
+
+function canReadDeadline(user: UserToken, deadline: {
+  createdBy?: string | null;
+  responsible?: string | null;
+  process?: { ownerId: number } | null;
+}) {
+  return (
+    user.role === 'ADM' ||
+    user.role === 'FIN' ||
+    deadline.createdBy === getResponsibleLabel(user.email) ||
+    deadline.responsible === getResponsibleLabel(user.email) ||
+    (deadline.process ? canReadProcess(user, deadline.process) : false)
   );
 }
 
@@ -974,6 +1026,155 @@ app.put('/attendances/:id', async (req, res) => {
   });
 
   res.json(buildAttendancePayload(updated));
+});
+
+app.get('/deadlines', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const ownerLabel = getResponsibleLabel(decoded.email);
+  const deadlines = await prisma.prazo.findMany({
+    where: decoded.role === 'ADM' || decoded.role === 'FIN'
+      ? undefined
+      : {
+          OR: [
+            { createdBy: ownerLabel ?? decoded.email },
+            { responsible: ownerLabel ?? decoded.email },
+            { process: { ownerId: decoded.sub } },
+          ],
+        },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+    },
+    orderBy: [
+      { dueDate: 'asc' },
+      { createdAt: 'desc' },
+    ],
+  });
+
+  res.json(deadlines.map((deadline) => buildDeadlinePayload(deadline)));
+});
+
+app.get('/deadlines/:id', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const deadline = await prisma.prazo.findUnique({
+    where: { id: Number(req.params.id) },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+    },
+  });
+
+  if (!deadline) return res.status(404).send({ message: 'Prazo não encontrado' });
+  if (!canReadDeadline(decoded, deadline)) return res.status(403).send({ message: 'Acesso negado' });
+
+  res.json(buildDeadlinePayload(deadline));
+});
+
+app.post('/deadlines', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const { title, processId, dueDate, priority, status, origin, responsible, notes } = req.body;
+
+  if (!title || typeof title !== 'string' || !title.trim()) {
+    return res.status(400).send({ message: 'Título do prazo é obrigatório' });
+  }
+
+  if (!processId) {
+    return res.status(400).send({ message: 'Processo vinculado é obrigatório' });
+  }
+
+  if (!dueDate || typeof dueDate !== 'string') {
+    return res.status(400).send({ message: 'Data de vencimento é obrigatória' });
+  }
+
+  const access = await assertProcessAccess(decoded, Number(processId));
+  if (access.error) return res.status(access.error.status).send({ message: access.error.message });
+
+  const processRecord = access.process;
+  const created = await prisma.prazo.create({
+    data: {
+      processId: processRecord.id,
+      title: title.trim(),
+      dueDate: new Date(dueDate),
+      priority: priority || 'media',
+      status: status || 'aberto',
+      origin: origin || 'interno',
+      responsible: responsible || getResponsibleLabel(decoded.email) || decoded.email,
+      legalArea: processRecord.phase,
+      notes: typeof notes === 'string' ? notes.trim() : null,
+      createdBy: getResponsibleLabel(decoded.email) || decoded.email,
+    },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+    },
+  });
+
+  res.status(201).json(buildDeadlinePayload(created));
+});
+
+app.put('/deadlines/:id', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const current = await prisma.prazo.findUnique({
+    where: { id: Number(req.params.id) },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+    },
+  });
+
+  if (!current) return res.status(404).send({ message: 'Prazo não encontrado' });
+  if (!canReadDeadline(decoded, current)) return res.status(403).send({ message: 'Acesso negado' });
+
+  const { title, dueDate, priority, status, responsible, notes, origin } = req.body;
+  const nextStatus = status ?? current.status;
+
+  const updated = await prisma.prazo.update({
+    where: { id: current.id },
+    data: {
+      title: typeof title === 'string' && title.trim() ? title.trim() : current.title,
+      dueDate: dueDate ? new Date(dueDate) : current.dueDate,
+      priority: priority ?? current.priority,
+      status: nextStatus,
+      responsible: responsible ?? current.responsible,
+      notes: notes === undefined ? current.notes : (typeof notes === 'string' ? notes.trim() : null),
+      origin: origin ?? current.origin,
+      completedAt: nextStatus === 'concluido' ? new Date() : (status ? null : current.completedAt),
+    },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+    },
+  });
+
+  res.json(buildDeadlinePayload(updated));
 });
 
 app.get('/tasks', async (req, res) => {
@@ -1611,8 +1812,19 @@ app.get('/processes/:id/prazos', async (req, res) => {
   const process = await prisma.process.findUnique({ where: { id: Number(req.params.id) } });
   if (!process) return res.status(404).send({ message: 'Processo nao encontrado' });
   if (decoded.role !== 'ADM' && decoded.role !== 'FIN' && process.ownerId !== decoded.sub) return res.status(403).send({ message: 'Acesso negado' });
-  const data = await prisma.prazo.findMany({ where: { processId: Number(req.params.id) }, orderBy: { dueDate: 'asc' } });
-  res.json(data);
+  const data = await prisma.prazo.findMany({
+    where: { processId: Number(req.params.id) },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+    },
+    orderBy: { dueDate: 'asc' },
+  });
+  res.json(data.map((deadline) => buildDeadlinePayload(deadline)));
 });
 
 app.post('/processes/:id/prazos', async (req, res) => {
@@ -1621,10 +1833,31 @@ app.post('/processes/:id/prazos', async (req, res) => {
   const process = await prisma.process.findUnique({ where: { id: Number(req.params.id) } });
   if (!process) return res.status(404).send({ message: 'Processo nao encontrado' });
   if (decoded.role !== 'ADM' && decoded.role !== 'FIN' && process.ownerId !== decoded.sub) return res.status(403).send({ message: 'Acesso negado' });
-  const { title, dueDate, priority } = req.body;
+  const { title, dueDate, priority, status, origin, responsible, notes } = req.body;
   if (!title || !dueDate) return res.status(400).send({ message: 'title e dueDate sao obrigatorios' });
-  const item = await prisma.prazo.create({ data: { processId: Number(req.params.id), title, dueDate: new Date(dueDate), priority: priority || 'media' } });
-  res.status(201).json(item);
+  const item = await prisma.prazo.create({
+    data: {
+      processId: Number(req.params.id),
+      title,
+      dueDate: new Date(dueDate),
+      priority: priority || 'media',
+      status: status || 'aberto',
+      origin: origin || 'interno',
+      responsible: responsible || getResponsibleLabel(decoded.email) || decoded.email,
+      legalArea: process.phase,
+      notes: typeof notes === 'string' ? notes.trim() : null,
+      createdBy: getResponsibleLabel(decoded.email) || decoded.email,
+    },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+    },
+  });
+  res.status(201).json(buildDeadlinePayload(item));
 });
 
 app.get('/processes/:id/documentos', async (req, res) => {
