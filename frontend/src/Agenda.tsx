@@ -80,6 +80,20 @@ interface AgendaFilters {
   prazoOnly: boolean;
 }
 
+interface AgendaCreateDraft {
+  title: string;
+  type: AgendaEventType;
+  date: string;
+  startTime: string;
+  endTime: string;
+  processId: string;
+  client: string;
+  responsible: string;
+  locationOrChannel: string;
+  notes: string;
+  priority: AgendaPriority;
+}
+
 const EMPTY_FILTERS: AgendaFilters = {
   search: '',
   type: '',
@@ -91,6 +105,20 @@ const EMPTY_FILTERS: AgendaFilters = {
   audienciaOnly: false,
   retornoOnly: false,
   prazoOnly: false,
+};
+
+const EMPTY_CREATE_DRAFT: AgendaCreateDraft = {
+  title: '',
+  type: 'compromisso_interno',
+  date: '',
+  startTime: '09:00',
+  endTime: '10:00',
+  processId: '',
+  client: '',
+  responsible: '',
+  locationOrChannel: '',
+  notes: '',
+  priority: 'media',
 };
 
 const EVENT_TYPE_LABEL: Record<AgendaEventType, string> = {
@@ -244,6 +272,9 @@ export function Agenda({ user }: AgendaProps) {
   const [weekLayout, setWeekLayout] = useState<WeekLayout>('compacta');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [processCatalog, setProcessCatalog] = useState<Array<{ id: number; title: string; client: string }>>([]);
+  const [createDraft, setCreateDraft] = useState<AgendaCreateDraft>(EMPTY_CREATE_DRAFT);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedEvent, setSelectedEvent] = useState<AgendaEvent | null>(null);
 
@@ -256,21 +287,49 @@ export function Agenda({ user }: AgendaProps) {
     setSelectedEvent(null);
   }
 
+  function openCreateModal(type: AgendaEventType) {
+    setCreateDraft({
+      ...EMPTY_CREATE_DRAFT,
+      type,
+      date: toIsoDate(selectedDate),
+      title: type === 'audiencia' ? 'Audiência' : 'Compromisso',
+      locationOrChannel: DEFAULT_CHANNEL_BY_TYPE[type],
+      responsible: user.email.split('@')[0],
+      priority: type === 'audiencia' ? 'alta' : 'media',
+      startTime: type === 'audiencia' ? '10:00' : '09:00',
+      endTime: type === 'audiencia' ? '11:00' : '10:00',
+    });
+    setCreateMenuOpen(false);
+    setShowCreateModal(true);
+  }
+
+  function closeCreateModal() {
+    setShowCreateModal(false);
+    setCreateDraft(EMPTY_CREATE_DRAFT);
+  }
+
   async function loadAgenda() {
     setLoading(true);
     setError('');
 
     try {
-      const res = await api.getAgenda();
-      if (res.status !== 200 || !Array.isArray(res.data)) {
-        setError(res.error || 'Não foi possível carregar a agenda.');
+      const [agendaRes, processesRes] = await Promise.all([api.getAgenda(), api.getProcesses()]);
+      if (agendaRes.status !== 200 || !Array.isArray(agendaRes.data)) {
+        setError(agendaRes.error || 'Não foi possível carregar a agenda.');
         setLoading(false);
         return;
       }
 
       const now = new Date();
-      const normalized = (res.data as ApiAgendaEvent[]).map((event) => normalizeAgendaEvent(mapApiAgendaEvent(event), now));
+      const normalized = (agendaRes.data as ApiAgendaEvent[]).map((event) => normalizeAgendaEvent(mapApiAgendaEvent(event), now));
       setEvents(normalized);
+      if (processesRes.status === 200 && Array.isArray(processesRes.data)) {
+        setProcessCatalog((processesRes.data as Array<{ id: number; title: string; client: string }>).map((process) => ({
+          id: process.id,
+          title: process.title,
+          client: process.client,
+        })));
+      }
       trackEvent('agenda_loaded', { count: normalized.length, role: user.role });
     } catch (err) {
       setError((err as Error).message || 'Erro ao carregar agenda.');
@@ -328,29 +387,30 @@ export function Agenda({ user }: AgendaProps) {
     setSelectedEvent((prev) => (prev && prev.id === next.id ? next : prev));
   }
 
-  async function createQuickEvent(type: AgendaEventType) {
-    const labelByType: Record<AgendaEventType, string> = {
-      audiencia: 'Audiência de acompanhamento',
-      prazo_calendario: 'Prazo operacional',
-      reuniao_cliente: 'Reunião com cliente',
-      retorno_agendado: 'Retorno com cliente',
-      compromisso_interno: 'Compromisso interno',
-      diligencia: 'Diligência externa',
-      protocolo: 'Protocolo',
-      tarefa_horario: 'Tarefa com horário',
-      evento_manual: 'Evento manual',
-    };
+  async function submitCreateEvent() {
+    if (!createDraft.title.trim()) {
+      setError('Informe o título do evento.');
+      return;
+    }
 
-    const referenceDate = toIsoDate(selectedDate);
+    if (!createDraft.date) {
+      setError('Informe a data do evento.');
+      return;
+    }
+
     const createRes = await api.createAgendaEvent({
-      title: labelByType[type],
-      type,
-      date: referenceDate,
-      startTime: type === 'audiencia' ? '10:00' : type === 'retorno_agendado' ? '14:00' : '09:00',
-      endTime: type === 'audiencia' ? '11:00' : type === 'retorno_agendado' ? '15:00' : '10:00',
-      priority: type === 'audiencia' || type === 'retorno_agendado' ? 'alta' : 'media',
-      locationOrChannel: DEFAULT_CHANNEL_BY_TYPE[type],
-      origin: type === 'retorno_agendado' ? 'atendimento' : 'manual',
+      title: createDraft.title.trim(),
+      type: createDraft.type,
+      date: createDraft.date,
+      startTime: createDraft.startTime,
+      endTime: createDraft.endTime,
+      priority: createDraft.priority,
+      processId: createDraft.processId ? Number(createDraft.processId) : undefined,
+      client: createDraft.client.trim() || undefined,
+      responsible: createDraft.responsible.trim() || undefined,
+      locationOrChannel: createDraft.locationOrChannel.trim() || DEFAULT_CHANNEL_BY_TYPE[createDraft.type],
+      notes: createDraft.notes.trim() || undefined,
+      origin: 'manual',
     });
 
     if (createRes.status !== 201) {
@@ -362,8 +422,8 @@ export function Agenda({ user }: AgendaProps) {
     setEvents((prev) => [...prev, next]);
     setSelectedEvent(next);
     setSuccess('Evento criado na agenda.');
-    setCreateMenuOpen(false);
-    trackEvent('agenda_event_created', { type });
+    closeCreateModal();
+    trackEvent('agenda_event_created', { type: createDraft.type });
   }
 
   async function markAsDone(id: number) {
@@ -468,12 +528,19 @@ export function Agenda({ user }: AgendaProps) {
   const clients = useMemo(() => Array.from(new Set(events.map((event) => event.client))), [events]);
   const responsibles = useMemo(() => Array.from(new Set(events.map((event) => event.responsible))), [events]);
   const processes = useMemo(() => {
+    if (processCatalog.length > 0) {
+      return processCatalog.map((process) => ({
+        id: String(process.id),
+        label: `#${process.id} - ${process.title}`,
+      }));
+    }
+
     const map = new Map<string, string>();
     events.forEach((event) => {
       if (event.processId) map.set(String(event.processId), event.processLabel);
     });
     return Array.from(map.entries()).map(([id, label]) => ({ id, label }));
-  }, [events]);
+  }, [events, processCatalog]);
   const processOptions = useMemo(() => processes.map((process) => ({ value: process.id, label: process.label })), [processes]);
 
   const overlapEventIds = useMemo(() => {
@@ -567,7 +634,7 @@ export function Agenda({ user }: AgendaProps) {
         </div>
 
         <div className="agenda-header-actions" role="toolbar" aria-label="Ações da agenda">
-          <button className="btn-primary" onClick={() => createQuickEvent('compromisso_interno')} aria-label="Novo compromisso">
+          <button className="btn-primary" onClick={() => openCreateModal('compromisso_interno')} aria-label="Novo compromisso">
             <Plus size={14} aria-hidden="true" />
             Novo compromisso
           </button>
@@ -580,10 +647,10 @@ export function Agenda({ user }: AgendaProps) {
             </button>
             {createMenuOpen && (
               <div className="agenda-create-menu-popover" role="menu" aria-label="Criar novo evento">
-                <button type="button" role="menuitem" onClick={() => createQuickEvent('audiencia')}>Nova audiência</button>
-                <button type="button" role="menuitem" onClick={() => createQuickEvent('retorno_agendado')}>Novo retorno</button>
-                <button type="button" role="menuitem" onClick={() => createQuickEvent('prazo_calendario')}>Novo prazo</button>
-                <button type="button" role="menuitem" onClick={() => createQuickEvent('tarefa_horario')}>Nova tarefa</button>
+                <button type="button" role="menuitem" onClick={() => openCreateModal('audiencia')}>Nova audiência</button>
+                <button type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); navigate('/atendimentos'); }}>Novo retorno</button>
+                <button type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); navigate('/prazos'); }}>Novo prazo</button>
+                <button type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); navigate('/tarefas'); }}>Nova tarefa</button>
               </div>
             )}
           </div>
@@ -768,7 +835,7 @@ export function Agenda({ user }: AgendaProps) {
         <section className="agenda-empty" role="status">
           <h3>Nenhum evento cadastrado</h3>
           <p>Crie compromissos, audiências e retornos para iniciar sua agenda.</p>
-          <button className="btn-primary" onClick={() => createQuickEvent('compromisso_interno')}>Novo compromisso</button>
+          <button className="btn-primary" onClick={() => openCreateModal('compromisso_interno')}>Novo compromisso</button>
         </section>
       )}
 
@@ -1086,6 +1153,91 @@ export function Agenda({ user }: AgendaProps) {
                   Cancelar
                 </button>
               </div>
+            </div>
+          </aside>
+        </>
+      )}
+
+      {showCreateModal && (
+        <>
+          <button className="agenda-drawer-overlay" onClick={closeCreateModal} aria-label="Fechar criação de evento" />
+          <aside className="agenda-drawer agenda-drawer--form" role="dialog" aria-modal="true" aria-labelledby="agenda-create-title">
+            <div className="agenda-drawer-head">
+              <div>
+                <p className="agenda-eyebrow">Novo evento</p>
+                <h3 id="agenda-create-title">{createDraft.type === 'audiencia' ? 'Nova audiência' : 'Novo compromisso'}</h3>
+              </div>
+              <button className="agenda-close" onClick={closeCreateModal} aria-label="Fechar formulário">
+                <X size={16} aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="agenda-drawer-body">
+              <section className="agenda-drawer-section agenda-form-grid">
+                <label className="agenda-field">
+                  <span>Título</span>
+                  <input value={createDraft.title} onChange={(event) => setCreateDraft((prev) => ({ ...prev, title: event.target.value }))} />
+                </label>
+                <label className="agenda-field">
+                  <span>Data</span>
+                  <input type="date" value={createDraft.date} onChange={(event) => setCreateDraft((prev) => ({ ...prev, date: event.target.value }))} />
+                </label>
+                <label className="agenda-field">
+                  <span>Início</span>
+                  <input type="time" value={createDraft.startTime} onChange={(event) => setCreateDraft((prev) => ({ ...prev, startTime: event.target.value }))} />
+                </label>
+                <label className="agenda-field">
+                  <span>Fim</span>
+                  <input type="time" value={createDraft.endTime} onChange={(event) => setCreateDraft((prev) => ({ ...prev, endTime: event.target.value }))} />
+                </label>
+                <label className="agenda-field">
+                  <span>Processo</span>
+                  <ProcessCombobox
+                    id="agenda-create-process"
+                    value={createDraft.processId}
+                    onChange={(value) => {
+                      const selectedProcess = processCatalog.find((process) => String(process.id) === value);
+                      setCreateDraft((prev) => ({
+                        ...prev,
+                        processId: value,
+                        client: selectedProcess?.client ?? prev.client,
+                      }));
+                    }}
+                    options={processOptions}
+                    placeholder="Buscar processo"
+                    emptyLabel="Sem vínculo"
+                  />
+                </label>
+                <label className="agenda-field">
+                  <span>Cliente</span>
+                  <input value={createDraft.client} onChange={(event) => setCreateDraft((prev) => ({ ...prev, client: event.target.value }))} />
+                </label>
+                <label className="agenda-field">
+                  <span>Responsável</span>
+                  <input value={createDraft.responsible} onChange={(event) => setCreateDraft((prev) => ({ ...prev, responsible: event.target.value }))} />
+                </label>
+                <label className="agenda-field">
+                  <span>Local / canal</span>
+                  <input value={createDraft.locationOrChannel} onChange={(event) => setCreateDraft((prev) => ({ ...prev, locationOrChannel: event.target.value }))} />
+                </label>
+                <label className="agenda-field">
+                  <span>Prioridade</span>
+                  <select value={createDraft.priority} onChange={(event) => setCreateDraft((prev) => ({ ...prev, priority: event.target.value as AgendaPriority }))}>
+                    <option value="alta">Alta</option>
+                    <option value="media">Média</option>
+                    <option value="baixa">Baixa</option>
+                  </select>
+                </label>
+                <label className="agenda-field agenda-field--full">
+                  <span>Observações</span>
+                  <textarea value={createDraft.notes} onChange={(event) => setCreateDraft((prev) => ({ ...prev, notes: event.target.value }))} rows={4} />
+                </label>
+              </section>
+            </div>
+
+            <div className="agenda-drawer-footer" role="toolbar" aria-label="Ações de criação de evento">
+              <button className="btn-primary" onClick={submitCreateEvent}>Salvar evento</button>
+              <button className="btn-secondary" onClick={closeCreateModal}>Cancelar</button>
             </div>
           </aside>
         </>

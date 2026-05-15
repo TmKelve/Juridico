@@ -205,13 +205,20 @@
 }
 
 .agenda-field input,
-.agenda-field select {
+.agenda-field select,
+.agenda-field textarea {
   min-height: 40px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   padding: 0 var(--space-3);
   color: var(--text-primary);
   background: var(--white);
+}
+
+.agenda-field textarea {
+  min-height: 112px;
+  padding: var(--space-3);
+  resize: vertical;
 }
 
 .agenda-field input:focus-visible,
@@ -757,6 +764,10 @@
   gap: var(--space-4);
 }
 
+.agenda-drawer--form {
+  width: min(620px, 94vw);
+}
+
 .agenda-drawer-head {
   display: flex;
   justify-content: space-between;
@@ -830,6 +841,16 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-3);
+}
+
+.agenda-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.agenda-field--full {
+  grid-column: 1 / -1;
 }
 
 .agenda-drawer-footer {
