@@ -30,10 +30,13 @@ export function ResponsibilityQueueTable({
   onQueueFilterChange,
   onItemOpen,
 }: ResponsibilityQueueTableProps) {
+  const highlights = items.slice(0, 3);
+  const remaining = items.slice(3);
+
   return (
     <div className="panel panel-main">
       <div className="panel-head">
-        <h2>Fila de Responsabilidades</h2>
+        <h2>Prioridades do dia</h2>
         <span>{items.length} itens ativos</span>
       </div>
 
@@ -54,6 +57,55 @@ export function ResponsibilityQueueTable({
         {selectedPhase && <span className="phase-chip">Fase: {selectedPhase}</span>}
       </div>
 
+      {highlights.length > 0 && (
+        <section className="priority-stack" aria-label="Itens prioritários">
+          {highlights.map((row) => (
+            <article
+              key={row.id}
+              className={`priority-card ${selectedItemId === row.id ? 'is-selected' : ''}`}
+              data-sla={getSlaUrgency(row.sla)}
+            >
+              <div className="priority-card-main">
+                <div className="priority-card-headline">
+                  <span className="priority-card-kicker">{row.type === 'hoje' ? 'Atuação hoje' : row.type === 'atrasados' ? 'Atrasado' : 'Próximo período'}</span>
+                  <span className={`sla-badge sla-${getSlaUrgency(row.sla)}`}>{row.sla}</span>
+                </div>
+                <h3>{row.title}</h3>
+                <p>{row.client} • Processo #{row.id} • {row.phase}</p>
+                <small>{row.pendingSummary}</small>
+              </div>
+
+              <div className="priority-card-meta">
+                <div>
+                  <span className="priority-card-label">Responsável</span>
+                  <strong>{row.owner}</strong>
+                </div>
+                <div>
+                  <span className="priority-card-label">Status</span>
+                  <span className="queue-status-dot" data-status={row.status}>
+                    {row.status}
+                  </span>
+                </div>
+              </div>
+
+              <div className="priority-card-actions">
+                <button className="btn-primary btn-small" onClick={() => onItemOpen(row)}>
+                  <Eye size={14} aria-hidden="true" />
+                  Ver detalhe
+                </button>
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
+
+      <div className="queue-table-header">
+        <div>
+          <h3>Fila completa</h3>
+          <p>Continue pela lista detalhada quando precisar varrer a carteira inteira.</p>
+        </div>
+      </div>
+
       <div className="table-wrap">
         <table className="processes-table">
           <thead>
@@ -68,7 +120,7 @@ export function ResponsibilityQueueTable({
           </thead>
           <tbody>
             {items.length > 0 ? (
-              items.map((row) => (
+              (remaining.length > 0 ? remaining : items).map((row) => (
                 <tr
                   key={row.id}
                   className={`queue-row ${selectedItemId === row.id ? 'is-selected' : ''}`}
