@@ -390,12 +390,39 @@ export function Atendimentos({ user }: AtendimentosProps) {
   }
 
   function updateFilter<K extends keyof AtendimentoFilters>(key: K, value: AtendimentoFilters[K]) {
+    setPage(1);
     setFilters((prev) => ({ ...prev, [key]: value }));
   }
 
   function clearFilters() {
+    setPage(1);
     setFilters(EMPTY_FILTERS);
     setSuccess('Filtros limpos.');
+  }
+
+  function applyPresetFilter(preset: 'hoje' | 'retornos' | 'sem_resposta' | 'semana') {
+    setPage(1);
+    if (preset === 'hoje') {
+      setFilters({ ...EMPTY_FILTERS, period: 'hoje' });
+      setViewMode('lista');
+      setSuccess('Filtro aplicado: atendimentos de hoje.');
+      return;
+    }
+    if (preset === 'retornos') {
+      setFilters({ ...EMPTY_FILTERS, pendingRetorno: true });
+      setViewMode('conversa');
+      setSuccess('Filtro aplicado: retornos operacionais.');
+      return;
+    }
+    if (preset === 'sem_resposta') {
+      setFilters({ ...EMPTY_FILTERS, status: 'sem_resposta' });
+      setViewMode('conversa');
+      setSuccess('Filtro aplicado: clientes sem resposta.');
+      return;
+    }
+    setFilters({ ...EMPTY_FILTERS, period: 'semana' });
+    setViewMode('timeline');
+    setSuccess('Filtro aplicado: interações desta semana.');
   }
 
   function saveFilters() {
@@ -568,11 +595,10 @@ export function Atendimentos({ user }: AtendimentosProps) {
       >
         <td className="atend-td-client">
           <span className="atend-client-name">{item.client}</span>
+          <span className="atend-client-meta">
+            {item.processLabel} · {item.processTitle}
+          </span>
           <span className="atend-client-area">{item.area}</span>
-        </td>
-        <td className="atend-td-process">
-          <span className="atend-process-label">{item.processLabel}</span>
-          <span className="atend-process-title">{item.processTitle}</span>
         </td>
         <td><CanalIcon canal={item.canal} /></td>
         <td className="atend-td-assunto">
@@ -701,22 +727,34 @@ export function Atendimentos({ user }: AtendimentosProps) {
 
       {/* ── KPI Cards ───────────────────────────────────────────── */}
       <div className="atend-kpis" aria-label="Indicadores de atendimento">
-        <div className="atend-kpi-card">
+        <button type="button" className="atend-kpi-card atend-kpi-card--button" onClick={() => applyPresetFilter('hoje')}>
           <p>Atendimentos hoje</p>
           <strong>{loading ? '—' : kpis.hoje}</strong>
-        </div>
-        <div className="atend-kpi-card atend-kpi-card--warning">
+        </button>
+        <button
+          type="button"
+          className="atend-kpi-card atend-kpi-card--warning atend-kpi-card--button"
+          onClick={() => applyPresetFilter('retornos')}
+        >
           <p>Retornos operacionais</p>
           <strong>{loading ? '—' : retornosOperacionais}</strong>
-        </div>
-        <div className="atend-kpi-card atend-kpi-card--danger">
+        </button>
+        <button
+          type="button"
+          className="atend-kpi-card atend-kpi-card--danger atend-kpi-card--button"
+          onClick={() => applyPresetFilter('sem_resposta')}
+        >
           <p>Clientes sem resposta</p>
           <strong>{loading ? '—' : atendimentosSemResposta}</strong>
-        </div>
-        <div className="atend-kpi-card">
+        </button>
+        <button
+          type="button"
+          className="atend-kpi-card atend-kpi-card--button"
+          onClick={() => applyPresetFilter('semana')}
+        >
           <p>Interações na semana</p>
           <strong>{loading ? '—' : kpis.semana}</strong>
-        </div>
+        </button>
       </div>
 
       <div className="atend-operational-strip" aria-label="Resumo operacional de atendimento">
@@ -950,8 +988,7 @@ export function Atendimentos({ user }: AtendimentosProps) {
                 <table className="atend-table" aria-label="Lista de atendimentos">
                   <thead>
                     <tr>
-                      <th scope="col">Cliente</th>
-                      <th scope="col">Processo</th>
+                      <th scope="col">Cliente / Processo</th>
                       <th scope="col">Canal</th>
                       <th scope="col">Assunto / Resumo</th>
                       <th scope="col">Data</th>
