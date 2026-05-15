@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { api } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
+import { ProcessCombobox } from './ProcessCombobox';
 import './PieceTemplates.css';
 
 interface PieceTemplatesProps {
@@ -576,6 +577,10 @@ function PieceTemplates({ user }: PieceTemplatesProps) {
 
   const selectedModel = generation.templateId ? models.find((m) => m.id === generation.templateId) : null;
   const selectedProcess = generation.processId ? processes.find((p) => String(p.id) === generation.processId) : null;
+  const processOptions = useMemo(
+    () => processes.map((p) => ({ value: String(p.id), label: `#${p.id} • ${p.title}`, searchText: `${p.client} ${p.phase}` })),
+    [processes],
+  );
 
   return (
     <div className="tpl-page" onClick={() => { if (openMenuId) setOpenMenuId(null); }}>
@@ -989,24 +994,22 @@ function PieceTemplates({ user }: PieceTemplatesProps) {
                 <div className="tpl-gen-section tpl-gen-grid">
                   <div>
                     <label htmlFor="gen-process">Escolher processo</label>
-                    <select
+                    <ProcessCombobox
                       id="gen-process"
                       value={generation.processId}
-                      onChange={(e) => {
-                        const p = processes.find((pr) => String(pr.id) === e.target.value);
+                      onChange={(value) => {
+                        const p = processes.find((pr) => String(pr.id) === value);
                         setGeneration((prev) => ({
                           ...prev,
-                          processId: e.target.value,
+                          processId: value,
                           client: p?.client ?? '',
                           draftTitle: selectedModel ? `${selectedModel.tipoPeca} - ${p?.client ?? 'Cliente'}` : prev.draftTitle,
                         }));
                       }}
-                    >
-                      <option value="">Selecione um processo</option>
-                      {processes.map((p) => (
-                        <option key={p.id} value={String(p.id)}>#{p.id} • {p.title}</option>
-                      ))}
-                    </select>
+                      options={processOptions}
+                      placeholder="Pesquisar processo"
+                      emptyLabel="Selecione um processo"
+                    />
                   </div>
 
                   <div>

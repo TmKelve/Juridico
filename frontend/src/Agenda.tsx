@@ -20,6 +20,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { api } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
+import { ProcessCombobox } from './ProcessCombobox';
 import './Agenda.css';
 
 interface AgendaProps {
@@ -458,6 +459,10 @@ export function Agenda({ user }: AgendaProps) {
     events.forEach((event) => map.set(String(event.processId), event.processLabel));
     return Array.from(map.entries()).map(([id, label]) => ({ id, label }));
   }, [events]);
+  const processOptions = useMemo(
+    () => processes.map((process) => ({ value: String(process.id), label: process.label })),
+    [processes],
+  );
 
   const kpis = useMemo(() => {
     const now = new Date();
@@ -628,12 +633,7 @@ export function Agenda({ user }: AgendaProps) {
 
           <label className="agenda-field" htmlFor="agenda-process">
             <span>Processo</span>
-            <select id="agenda-process" value={filters.process} onChange={(event) => updateFilter('process', event.target.value)}>
-              <option value="">Todos</option>
-              {processes.map((process) => (
-                <option key={process.id} value={process.id}>{process.label}</option>
-              ))}
-            </select>
+            <ProcessCombobox id="agenda-process" value={filters.process} onChange={(value) => updateFilter('process', value)} options={processOptions} placeholder="Buscar processo" emptyLabel="Todos" />
           </label>
         </div>
 

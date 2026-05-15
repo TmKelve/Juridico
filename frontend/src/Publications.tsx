@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { api } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
+import { ProcessCombobox } from './ProcessCombobox';
 import './Publications.css';
 
 interface PublicationsProps {
@@ -386,6 +387,10 @@ export function Publications({ user }: PublicationsProps) {
   }, [publications]);
 
   const uniqueClients   = useMemo(() => [...new Set(publications.map((p) => p.client))].sort(), [publications]);
+  const processOptions  = useMemo(
+    () => processes.map((p) => ({ value: String(p.id), label: `#${p.id} · ${p.title}`, searchText: `${p.client} ${p.phase}` })),
+    [processes],
+  );
   const uniqueTribunais = useMemo(() => [...new Set(publications.map((p) => p.tribunal))].sort(), [publications]);
 
   const filtered = useMemo(() => {
@@ -638,10 +643,7 @@ export function Publications({ user }: PublicationsProps) {
 
           <div className="pub-field">
             <label htmlFor="pub-process">Processo</label>
-            <select id="pub-process" value={filters.process} onChange={(e) => updateFilter('process', e.target.value)}>
-              <option value="">Todos</option>
-              {processes.map((p) => <option key={p.id} value={String(p.id)}>#{p.id} · {p.title}</option>)}
-            </select>
+            <ProcessCombobox id="pub-process" value={filters.process} onChange={(value) => updateFilter('process', value)} options={processOptions} placeholder="Buscar processo" emptyLabel="Todos" />
           </div>
 
           <div className="pub-field">

@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { api, type ApiAttendance } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
+import { ProcessCombobox } from './ProcessCombobox';
 import './Atendimentos.css';
 
 interface AtendimentosProps {
@@ -479,6 +480,10 @@ export function Atendimentos({ user }: AtendimentosProps) {
   }, [atendimentos]);
 
   const uniqueClients    = useMemo(() => [...new Set(atendimentos.map((a) => a.client))].sort(), [atendimentos]);
+  const processOptions   = useMemo(
+    () => processes.map((p) => ({ value: String(p.id), label: `#${p.id} · ${p.title}`, searchText: `${p.client} ${p.phase}` })),
+    [processes],
+  );
   const uniqueResponsaveis = useMemo(() => [...new Set(atendimentos.map((a) => a.responsavel))].sort(), [atendimentos]);
 
   const filtered = useMemo(() => {
@@ -771,10 +776,7 @@ export function Atendimentos({ user }: AtendimentosProps) {
           {/* Process */}
           <div className="atend-field">
             <label htmlFor="atd-process">Processo</label>
-            <select id="atd-process" value={filters.process} onChange={(e) => updateFilter('process', e.target.value)}>
-              <option value="">Todos</option>
-              {processes.map((p) => <option key={p.id} value={String(p.id)}>#{p.id} · {p.title}</option>)}
-            </select>
+            <ProcessCombobox id="atd-process" value={filters.process} onChange={(value) => updateFilter('process', value)} options={processOptions} placeholder="Buscar processo" emptyLabel="Todos" />
           </div>
 
           {/* Status */}
@@ -1241,10 +1243,14 @@ export function Atendimentos({ user }: AtendimentosProps) {
 
                 <div className="atend-form-field">
                   <label htmlFor="form-process">Processo vinculado</label>
-                  <select id="form-process" value={form.processId} onChange={(e) => setForm((f) => ({ ...f, processId: e.target.value }))}>
-                    <option value="">Selecionar processo</option>
-                    {processes.map((p) => <option key={p.id} value={String(p.id)}>#{p.id} · {p.title}</option>)}
-                  </select>
+                  <ProcessCombobox
+                    id="form-process"
+                    value={form.processId}
+                    onChange={(value) => setForm((f) => ({ ...f, processId: value }))}
+                    options={processOptions}
+                    placeholder="Pesquisar processo"
+                    emptyLabel="Selecionar processo"
+                  />
                 </div>
 
                 <div className="atend-form-field">

@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { api, type ApiTask } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
+import { ProcessCombobox } from './ProcessCombobox';
 import './Tasks.css';
 
 interface TasksProps {
@@ -383,6 +384,10 @@ export function Tasks({ user }: TasksProps) {
 
   const uniqueOwners = useMemo(() => [...new Set(tasks.map((t) => t.owner))].sort(), [tasks]);
   const uniqueClients = useMemo(() => [...new Set(tasks.map((t) => t.client))].sort(), [tasks]);
+  const processOptions = useMemo(
+    () => processes.map((p) => ({ value: String(p.id), label: `#${p.id} · ${p.title}`, searchText: `${p.client} ${p.phase}` })),
+    [processes],
+  );
 
   const filtered = useMemo(() => {
     return tasks.filter((t) => {
@@ -551,7 +556,7 @@ export function Tasks({ user }: TasksProps) {
           <div className="tsk-field"><label htmlFor="tsk-priority">Prioridade</label><select id="tsk-priority" value={filters.priority} onChange={(e) => updateFilter('priority', e.target.value)}><option value="">Todas</option>{(Object.entries(PRIORITY_CFG) as Array<[TaskPriority, { label: string }]>).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
           <div className="tsk-field"><label htmlFor="tsk-owner">Responsável</label><select id="tsk-owner" value={filters.owner} onChange={(e) => updateFilter('owner', e.target.value)}><option value="">Todos</option>{uniqueOwners.map((o) => <option key={o} value={o}>{o}</option>)}</select></div>
           <div className="tsk-field"><label htmlFor="tsk-scope">Escopo</label><select id="tsk-scope" value={filters.scope} onChange={(e) => updateFilter('scope', e.target.value)}><option value="">Todos</option><option value="minha">Tarefa minha</option><option value="delegada_por_mim">Delegada por mim</option></select></div>
-          <div className="tsk-field"><label htmlFor="tsk-process">Processo</label><select id="tsk-process" value={filters.process} onChange={(e) => updateFilter('process', e.target.value)}><option value="">Todos</option>{processes.map((p) => <option key={p.id} value={String(p.id)}>#{p.id} • {p.title}</option>)}</select></div>
+          <div className="tsk-field"><label htmlFor="tsk-process">Processo</label><ProcessCombobox id="tsk-process" value={filters.process} onChange={(value) => updateFilter('process', value)} options={processOptions} placeholder="Buscar processo" emptyLabel="Todos" /></div>
           <div className="tsk-field"><label htmlFor="tsk-client">Cliente</label><select id="tsk-client" value={filters.client} onChange={(e) => updateFilter('client', e.target.value)}><option value="">Todos</option>{uniqueClients.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
           <div className="tsk-field"><label htmlFor="tsk-prazo">Prazo</label><select id="tsk-prazo" value={filters.prazo} onChange={(e) => updateFilter('prazo', e.target.value)}><option value="">Todos</option><option value="hoje">Hoje</option><option value="atrasado">Atrasado</option></select></div>
           <div className="tsk-field"><label htmlFor="tsk-origin">Origem</label><select id="tsk-origin" value={filters.origin} onChange={(e) => updateFilter('origin', e.target.value)}><option value="">Todas</option>{(Object.entries(ORIGIN_LABEL) as Array<[TaskOrigin, string]>).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
@@ -750,13 +755,17 @@ export function Tasks({ user }: TasksProps) {
 
                 <div className="tsk-form-field">
                   <label htmlFor="task-process">Processo vinculado</label>
-                  <select id="task-process" value={form.processId} onChange={(e) => {
-                    const p = processes.find((x) => String(x.id) === e.target.value);
-                    setForm((f) => ({ ...f, processId: e.target.value, client: p?.client || f.client }));
-                  }}>
-                    <option value="">Selecionar</option>
-                    {processes.map((p) => <option key={p.id} value={String(p.id)}>#{p.id} • {p.title}</option>)}
-                  </select>
+                  <ProcessCombobox
+                    id="task-process"
+                    value={form.processId}
+                    onChange={(value) => {
+                      const p = processes.find((x) => String(x.id) === value);
+                      setForm((f) => ({ ...f, processId: value, client: p?.client || f.client }));
+                    }}
+                    options={processOptions}
+                    placeholder="Pesquisar processo"
+                    emptyLabel="Selecionar processo"
+                  />
                 </div>
 
                 <div className="tsk-form-field">
