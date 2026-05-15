@@ -191,7 +191,7 @@ function PendenciaBadge({ count }: { count: number }) {
 
 // ─── DETAIL TABS ──────────────────────────────────────────────────────────────
 
-const DETAIL_TABS = ['Visão Geral', 'Dados Cadastrais', 'Processos', 'Atendimentos', 'Documentos', 'Pendências'] as const;
+const DETAIL_TABS = ['Resumo', 'Processos', 'Cadastro'] as const;
 type DetailTab = typeof DETAIL_TABS[number];
 
 function ClientDetailView({
@@ -205,7 +205,7 @@ function ClientDetailView({
   onGoToAtendimento: (client: ClientItem) => void;
   onOpenProcesso: (processId: number) => void;
 }) {
-  const [activeTab, setActiveTab] = useState<DetailTab>('Visão Geral');
+  const [activeTab, setActiveTab] = useState<DetailTab>('Resumo');
 
   return (
     <div className="cli-detail-overlay" onClick={onClose} aria-hidden="true">
@@ -252,7 +252,7 @@ function ClientDetailView({
         {/* Tab panels */}
         <div className="cli-detail-body" role="tabpanel" aria-label={activeTab}>
 
-          {activeTab === 'Visão Geral' && (
+          {activeTab === 'Resumo' && (
             <div className="cli-detail-section-list">
               <div className="cli-detail-kpi-row">
                 <div className="cli-detail-kpi">
@@ -273,55 +273,111 @@ function ClientDetailView({
                 </div>
               </div>
 
-              <div className="cli-detail-section">
-                <span className="cli-detail-label">Contato</span>
-                <span className="cli-detail-val">
-                  <Phone size={12} aria-hidden="true" /> {client.telefone}
-                </span>
-                <span className="cli-detail-val">
-                  <Mail size={12} aria-hidden="true" /> {client.email}
-                </span>
+              <div className="cli-detail-row2">
+                <div className="cli-detail-section">
+                  <span className="cli-detail-label">Contato</span>
+                  <span className="cli-detail-val">
+                    <Phone size={12} aria-hidden="true" /> {client.telefone}
+                  </span>
+                  <span className="cli-detail-val">
+                    <Mail size={12} aria-hidden="true" /> {client.email}
+                  </span>
+                </div>
+
+                <div className="cli-detail-section">
+                  <span className="cli-detail-label">Responsável</span>
+                  <span className="cli-detail-val">{client.responsavel}</span>
+                </div>
+              </div>
+
+              <div className="cli-detail-summary-grid">
+                <div className="cli-detail-summary-card">
+                  <span className="cli-detail-label">Atendimento</span>
+                  {client.atendimentoPendente ? (
+                    <div className="cli-detail-alert">
+                      <AlertTriangle size={14} aria-hidden="true" />
+                      Atendimento pendente — ligar ou enviar retorno.
+                    </div>
+                  ) : (
+                    <div className="cli-detail-ok">
+                      <CheckCircle2 size={14} /> Sem retorno pendente.
+                    </div>
+                  )}
+                </div>
+
+                <div className="cli-detail-summary-card">
+                  <span className="cli-detail-label">Documentos</span>
+                  {client.documentosFaltantes > 0 ? (
+                    <div className="cli-detail-alert cli-detail-alert--doc">
+                      <FileText size={14} />
+                      {client.documentosFaltantes} documento{client.documentosFaltantes > 1 ? 's' : ''} faltando no checklist.
+                    </div>
+                  ) : (
+                    <div className="cli-detail-ok">
+                      <CheckCircle2 size={14} /> Checklist documental completo.
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="cli-detail-section">
-                <span className="cli-detail-label">Responsável</span>
-                <span className="cli-detail-val">{client.responsavel}</span>
+                <span className="cli-detail-label">Último atendimento</span>
+                <p className="cli-detail-empty cli-detail-empty--info">
+                  {client.ultimoAtendimento
+                    ? formatDate(client.ultimoAtendimento)
+                    : 'Nenhum atendimento registrado.'}
+                </p>
               </div>
 
-              {client.atendimentoPendente && (
-                <div className="cli-detail-alert">
-                  <AlertTriangle size={14} aria-hidden="true" />
-                  Atendimento pendente — ligar ou enviar retorno.
-                </div>
-              )}
-
-              {client.documentosFaltantes > 0 && (
-                <div className="cli-detail-alert cli-detail-alert--doc">
-                  <FileText size={14} aria-hidden="true" />
-                  {client.documentosFaltantes} documento{client.documentosFaltantes > 1 ? 's' : ''} faltando no checklist.
-                </div>
-              )}
-
               <div className="cli-detail-section">
-                <span className="cli-detail-label">Processos vinculados</span>
-                {client.processos.map((p) => (
+                <span className="cli-detail-label">Processo principal</span>
+                {client.processos[0] ? (
                   <button
-                    key={p.id}
-                    className="cli-process-chip"
-                    onClick={() => onOpenProcesso(p.id)}
-                    aria-label={`Abrir processo ${p.label}: ${p.title}`}
+                    className="cli-process-chip cli-process-chip--primary"
+                    onClick={() => onOpenProcesso(client.processos[0].id)}
+                    aria-label={`Abrir processo principal ${client.processos[0].label}: ${client.processos[0].title}`}
                   >
                     <Briefcase size={12} aria-hidden="true" />
-                    <span>{p.label}</span>
-                    <span className="cli-process-chip-title">{p.title}</span>
+                    <span>{client.processos[0].label}</span>
+                    <span className="cli-process-chip-title">{client.processos[0].title}</span>
                     <ExternalLink size={11} aria-hidden="true" />
                   </button>
-                ))}
+                ) : (
+                  <p className="cli-detail-empty">Nenhum processo vinculado.</p>
+                )}
               </div>
             </div>
           )}
 
-          {activeTab === 'Dados Cadastrais' && (
+          {activeTab === 'Processos' && (
+            <div className="cli-detail-section-list">
+              <div className="cli-detail-section">
+                <span className="cli-detail-label">Processos vinculados</span>
+                {client.processos.length === 0 ? (
+                  <p className="cli-detail-empty">Nenhum processo vinculado.</p>
+                ) : (
+                  client.processos.map((p) => (
+                    <div key={p.id} className="cli-process-row">
+                      <div>
+                        <span className="cli-process-row-label">{p.label}</span>
+                        <span className="cli-process-row-title">{p.title}</span>
+                      </div>
+                      <span className="cli-badge cli-badge--muted">{p.status}</span>
+                      <button
+                        className="btn-ghost cli-open-btn"
+                        onClick={() => onOpenProcesso(p.id)}
+                        aria-label={`Abrir processo ${p.label}`}
+                      >
+                        <ExternalLink size={13} /> Abrir
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'Cadastro' && (
             <div className="cli-detail-section-list">
               <div className="cli-detail-row2">
                 <div className="cli-detail-section">
@@ -330,17 +386,7 @@ function ClientDetailView({
                 </div>
                 <div className="cli-detail-section">
                   <span className="cli-detail-label">CPF / CNPJ</span>
-                  <span className="cli-detail-val">{client.cpfCnpj}</span>
-                </div>
-              </div>
-              <div className="cli-detail-row2">
-                <div className="cli-detail-section">
-                  <span className="cli-detail-label">Telefone</span>
-                  <span className="cli-detail-val">{client.telefone}</span>
-                </div>
-                <div className="cli-detail-section">
-                  <span className="cli-detail-label">E-mail</span>
-                  <span className="cli-detail-val">{client.email}</span>
+                  <span className="cli-detail-val">{client.cpfCnpj || '—'}</span>
                 </div>
               </div>
               <div className="cli-detail-row2">
@@ -368,80 +414,6 @@ function ClientDetailView({
                   <span className="cli-detail-label">Observações</span>
                   <p className="cli-detail-obs">{client.observacoes}</p>
                 </div>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'Processos' && (
-            <div className="cli-detail-section-list">
-              {client.processos.length === 0 ? (
-                <p className="cli-detail-empty">Nenhum processo vinculado.</p>
-              ) : (
-                client.processos.map((p) => (
-                  <div key={p.id} className="cli-process-row">
-                    <div>
-                      <span className="cli-process-row-label">{p.label}</span>
-                      <span className="cli-process-row-title">{p.title}</span>
-                    </div>
-                    <span className="cli-badge cli-badge--muted">{p.status}</span>
-                    <button
-                      className="btn-ghost cli-open-btn"
-                      onClick={() => onOpenProcesso(p.id)}
-                      aria-label={`Abrir processo ${p.label}`}
-                    >
-                      <ExternalLink size={13} /> Abrir
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-
-          {activeTab === 'Atendimentos' && (
-            <div className="cli-detail-section-list">
-              <p className="cli-detail-empty cli-detail-empty--info">
-                {client.ultimoAtendimento
-                  ? `Último atendimento: ${formatDate(client.ultimoAtendimento)}`
-                  : 'Nenhum atendimento registrado.'}
-              </p>
-              <button
-                className="btn-primary"
-                onClick={() => onGoToAtendimento(client)}
-                aria-label="Registrar novo atendimento para este cliente"
-              >
-                <Plus size={13} /> Registrar atendimento
-              </button>
-            </div>
-          )}
-
-          {activeTab === 'Documentos' && (
-            <div className="cli-detail-section-list">
-              {client.documentosFaltantes > 0 ? (
-                <div className="cli-detail-alert cli-detail-alert--doc">
-                  <FileText size={14} />
-                  {client.documentosFaltantes} documento{client.documentosFaltantes > 1 ? 's' : ''} faltando no checklist. Solicite ao cliente.
-                </div>
-              ) : (
-                <div className="cli-detail-ok">
-                  <CheckCircle2 size={14} /> Checklist documental completo.
-                </div>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'Pendências' && (
-            <div className="cli-detail-section-list">
-              {client.pendencias === 0 ? (
-                <div className="cli-detail-ok">
-                  <CheckCircle2 size={14} /> Sem pendências operacionais.
-                </div>
-              ) : (
-                Array.from({ length: client.pendencias }).map((_, i) => (
-                  <div key={i} className="cli-pend-row">
-                    <AlertTriangle size={14} aria-hidden="true" />
-                    <span>Pendência #{i + 1}: verificar andamento do processo vinculado.</span>
-                  </div>
-                ))
               )}
             </div>
           )}
@@ -493,12 +465,11 @@ export function Clients({ user }: ClientsProps) {
   const [sortBy, setSortBy]             = useState<SortField>('nome');
   const [sortDesc, setSortDesc]         = useState(false);
   const [page, setPage]                 = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   const [selectedClient, setSelectedClient] = useState<ClientItem | null>(null);
   const [openMenuId, setOpenMenuId]     = useState<string | null>(null);
   const [showForm, setShowForm]         = useState(false);
   const [form, setForm]                 = useState<NewClientForm>(EMPTY_FORM);
-
-  const ITEMS_PER_PAGE = 15;
 
   useEffect(() => {
     trackPageView('clientes', { role: user.role });
@@ -671,8 +642,8 @@ export function Clients({ user }: ClientsProps) {
     return arr;
   }, [filtered, sortBy, sortDesc]);
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / ITEMS_PER_PAGE));
-  const pageItems  = sorted.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+  const totalPages = Math.max(1, Math.ceil(sorted.length / itemsPerPage));
+  const pageItems  = sorted.slice((page - 1) * itemsPerPage, page * itemsPerPage);
   const hasActiveFilters = Object.entries(filters).some(([, v]) => typeof v === 'boolean' ? v : v !== '');
 
   // ─── row render ────────────────────────────────────────────────────────────
@@ -786,11 +757,11 @@ export function Clients({ user }: ClientsProps) {
 
       {/* ── Header ──────────────────────────────────────────────── */}
       <div className="cli-header-card">
-        <div>
-          <p className="cli-eyebrow">Gestão Relacional</p>
-          <h2>Clientes</h2>
+        <div className="cli-header-copy">
+          <p className="cli-eyebrow">Carteira e relacionamento</p>
+          <h3 className="cli-header-title">Acompanhe clientes, retornos e vínculos com processos.</h3>
           <p className="cli-subtitle">
-            Visualize sua carteira, acompanhe pendências e mantenha o vínculo cliente–processo sempre atualizado.
+            Busque rapidamente, filtre por contexto operacional e acione atendimento ou processo sem sair da carteira.
           </p>
         </div>
         <div className="cli-header-actions">
@@ -927,33 +898,35 @@ export function Clients({ user }: ClientsProps) {
         </div>
 
         <div className="cli-filters-bottom">
-          <label className="cli-checkline">
-            <input
-              type="checkbox"
-              checked={filters.comProcessoAtivo}
-              onChange={(e) => updateFilter('comProcessoAtivo', e.target.checked)}
-              aria-label="Mostrar apenas clientes com processo ativo"
-            />
-            Com processo ativo
-          </label>
-          <label className="cli-checkline">
-            <input
-              type="checkbox"
-              checked={filters.aguardandoRetorno}
-              onChange={(e) => updateFilter('aguardandoRetorno', e.target.checked)}
-              aria-label="Mostrar apenas clientes aguardando retorno"
-            />
-            Aguardando retorno
-          </label>
-          <label className="cli-checkline">
-            <input
-              type="checkbox"
-              checked={filters.comDocumentoFaltante}
-              onChange={(e) => updateFilter('comDocumentoFaltante', e.target.checked)}
-              aria-label="Mostrar apenas clientes com documento faltante"
-            />
-            Doc. faltante
-          </label>
+          <div className="cli-toggle-group" aria-label="Filtros rápidos">
+            <label className="cli-checkline">
+              <input
+                type="checkbox"
+                checked={filters.comProcessoAtivo}
+                onChange={(e) => updateFilter('comProcessoAtivo', e.target.checked)}
+                aria-label="Mostrar apenas clientes com processo ativo"
+              />
+              Com processo ativo
+            </label>
+            <label className="cli-checkline">
+              <input
+                type="checkbox"
+                checked={filters.aguardandoRetorno}
+                onChange={(e) => updateFilter('aguardandoRetorno', e.target.checked)}
+                aria-label="Mostrar apenas clientes aguardando retorno"
+              />
+              Aguardando retorno
+            </label>
+            <label className="cli-checkline">
+              <input
+                type="checkbox"
+                checked={filters.comDocumentoFaltante}
+                onChange={(e) => updateFilter('comDocumentoFaltante', e.target.checked)}
+                aria-label="Mostrar apenas clientes com documento faltante"
+              />
+              Doc. faltante
+            </label>
+          </div>
 
           <div className="cli-filter-actions">
             {hasActiveFilters && (
@@ -1028,10 +1001,27 @@ export function Clients({ user }: ClientsProps) {
           {filtered.length > 0 && viewMode === 'lista' && (
             <div className="cli-table-card">
               <div className="cli-table-header">
-                <span className="cli-count-badge">
-                  {filtered.length} cliente{filtered.length !== 1 ? 's' : ''}
-                </span>
+                <div className="cli-table-header-meta">
+                  <span className="cli-count-badge">
+                    {filtered.length} cliente{filtered.length !== 1 ? 's' : ''}
+                  </span>
+                  <span className="cli-table-range">
+                    Exibindo {filtered.length === 0 ? 0 : ((page - 1) * itemsPerPage) + 1}
+                    {' '}a {Math.min(page * itemsPerPage, filtered.length)} de {filtered.length}
+                  </span>
+                </div>
                 <div className="cli-sort-controls">
+                  <label htmlFor="cli-page-size" className="sr-only">Itens por página</label>
+                  <select
+                    id="cli-page-size"
+                    value={String(itemsPerPage)}
+                    onChange={(e) => { setItemsPerPage(Number(e.target.value)); setPage(1); }}
+                    aria-label="Itens por página"
+                  >
+                    <option value="10">10 por página</option>
+                    <option value="20">20 por página</option>
+                    <option value="50">50 por página</option>
+                  </select>
                   <label htmlFor="cli-sort" className="sr-only">Ordenar por</label>
                   <select
                     id="cli-sort"
@@ -1075,13 +1065,14 @@ export function Clients({ user }: ClientsProps) {
                 </table>
               </div>
 
-              {totalPages > 1 && (
-                <div className="cli-pagination" aria-label="Paginação">
+              <div className="cli-pagination" aria-label="Paginação">
+                <span className="cli-pagination-summary">Página {page} de {totalPages}</span>
+                <div className="cli-pagination-controls">
                   <button disabled={page === 1} onClick={() => setPage((p) => p - 1)} aria-label="Página anterior">Anterior</button>
                   <span aria-live="polite">{page} / {totalPages}</span>
                   <button disabled={page === totalPages} onClick={() => setPage((p) => p + 1)} aria-label="Próxima página">Próximo</button>
                 </div>
-              )}
+              </div>
             </div>
           )}
 
