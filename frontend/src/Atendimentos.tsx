@@ -547,6 +547,11 @@ export function Atendimentos({ user }: AtendimentosProps) {
   const hasActiveFilters = Object.entries(filters).some(([k, v]) =>
     k !== 'period' ? (typeof v === 'boolean' ? v : v !== '') : v !== ''
   );
+  const atendimentosSemResposta = atendimentos.filter((item) => item.status === 'sem_resposta').length;
+  const processosCriticos = atendimentos.filter((item) => item.critico).length;
+  const retornosOperacionais = atendimentos.filter(
+    (item) => item.status === 'aguardando_cliente' || item.status === 'sem_resposta' || item.status === 'agendado',
+  ).length;
 
   // ─── render helpers ─────────────────────────────────────────────────────
 
@@ -645,11 +650,11 @@ export function Atendimentos({ user }: AtendimentosProps) {
 
       {/* ── Header ──────────────────────────────────────────────── */}
       <div className="atend-header-card">
-        <div>
-          <p className="atend-eyebrow">Gestão Relacional</p>
-          <h2>Atendimentos</h2>
+        <div className="atend-header-content">
+          <p className="atend-eyebrow">Carteira relacional</p>
+          <h2>Trate retornos, registre interações e destrave próximos passos.</h2>
           <p className="atend-subtitle">
-            Registre interações, acompanhe retornos e mantenha cada vínculo cliente–processo atualizado.
+            Centralize os contatos do cliente, priorize quem está sem retorno e acione processo ou tarefa sem sair da operação.
           </p>
         </div>
         <div className="atend-header-actions">
@@ -701,20 +706,31 @@ export function Atendimentos({ user }: AtendimentosProps) {
           <strong>{loading ? '—' : kpis.hoje}</strong>
         </div>
         <div className="atend-kpi-card atend-kpi-card--warning">
-          <p>Retornos pendentes</p>
-          <strong>{loading ? '—' : kpis.pendentes}</strong>
+          <p>Retornos operacionais</p>
+          <strong>{loading ? '—' : retornosOperacionais}</strong>
         </div>
         <div className="atend-kpi-card atend-kpi-card--danger">
           <p>Clientes sem resposta</p>
-          <strong>{loading ? '—' : kpis.semResposta}</strong>
+          <strong>{loading ? '—' : atendimentosSemResposta}</strong>
         </div>
         <div className="atend-kpi-card">
           <p>Interações na semana</p>
           <strong>{loading ? '—' : kpis.semana}</strong>
         </div>
-        <div className="atend-kpi-card atend-kpi-card--critico">
-          <p>Processos críticos</p>
-          <strong>{loading ? '—' : kpis.criticos}</strong>
+      </div>
+
+      <div className="atend-operational-strip" aria-label="Resumo operacional de atendimento">
+        <div className="atend-operational-pill atend-operational-pill--critical">
+          <span>Processos críticos</span>
+          <strong>{loading ? '—' : processosCriticos}</strong>
+        </div>
+        <div className="atend-operational-pill">
+          <span>Retornos pendentes</span>
+          <strong>{loading ? '—' : kpis.pendentes}</strong>
+        </div>
+        <div className="atend-operational-note">
+          <AlertTriangle size={14} aria-hidden="true" />
+          <span>Use a visualização de conversa para tratar clientes sem resposta antes de abrir novos registros.</span>
         </div>
       </div>
 
@@ -754,15 +770,6 @@ export function Atendimentos({ user }: AtendimentosProps) {
             </select>
           </div>
 
-          {/* Canal */}
-          <div className="atend-field">
-            <label htmlFor="atd-canal">Canal</label>
-            <select id="atd-canal" value={filters.canal} onChange={(e) => updateFilter('canal', e.target.value)}>
-              <option value="">Todos</option>
-              {CANAIS.map((c) => <option key={c} value={c}>{CANAL_LABEL[c]}</option>)}
-            </select>
-          </div>
-
           {/* Status */}
           <div className="atend-field">
             <label htmlFor="atd-status">Status</label>
@@ -771,15 +778,6 @@ export function Atendimentos({ user }: AtendimentosProps) {
               {(Object.entries(STATUS_CFG) as [AtendStatus, { label: string; variant: string }][]).map(([k, v]) =>
                 <option key={k} value={k}>{v.label}</option>
               )}
-            </select>
-          </div>
-
-          {/* Responsible */}
-          <div className="atend-field">
-            <label htmlFor="atd-resp">Responsável</label>
-            <select id="atd-resp" value={filters.responsible} onChange={(e) => updateFilter('responsible', e.target.value)}>
-              <option value="">Todos</option>
-              {uniqueResponsaveis.map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
           </div>
 
@@ -794,7 +792,25 @@ export function Atendimentos({ user }: AtendimentosProps) {
             </select>
           </div>
 
-          {/* Area */}
+        </div>
+
+        <div className="atend-filters-secondary">
+          <div className="atend-field">
+            <label htmlFor="atd-canal">Canal</label>
+            <select id="atd-canal" value={filters.canal} onChange={(e) => updateFilter('canal', e.target.value)}>
+              <option value="">Todos</option>
+              {CANAIS.map((c) => <option key={c} value={c}>{CANAL_LABEL[c]}</option>)}
+            </select>
+          </div>
+
+          <div className="atend-field">
+            <label htmlFor="atd-resp">Responsável</label>
+            <select id="atd-resp" value={filters.responsible} onChange={(e) => updateFilter('responsible', e.target.value)}>
+              <option value="">Todos</option>
+              {uniqueResponsaveis.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+
           <div className="atend-field">
             <label htmlFor="atd-area">Área</label>
             <select id="atd-area" value={filters.area} onChange={(e) => updateFilter('area', e.target.value)}>
@@ -841,22 +857,6 @@ export function Atendimentos({ user }: AtendimentosProps) {
             </button>
           </div>
 
-          {/* View toggle */}
-          <div className="atend-view-toggle" role="group" aria-label="Modo de visualização">
-            {(['lista', 'conversa', 'timeline'] as ViewMode[]).map((mode) => {
-              const labels = { lista: 'Lista', conversa: 'Conversa', timeline: 'Timeline' };
-              return (
-                <button
-                  key={mode}
-                  className={`atend-view-btn${viewMode === mode ? ' atend-view-btn--active' : ''}`}
-                  onClick={() => setViewMode(mode)}
-                  aria-pressed={viewMode === mode}
-                >
-                  {labels[mode]}
-                </button>
-              );
-            })}
-          </div>
         </div>
       </div>
 
@@ -894,13 +894,30 @@ export function Atendimentos({ user }: AtendimentosProps) {
             </div>
           )}
 
-          {/* ── Lista mode ─────────────────────────────────────── */}
-          {filtered.length > 0 && viewMode === 'lista' && (
-            <div className="atend-table-card">
-              <div className="atend-table-header">
+          {filtered.length > 0 && (
+            <div className="atend-content-header">
+              <div className="atend-table-header-main">
                 <span className="atend-count-badge">
                   {filtered.length} atendimento{filtered.length !== 1 ? 's' : ''}
                 </span>
+                <p className="atend-table-subtitle">Trabalhe a fila por prioridade, retorno e contexto do processo.</p>
+              </div>
+              <div className="atend-table-header-controls">
+                <div className="atend-view-toggle" role="group" aria-label="Modo de visualização">
+                  {(['lista', 'conversa', 'timeline'] as ViewMode[]).map((mode) => {
+                    const labels = { lista: 'Lista', conversa: 'Conversa', timeline: 'Timeline' };
+                    return (
+                      <button
+                        key={mode}
+                        className={`atend-view-btn${viewMode === mode ? ' atend-view-btn--active' : ''}`}
+                        onClick={() => setViewMode(mode)}
+                        aria-pressed={viewMode === mode}
+                      >
+                        {labels[mode]}
+                      </button>
+                    );
+                  })}
+                </div>
                 <div className="atend-sort-controls">
                   <label htmlFor="atd-sort" className="sr-only">Ordenar por</label>
                   <select
@@ -923,7 +940,12 @@ export function Atendimentos({ user }: AtendimentosProps) {
                   </button>
                 </div>
               </div>
+            </div>
+          )}
 
+          {/* ── Lista mode ─────────────────────────────────────── */}
+          {filtered.length > 0 && viewMode === 'lista' && (
+            <div className="atend-table-card">
               <div className="atend-table-wrap">
                 <table className="atend-table" aria-label="Lista de atendimentos">
                   <thead>
@@ -1069,7 +1091,10 @@ export function Atendimentos({ user }: AtendimentosProps) {
             role="complementary"
           >
             <div className="atend-drawer-top">
-              <h3>Detalhe do Atendimento</h3>
+              <div className="atend-drawer-heading">
+                <span className="atend-drawer-kicker">Atendimento</span>
+                <h3>{selectedItem.client}</h3>
+              </div>
               <button
                 className="atend-drawer-close"
                 onClick={() => setSelectedItem(null)}
@@ -1080,69 +1105,53 @@ export function Atendimentos({ user }: AtendimentosProps) {
             </div>
 
             <div className="atend-drawer-body">
-              <div className="atend-drawer-section">
-                <span className="atend-drawer-label">Cliente</span>
-                <span className="atend-drawer-value atend-drawer-value--strong">{selectedItem.client}</span>
-              </div>
-              <div className="atend-drawer-section">
-                <span className="atend-drawer-label">Processo</span>
-                <span className="atend-drawer-value">
-                  {selectedItem.processLabel} · {selectedItem.processTitle}
-                </span>
-              </div>
-              <div className="atend-drawer-section atend-drawer-row">
-                <div>
-                  <span className="atend-drawer-label">Canal</span>
+              <div className="atend-drawer-hero">
+                <div className="atend-drawer-hero-top">
                   <CanalIcon canal={selectedItem.canal} />
+                  <StatusBadge status={selectedItem.status} />
+                  <span className="atend-drawer-priority">
+                    <PriorityDot priority={selectedItem.priority} />
+                    {selectedItem.priority.charAt(0).toUpperCase() + selectedItem.priority.slice(1)}
+                  </span>
                 </div>
-                <div>
+                <p className="atend-drawer-hero-subject">{selectedItem.assunto}</p>
+                <p className="atend-drawer-hero-summary">{selectedItem.resumo}</p>
+              </div>
+
+              <div className="atend-drawer-next-card">
+                <span className="atend-drawer-label">Próximo passo</span>
+                <p className="atend-drawer-next-text">
+                  {selectedItem.proximoPasso || <em>Não definido. Este atendimento ainda precisa de encaminhamento operacional.</em>}
+                </p>
+              </div>
+
+              <div className="atend-drawer-meta-grid">
+                <div className="atend-drawer-section">
+                  <span className="atend-drawer-label">Processo</span>
+                  <span className="atend-drawer-value">
+                    {selectedItem.processLabel} · {selectedItem.processTitle}
+                  </span>
+                </div>
+                <div className="atend-drawer-section">
+                  <span className="atend-drawer-label">Responsável</span>
+                  <span className="atend-drawer-value">{selectedItem.responsavel}</span>
+                </div>
+                <div className="atend-drawer-section">
+                  <span className="atend-drawer-label">Data / Hora</span>
+                  <span className="atend-drawer-value">{formatDateTime(selectedItem.dataHora)}</span>
+                </div>
+                <div className="atend-drawer-section">
                   <span className="atend-drawer-label">Tipo</span>
                   <span className="atend-drawer-value">{selectedItem.tipo}</span>
                 </div>
               </div>
-              <div className="atend-drawer-section atend-drawer-row">
-                <div>
-                  <span className="atend-drawer-label">Data / Hora</span>
-                  <span className="atend-drawer-value">{formatDateTime(selectedItem.dataHora)}</span>
-                </div>
-                <div>
-                  <span className="atend-drawer-label">Responsável</span>
-                  <span className="atend-drawer-value">{selectedItem.responsavel}</span>
-                </div>
-              </div>
-              <div className="atend-drawer-section">
-                <span className="atend-drawer-label">Assunto</span>
-                <span className="atend-drawer-value atend-drawer-value--strong">{selectedItem.assunto}</span>
-              </div>
-              <div className="atend-drawer-section">
-                <span className="atend-drawer-label">Resumo</span>
-                <p className="atend-drawer-text">{selectedItem.resumo}</p>
-              </div>
+
               {selectedItem.observacoes && (
                 <div className="atend-drawer-section">
                   <span className="atend-drawer-label">Observações</span>
                   <p className="atend-drawer-text atend-drawer-text--obs">{selectedItem.observacoes}</p>
                 </div>
               )}
-              <div className="atend-drawer-section atend-drawer-row">
-                <div>
-                  <span className="atend-drawer-label">Status</span>
-                  <StatusBadge status={selectedItem.status} />
-                </div>
-                <div>
-                  <span className="atend-drawer-label">Prioridade</span>
-                  <span className="atend-drawer-value" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <PriorityDot priority={selectedItem.priority} />
-                    {selectedItem.priority.charAt(0).toUpperCase() + selectedItem.priority.slice(1)}
-                  </span>
-                </div>
-              </div>
-              <div className="atend-drawer-section">
-                <span className="atend-drawer-label">Próximo passo</span>
-                <p className="atend-drawer-text">
-                  {selectedItem.proximoPasso || <em>Não definido</em>}
-                </p>
-              </div>
               {selectedItem.retornoAgendado && (
                 <div className="atend-drawer-section">
                   <span className="atend-drawer-label">Retorno agendado</span>
