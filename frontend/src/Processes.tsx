@@ -12,6 +12,7 @@ import {
   FolderOpen,
   KanbanSquare,
   Loader2,
+  MoreHorizontal,
   Plus,
   RefreshCw,
   Save,
@@ -28,6 +29,7 @@ import './Processes.css';
 interface Process {
   id: number;
   title: string;
+  processNumber?: string | null;
   client: string;
   phase: string;
   status: string;
@@ -37,6 +39,7 @@ interface Process {
 
 interface ProcessFormData {
   title: string;
+  processNumber: string;
   client: string;
   phase: string;
   status: string;
@@ -52,6 +55,7 @@ type PrazoFiltro = 'todos' | 'critico' | 'hoje' | '7dias';
 type SortField = 'nextDeadline' | 'priority' | 'lastMovement';
 type SortDirection = 'asc' | 'desc';
 type FilterPresetKey = 'critical_today' | 'stale_15' | 'pending_docs' | 'new_publications';
+type ProcessEntryMode = 'novo' | 'andamento';
 type KanbanStage =
   | 'aguardando_acao'
   | 'aguardando_documentos'
@@ -238,12 +242,17 @@ export function Processes({ user }: ProcessesProps) {
 
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [entryMode, setEntryMode] = useState<ProcessEntryMode>('novo');
   const [formData, setFormData] = useState<ProcessFormData>({
     title: '',
+    processNumber: '',
     client: '',
     phase: 'Inicial',
     status: 'ativo',
   });
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupError, setLookupError] = useState('');
+  const [lookupInfo, setLookupInfo] = useState<{ alreadyRegistered: boolean; existingId?: number | null } | null>(null);
 
   const [filters, setFilters] = useState<ProcessFilters>(EMPTY_FILTERS);
   const [sortBy, setSortBy] = useState<SortField>('nextDeadline');
@@ -289,6 +298,66 @@ export function Processes({ user }: ProcessesProps) {
     setCurrentPage(1);
   }, [filters, sortBy, sortDirection]);
 
+  useEffect(() => {
+    if (!showForm || editingId || entryMode !== 'andamento') return;
+
+    const normalized = formData.processNumber.replace(/\D/g, '');
+    if (normalized.length < 8) {
+      setLookupLoading(false);
+      setLookupError('');
+      setLookupInfo(null);
+      return;
+    }
+
+    const handle = window.setTimeout(async () => {
+      setLookupLoading(true);
+      setLookupError('');
+
+      try {
+        const res = await api.lookupProcess(normalized);
+        if (res.status === 200 && res.data?.process) {
+          setFormData((prev) => ({
+            ...prev,
+            processNumber: normalized,
+            title: res.data.process.title,
+            client: res.data.process.client,
+            phase: res.data.process.phase,
+            status: res.data.process.status,
+          }));
+          setLookupInfo({
+            alreadyRegistered: res.data.alreadyRegistered,
+            existingId: res.data.alreadyRegistered ? res.data.process.id : null,
+          });
+        } else {
+          setLookupInfo(null);
+          setLookupError(res.error || 'Nenhum dado encontrado para esse numero de processo');
+        }
+      } catch (err) {
+        setLookupInfo(null);
+        setLookupError((err as Error).message);
+      } finally {
+        setLookupLoading(false);
+      }
+    }, 450);
+
+    return () => window.clearTimeout(handle);
+  }, [editingId, entryMode, formData.processNumber, showForm]);
+
+  function resetFormState(nextMode: ProcessEntryMode = 'novo') {
+    setEditingId(null);
+    setEntryMode(nextMode);
+    setLookupLoading(false);
+    setLookupError('');
+    setLookupInfo(null);
+    setFormData({
+      title: '',
+      processNumber: '',
+      client: '',
+      phase: 'Inicial',
+      status: 'ativo',
+    });
+  }
+
   async function loadProcesses() {
     setLoading(true);
     setError('');
@@ -320,8 +389,13 @@ export function Processes({ user }: ProcessesProps) {
       return;
     }
 
-    if (!clientExists) {
-      setError('Cliente nao encontrado. Cadastre o cliente antes de criar o processo.');
+    if (entryMode === 'andamento' && !editingId && !formData.processNumber.trim()) {
+      setError('Informe o numero do processo para cadastrar um processo em andamento.');
+      return;
+    }
+
+    if (lookupInfo?.alreadyRegistered && lookupInfo.existingId && !editingId) {
+      setError('Esse numero de processo ja esta cadastrado na carteira.');
       return;
     }
 
@@ -338,8 +412,7 @@ export function Processes({ user }: ProcessesProps) {
       if (res.status === 200 || res.status === 201) {
         setSuccess(editingId ? 'Processo atualizado com sucesso.' : 'Processo criado com sucesso.');
         setShowForm(false);
-        setEditingId(null);
-        setFormData({ title: '', client: '', phase: 'Inicial', status: 'ativo' });
+        resetFormState('novo');
         await loadProcesses();
       } else {
         setError(res.error || 'Erro ao salvar processo');
@@ -375,10 +448,14 @@ export function Processes({ user }: ProcessesProps) {
 
     setFormData({
       title: process.title,
+      processNumber: process.processNumber ?? '',
       client: process.client,
       phase: process.phase,
       status: process.status,
     });
+    setEntryMode(process.processNumber ? 'andamento' : 'novo');
+    setLookupError('');
+    setLookupInfo(null);
     setEditingId(process.id);
     setShowForm(true);
     setMenuOpenId(null);
@@ -488,6 +565,7 @@ export function Processes({ user }: ProcessesProps) {
 
   const showClientShortcut = formData.client.trim().length >= 3 && !clientExists;
   const isClientSuggestionOpen = showForm && clientSuggestions.length > 0 && !clientExists;
+  const processLookupReady = entryMode === 'novo' || editingId !== null || (!!formData.title && !!formData.client && !lookupInfo?.alreadyRegistered);
 
   useEffect(() => {
     setClientSuggestionIndex(-1);
@@ -678,8 +756,9 @@ export function Processes({ user }: ProcessesProps) {
             className="btn-secondary"
             onClick={() => {
               setShowForm((prev) => !prev);
-              setEditingId(null);
-              setFormData({ title: '', client: '', phase: 'Inicial', status: 'ativo' });
+              if (!showForm) {
+                resetFormState('novo');
+              }
             }}
           >
             <Plus size={16} aria-hidden="true" />
@@ -731,8 +810,63 @@ export function Processes({ user }: ProcessesProps) {
 
       {showForm && (
         <section className="my-processes-form" aria-label="Formulario de processo">
-          <h3>{editingId ? 'Editar processo' : 'Novo processo'}</h3>
+          <div className="process-form-head">
+            <div>
+              <h3>{editingId ? 'Editar processo' : 'Novo processo'}</h3>
+              <p>{editingId ? 'Atualize o cadastro e o contexto operacional do processo.' : 'Escolha entre processo novo ou processo ja em andamento antes de concluir o cadastro.'}</p>
+            </div>
+            {!editingId && (
+              <div className="process-entry-switch" role="tablist" aria-label="Tipo de cadastro do processo">
+                <button
+                  type="button"
+                  className={`process-entry-chip${entryMode === 'novo' ? ' is-active' : ''}`}
+                  onClick={() => resetFormState('novo')}
+                  aria-pressed={entryMode === 'novo'}
+                >
+                  Processo novo
+                </button>
+                <button
+                  type="button"
+                  className={`process-entry-chip${entryMode === 'andamento' ? ' is-active' : ''}`}
+                  onClick={() => resetFormState('andamento')}
+                  aria-pressed={entryMode === 'andamento'}
+                >
+                  Ja em andamento
+                </button>
+              </div>
+            )}
+          </div>
           <form onSubmit={handleSubmit}>
+            {entryMode === 'andamento' && !editingId && (
+              <div className="process-lookup-panel">
+                <label htmlFor="process-number">
+                  Numero do processo
+                  <div className="filter-input-wrap">
+                    {lookupLoading ? <Loader2 size={15} className="spin" aria-hidden="true" /> : <Search size={15} aria-hidden="true" />}
+                    <input
+                      id="process-number"
+                      type="text"
+                      value={formData.processNumber}
+                      onChange={(event) => setFormData((prev) => ({ ...prev, processNumber: event.target.value }))}
+                      placeholder="Digite o numero do processo"
+                    />
+                  </div>
+                </label>
+                <p className="lookup-helper">Ao digitar o numero, a tela consulta os dados disponiveis para pre-preencher o processo.</p>
+                {lookupError && <p className="lookup-feedback lookup-feedback-error">{lookupError}</p>}
+                {lookupInfo?.alreadyRegistered && (
+                  <div className="lookup-feedback lookup-feedback-warning">
+                    <span>Esse processo ja esta cadastrado na carteira.</span>
+                    {lookupInfo.existingId ? (
+                      <button type="button" className="btn-ghost" onClick={() => openProcessDetail(lookupInfo.existingId!)}>Abrir processo existente</button>
+                    ) : null}
+                  </div>
+                )}
+                {lookupInfo && !lookupInfo.alreadyRegistered && !lookupError && (
+                  <p className="lookup-feedback lookup-feedback-success">Dados localizados. Revise o cadastro antes de salvar.</p>
+                )}
+              </div>
+            )}
             <div className="form-grid">
               <label htmlFor="process-title">
                 Titulo
@@ -742,8 +876,21 @@ export function Processes({ user }: ProcessesProps) {
                   value={formData.title}
                   onChange={(event) => setFormData((prev) => ({ ...prev, title: event.target.value }))}
                   placeholder="Ex: Revisional de contrato"
+                  disabled={entryMode === 'andamento' && !editingId && !processLookupReady}
                 />
               </label>
+              {editingId && (
+                <label htmlFor="process-number-edit">
+                  Numero do processo
+                  <input
+                    id="process-number-edit"
+                    type="text"
+                    value={formData.processNumber}
+                    onChange={(event) => setFormData((prev) => ({ ...prev, processNumber: event.target.value }))}
+                    placeholder="Opcional"
+                  />
+                </label>
+              )}
               <label htmlFor="process-client">
                 Cliente
                 <div className="client-search-field">
@@ -787,6 +934,7 @@ export function Processes({ user }: ProcessesProps) {
                     placeholder="Busque cliente por nome"
                     aria-expanded={isClientSuggestionOpen}
                     aria-controls="process-client-suggestions"
+                    disabled={entryMode === 'andamento' && !editingId && !processLookupReady}
                   />
                   {isClientSuggestionOpen && (
                     <div
@@ -815,7 +963,7 @@ export function Processes({ user }: ProcessesProps) {
                   )}
                 </div>
                 <small className="client-field-helper">
-                  Selecione um cliente existente para manter o vinculo com a carteira.
+                  Vincule o processo a um cliente ja conhecido ou siga para Clientes se precisar cadastrar um novo.
                 </small>
                 {showClientShortcut && (
                   <button
@@ -836,6 +984,7 @@ export function Processes({ user }: ProcessesProps) {
                   id="process-phase"
                   value={formData.phase}
                   onChange={(event) => setFormData((prev) => ({ ...prev, phase: event.target.value }))}
+                  disabled={entryMode === 'andamento' && !editingId && !processLookupReady}
                 >
                   {PHASES.map((phase) => (
                     <option key={phase} value={phase}>{phase}</option>
@@ -848,6 +997,7 @@ export function Processes({ user }: ProcessesProps) {
                   id="process-status"
                   value={formData.status}
                   onChange={(event) => setFormData((prev) => ({ ...prev, status: event.target.value }))}
+                  disabled={entryMode === 'andamento' && !editingId && !processLookupReady}
                 >
                   <option value="ativo">Ativo</option>
                   <option value="pausado">Pausado</option>
@@ -859,6 +1009,9 @@ export function Processes({ user }: ProcessesProps) {
               <button type="submit" className="btn-primary">
                 <FilePlus2 size={16} aria-hidden="true" />
                 {editingId ? 'Atualizar' : 'Criar'}
+              </button>
+              <button type="button" className="btn-secondary" onClick={() => { setShowForm(false); resetFormState('novo'); }}>
+                Cancelar
               </button>
             </div>
           </form>
@@ -945,7 +1098,7 @@ export function Processes({ user }: ProcessesProps) {
         <div className="my-processes-empty" role="status">
           <h3>Nenhum processo cadastrado</h3>
           <p>Comece criando o primeiro processo da sua carteira para visualizar prazos e prioridades.</p>
-          <button type="button" className="btn-primary" onClick={() => setShowForm(true)}>Criar primeiro processo</button>
+          <button type="button" className="btn-primary" onClick={() => { resetFormState('novo'); setShowForm(true); }}>Criar primeiro processo</button>
         </div>
       )}
 
@@ -1017,8 +1170,7 @@ export function Processes({ user }: ProcessesProps) {
                         aria-label={`Abrir menu de acoes do processo ${process.id}`}
                         onClick={() => setMenuOpenId((prev) => (prev === process.id ? null : process.id))}
                       >
-                        <span>Acoes</span>
-                        <span className="actions-dots" aria-hidden="true">...</span>
+                        <MoreHorizontal size={16} aria-hidden="true" />
                       </button>
                       {menuOpenId === process.id && (
                         <div className="row-action-menu" role="menu" aria-label="Menu de acoes">

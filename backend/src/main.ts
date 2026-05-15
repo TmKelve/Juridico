@@ -16,6 +16,30 @@ const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
 const isProduction = process.env.NODE_ENV === 'production';
 const authCookieName = 'Authorization';
 
+const externalProcessRegistry = [
+  {
+    processNumber: '10024567820265020001',
+    title: 'Reclamatoria Trabalhista Cliente Horizonte',
+    client: 'Cliente Horizonte',
+    phase: 'Inicial',
+    status: 'ativo',
+  },
+  {
+    processNumber: '50011234520263010022',
+    title: 'Execucao Fiscal Grupo Solaris',
+    client: 'Grupo Solaris',
+    phase: 'Contestacao',
+    status: 'ativo',
+  },
+  {
+    processNumber: '70099887720264030015',
+    title: 'Acao de Cobranca Cooperativa Aurora',
+    client: 'Cooperativa Aurora',
+    phase: 'Recurso',
+    status: 'pausado',
+  },
+] as const;
+
 function buildAllowedOrigins(primaryOrigin: string) {
   const allowed = new Set([primaryOrigin]);
 
@@ -108,6 +132,10 @@ function getResponsibleLabel(email?: string | null) {
   return email.split('@')[0];
 }
 
+function normalizeProcessNumber(value?: string | null) {
+  return (value ?? '').replace(/\D/g, '');
+}
+
 async function syncClientsFromProcesses() {
   const processes = await prisma.process.findMany({
     include: { owner: { select: { email: true } } },
@@ -186,6 +214,7 @@ async function seedData() {
     const sampleProcesses = [
       {
         title: 'Reclamatoria Trabalhista Cliente Atlas',
+        processNumber: '10000011120265020001',
         client: 'Cliente Atlas',
         phase: 'Inicial',
         status: 'ativo',
@@ -193,6 +222,7 @@ async function seedData() {
       },
       {
         title: 'Execucao Contratual Cliente Prisma',
+        processNumber: '10000022220265020002',
         client: 'Cliente Prisma',
         phase: 'Contestacao',
         status: 'ativo',
@@ -200,6 +230,7 @@ async function seedData() {
       },
       {
         title: 'Recuperacao de Credito Cliente Nexo',
+        processNumber: '10000033320265020003',
         client: 'Cliente Nexo',
         phase: 'Recurso',
         status: 'pausado',
@@ -229,6 +260,7 @@ async function seedData() {
       await prisma.process.create({
         data: {
           title: process.title,
+          processNumber: process.processNumber,
           client: process.client,
           clientId: seededClient.id,
           phase: process.phase,
@@ -1935,6 +1967,40 @@ app.get('/processes', async (req, res) => {
   res.json(own);
 });
 
+app.get('/processes/lookup', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const number = normalizeProcessNumber(String(req.query.number ?? ''));
+  if (number.length < 8) {
+    return res.status(400).send({ message: 'Informe um numero de processo valido' });
+  }
+
+  const existing = await prisma.process.findFirst({
+    where: { processNumber: number },
+    include: { owner: true },
+  });
+
+  if (existing) {
+    return res.json({
+      found: true,
+      alreadyRegistered: true,
+      process: existing,
+    });
+  }
+
+  const suggested = externalProcessRegistry.find((item) => item.processNumber === number);
+  if (!suggested) {
+    return res.status(404).send({ message: 'Nenhuma informacao encontrada para esse numero de processo' });
+  }
+
+  return res.json({
+    found: true,
+    alreadyRegistered: false,
+    process: suggested,
+  });
+});
+
 app.get('/processes/:id', async (req, res) => {
   const decoded = getUserFromReq(req);
   if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
@@ -1951,7 +2017,15 @@ app.post('/processes', async (req, res) => {
   if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
 
   const { title, client, phase, status } = req.body;
+  const processNumber = normalizeProcessNumber(req.body?.processNumber);
   if (!title || !client || !phase || !status) return res.status(400).send({ message: 'Dados incompletos' });
+
+  if (processNumber) {
+    const existing = await prisma.process.findFirst({ where: { processNumber } });
+    if (existing) {
+      return res.status(409).send({ message: 'Esse numero de processo ja esta cadastrado na carteira' });
+    }
+  }
 
   const linkedClient = await clientStore.upsert({
     where: { name: client.trim() },
@@ -1972,6 +2046,7 @@ app.post('/processes', async (req, res) => {
   const newProcess = await prisma.process.create({
     data: {
       title,
+      processNumber: processNumber || null,
       client,
       clientId: linkedClient.id,
       phase,
@@ -1993,8 +2068,22 @@ app.put('/processes/:id', async (req, res) => {
   if (decoded.role !== 'ADM' && decoded.role !== 'FIN' && process.ownerId !== decoded.sub) return res.status(403).send({ message: 'Acesso negado' });
 
   const { title, client, phase, status } = req.body;
+  const processNumber = normalizeProcessNumber(req.body?.processNumber);
   let nextClientId = (process as { clientId?: number | null }).clientId ?? null;
   let nextClientName = process.client;
+
+  if (processNumber) {
+    const existing = await prisma.process.findFirst({
+      where: {
+        processNumber,
+        NOT: { id: process.id },
+      },
+    });
+
+    if (existing) {
+      return res.status(409).send({ message: 'Esse numero de processo ja esta cadastrado na carteira' });
+    }
+  }
 
   if (typeof client === 'string' && client.trim()) {
     const linkedClient = await clientStore.upsert({
@@ -2020,6 +2109,7 @@ app.put('/processes/:id', async (req, res) => {
     where: { id: process.id },
     data: {
       title: title ?? process.title,
+      processNumber: processNumber || null,
       client: nextClientName,
       clientId: nextClientId,
       phase: phase ?? process.phase,

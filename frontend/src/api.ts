@@ -20,11 +20,18 @@ export interface ApiUser {
 export interface ApiProcess {
   id: number;
   title: string;
+  processNumber?: string | null;
   client: string;
   phase: string;
   status: string;
   ownerId: number;
   owner?: ApiUser;
+}
+
+export interface ApiProcessLookup {
+  found: boolean;
+  alreadyRegistered: boolean;
+  process: ApiProcess;
 }
 
 export interface ApiClientProcess {
@@ -312,13 +319,16 @@ export const api = {
   getProcess: (id: number) =>
     apiClient<ApiProcess>(`/processes/${id}`),
 
-  createProcess: (data: { title: string; client: string; phase: string; status: string }) =>
+  lookupProcess: (number: string) =>
+    apiClient<ApiProcessLookup>(`/processes/lookup?number=${encodeURIComponent(number)}`),
+
+  createProcess: (data: { title: string; processNumber?: string; client: string; phase: string; status: string }) =>
     apiClient('/processes', {
       method: 'POST',
       body: data,
     }),
 
-  updateProcess: (id: number, data: Partial<{ title: string; client: string; phase: string; status: string }>) =>
+  updateProcess: (id: number, data: Partial<{ title: string; processNumber: string; client: string; phase: string; status: string }>) =>
     apiClient(`/processes/${id}`, {
       method: 'PUT',
       body: data,

@@ -67,6 +67,7 @@ Carteiras operacionais:
 Processos e agregados por processo:
 
 - `GET /processes`
+- `GET /processes/lookup`
 - `POST /processes`
 - `GET /processes/:id`
 - `PUT /processes/:id`
@@ -100,6 +101,7 @@ Campos observados:
 
 - `id: number`
 - `title: string`
+- `processNumber?: string | null`
 - `client: string`
 - `phase: string`
 - `status: string`
