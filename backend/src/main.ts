@@ -5,6 +5,7 @@ import { PrismaClient } from '@prisma/client';
 import { signUserToken, verifyToken, type UserToken } from './auth';
 import { buildAgendaPayload } from './agenda.contract';
 import { collectCnjPublications } from './cnj-publications.provider';
+import { collectCpfPublications } from './cpf-publications.provider';
 import { buildDeadlinePayload } from './deadlines.contract';
 import { buildDocumentPayload } from './documents.contract';
 import { lookupExternalProcess } from './process-lookup.provider';
@@ -471,6 +472,227 @@ async function ingestCnjPublications(triggeredBy: string) {
   }
 }
 
+async function ingestCpfPublications(triggeredBy: string) {
+  const clients = await clientStore.findMany({
+    include: {
+      processes: {
+        where: { status: 'ativo' },
+        select: { id: true },
+      },
+    },
+    orderBy: { id: 'asc' },
+  });
+
+  const candidates = clients
+    .filter((client: any) => Boolean(client.cpfCnpj))
+    .map((client: any) => ({
+      clientId: client.id,
+      clientName: client.name,
+      cpf: client.cpfCnpj,
+      hasActiveProcess: client.processes.length > 0,
+    }));
+
+  const sourceJob = await prisma.publicationSourceJob.create({
+    data: {
+      sourceType: 'cpf',
+      scheduledFor: new Date(),
+      startedAt: new Date(),
+      status: 'running',
+    },
+  });
+
+  let itemsCaptured = 0;
+  let itemsCreated = 0;
+  let itemsUpdated = 0;
+  let itemsFlaggedCritical = 0;
+  let itemsSentToCrm = 0;
+
+  try {
+    const captures = await collectCpfPublications(candidates);
+    itemsCaptured = captures.length;
+
+    for (const capturePayload of captures) {
+      const matchedClient = clients.find((client: any) => client.cpfCnpj === capturePayload.cpf);
+      const fingerprint = createCaptureFingerprint([
+        'cpf',
+        capturePayload.sourceReference,
+        capturePayload.cpf,
+        capturePayload.occurredAt,
+        capturePayload.rawText,
+      ]);
+
+      let capture = await prisma.publicationCapture.findUnique({
+        where: { fingerprint },
+      });
+
+      if (capture) {
+        capture = await prisma.publicationCapture.update({
+          where: { id: capture.id },
+          data: {
+            sourceReference: capturePayload.sourceReference,
+            occurredAt: new Date(capturePayload.occurredAt),
+            tribunal: capturePayload.tribunal,
+            cpf: capturePayload.cpf,
+            personName: capturePayload.personName,
+            rawText: capturePayload.rawText,
+            normalizedText: capturePayload.rawText,
+            status: 'atualizado',
+            sourceJobId: sourceJob.id,
+          },
+        });
+        itemsUpdated += 1;
+      } else {
+        capture = await prisma.publicationCapture.create({
+          data: {
+            sourceType: 'cpf',
+            sourceReference: capturePayload.sourceReference,
+            occurredAt: new Date(capturePayload.occurredAt),
+            rawText: capturePayload.rawText,
+            normalizedText: capturePayload.rawText,
+            tribunal: capturePayload.tribunal,
+            cpf: capturePayload.cpf,
+            personName: capturePayload.personName,
+            metadataJson: { triggeredBy, source: 'cpf' },
+            fingerprint,
+            status: 'processado',
+            sourceJobId: sourceJob.id,
+          },
+        });
+        itemsCreated += 1;
+      }
+
+      const existingEvent = await prisma.publicationEvent.findFirst({
+        where: {
+          captureId: capture.id,
+          title: capturePayload.title,
+          eventAt: new Date(capturePayload.occurredAt),
+        },
+      });
+
+      const event = existingEvent ?? await prisma.publicationEvent.create({
+        data: {
+          captureId: capture.id,
+          clientId: matchedClient?.id ?? null,
+          eventType: 'publicacao',
+          eventAt: new Date(capturePayload.occurredAt),
+          title: capturePayload.title,
+          summary: capturePayload.summary,
+          fullText: capturePayload.rawText,
+          riskLevel: 'normal',
+          requiresAction: true,
+          timelinePosition: 1,
+        },
+      });
+
+      let crmOpportunityId: number | null = null;
+      let crmLeadId: number | null = null;
+
+      if (matchedClient) {
+        const opportunity = await prisma.crmOpportunity.create({
+          data: {
+            clientId: matchedClient.id,
+            cpf: capturePayload.cpf,
+            personName: capturePayload.personName,
+            source: 'publicacao_automatizada',
+            status: 'acao_recomendada',
+            summary: capturePayload.summary,
+          },
+        });
+        crmOpportunityId = opportunity.id;
+      } else {
+        const lead = await prisma.crmLead.create({
+          data: {
+            cpf: capturePayload.cpf,
+            personName: capturePayload.personName,
+            source: 'publicacao_automatizada',
+            status: 'novo',
+            summary: capturePayload.summary,
+          },
+        });
+        crmLeadId = lead.id;
+      }
+
+      itemsSentToCrm += 1;
+
+      const existingTriage = await prisma.triageItem.findFirst({
+        where: {
+          captureId: capture.id,
+          suggestedAction: matchedClient ? 'criar_oportunidade' : 'criar_lead',
+          clientId: matchedClient?.id ?? null,
+          status: { in: ['pendente', 'em_revisao_manual', 'adiado'] },
+        },
+      });
+
+      if (existingTriage) {
+        await prisma.triageItem.update({
+          where: { id: existingTriage.id },
+          data: {
+            eventId: event.id,
+            suggestedReason: capturePayload.summary,
+            sourceLabel: 'CPF',
+            crmLeadId: crmLeadId ?? existingTriage.crmLeadId,
+            crmOpportunityId: crmOpportunityId ?? existingTriage.crmOpportunityId,
+          },
+        });
+      } else {
+        await prisma.triageItem.create({
+          data: {
+            captureId: capture.id,
+            eventId: event.id,
+            clientId: matchedClient?.id ?? null,
+            crmLeadId,
+            crmOpportunityId,
+            queueType: 'normal',
+            status: 'pendente',
+            suggestedAction: matchedClient ? 'criar_oportunidade' : 'criar_lead',
+            suggestedReason: capturePayload.summary,
+            aiConfidenceBand: 'media',
+            aiScoreRaw: 0.76,
+            sourceLabel: 'CPF',
+          },
+        });
+      }
+    }
+
+    await prisma.publicationSourceJob.update({
+      where: { id: sourceJob.id },
+      data: {
+        finishedAt: new Date(),
+        status: 'success',
+        itemsCaptured,
+        itemsCreated,
+        itemsUpdated,
+        itemsFlaggedCritical,
+        itemsSentToCrm,
+      },
+    });
+
+    return {
+      sourceJobId: sourceJob.id,
+      itemsCaptured,
+      itemsCreated,
+      itemsUpdated,
+      itemsFlaggedCritical,
+      itemsSentToCrm,
+    };
+  } catch (error) {
+    await prisma.publicationSourceJob.update({
+      where: { id: sourceJob.id },
+      data: {
+        finishedAt: new Date(),
+        status: 'failed',
+        itemsCaptured,
+        itemsCreated,
+        itemsUpdated,
+        itemsFlaggedCritical,
+        itemsSentToCrm,
+        errorLog: error instanceof Error ? error.message : 'Erro desconhecido na coleta CPF',
+      },
+    });
+    throw error;
+  }
+}
+
 function scheduleCnjCollector() {
   const disabled = process.env.TRIAGE_SCHEDULER_DISABLED === 'true';
   if (disabled) return;
@@ -480,6 +702,27 @@ function scheduleCnjCollector() {
       await ingestCnjPublications('scheduler');
     } catch (error) {
       console.error('[triage] CNJ scheduler failed:', error);
+    } finally {
+      const nextRun = computeNextScheduleDate(new Date(Date.now() + 60000));
+      const waitMs = Math.max(60000, nextRun.getTime() - Date.now());
+      setTimeout(run, waitMs);
+    }
+  };
+
+  const firstRun = computeNextScheduleDate();
+  const initialWaitMs = Math.max(60000, firstRun.getTime() - Date.now());
+  setTimeout(run, initialWaitMs);
+}
+
+function scheduleCpfCollector() {
+  const disabled = process.env.TRIAGE_SCHEDULER_DISABLED === 'true';
+  if (disabled) return;
+
+  const run = async () => {
+    try {
+      await ingestCpfPublications('scheduler');
+    } catch (error) {
+      console.error('[triage] CPF scheduler failed:', error);
     } finally {
       const nextRun = computeNextScheduleDate(new Date(Date.now() + 60000));
       const waitMs = Math.max(60000, nextRun.getTime() - Date.now());
@@ -1213,6 +1456,7 @@ seedData().catch((err) => {
   console.error('Erro ao semear dados', err);
 });
 scheduleCnjCollector();
+scheduleCpfCollector();
 
 function getUserFromReq(req: express.Request): UserToken | null {
   const token = getAuthToken(req);
@@ -3813,6 +4057,19 @@ app.post('/triage/jobs/run-cnj', async (req, res) => {
     res.status(201).json(result);
   } catch (error) {
     res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao executar coleta CNJ' });
+  }
+});
+
+app.post('/triage/jobs/run-cpf', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token nao fornecido ou invalido' });
+  if (!canAccessTriage(decoded)) return res.status(403).send({ message: 'Acesso negado' });
+
+  try {
+    const result = await ingestCpfPublications(getResponsibleLabel(decoded.email) || decoded.email);
+    res.status(201).json(result);
+  } catch (error) {
+    res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao executar coleta CPF' });
   }
 });
 
