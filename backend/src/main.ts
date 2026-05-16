@@ -10,11 +10,22 @@ import { lookupExternalProcess } from './process-lookup.provider';
 import { buildPublicationPayload } from './publications.contract';
 import { buildTaskPayload } from './tasks.contract';
 import { buildTemplatePayload } from './templates.contract';
+import { buildTriageDecisionPayload, buildTriageItemPayload } from './triage.contract';
+import { inferQueueType, inferSuggestedAction, resolveTriageTarget } from './triage.matcher';
 
 const app = express();
 const port = process.env.PORT || 3000;
-const prisma = new PrismaClient();
-const clientStore = (prisma as PrismaClient & { client: any }).client;
+const prisma = new PrismaClient() as PrismaClient & {
+  client: any;
+  publicationCapture: any;
+  publicationEvent: any;
+  publicationSourceJob: any;
+  crmLead: any;
+  crmOpportunity: any;
+  triageItem: any;
+  triageDecision: any;
+};
+const clientStore = prisma.client;
 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
 const isProduction = process.env.NODE_ENV === 'production';
 const authCookieName = 'Authorization';
@@ -170,6 +181,14 @@ function addDays(base: Date, amount: number) {
   const next = new Date(base);
   next.setUTCDate(next.getUTCDate() + amount);
   return next;
+}
+
+function createCaptureFingerprint(parts: Array<string | number | null | undefined>) {
+  return parts
+    .map((part) => String(part ?? '').trim().toLowerCase())
+    .join('|')
+    .replace(/\s+/g, ' ')
+    .slice(0, 400);
 }
 
 async function syncClientsFromProcesses() {
@@ -738,10 +757,155 @@ async function seedData() {
             origin: firstTask.origin === 'atendimento' ? 'atendimento' : 'processo',
             createdBy: firstTask.createdBy,
           },
-        });
-      }
+      });
     }
   }
+
+  const triageCount = await prisma.triageItem.count();
+  if (triageCount === 0) {
+    const seededProcesses = await prisma.process.findMany({
+      include: {
+        owner: { select: { email: true } },
+        clientRecord: true,
+        publications: { orderBy: { publishedAt: 'desc' } },
+      },
+      orderBy: { id: 'asc' },
+      take: 3,
+    });
+
+    const sourceJob = await prisma.publicationSourceJob.create({
+      data: {
+        sourceType: 'scheduler',
+        scheduledFor: new Date(),
+        startedAt: new Date(),
+        finishedAt: new Date(),
+        status: 'success',
+      },
+    });
+
+    for (const [index, process] of seededProcesses.entries()) {
+      const occurredAt = new Date();
+      occurredAt.setHours(8 + index * 2, 0, 0, 0);
+
+      const rawText = index === 0
+        ? `Sentença publicada no processo ${process.processNumber}. Prazo recursal em aberto.`
+        : index === 1
+          ? `Intimação para manifestação no processo ${process.processNumber} com necessidade de anexar documentos.`
+          : `Movimentação informativa no processo ${process.processNumber} sem prazo explícito.`;
+
+      const capture = await prisma.publicationCapture.create({
+        data: {
+          sourceType: index === 2 ? 'diario_oficial' : 'cnj',
+          sourceReference: `SEED-TRIAGE-${process.id}-${index + 1}`,
+          occurredAt,
+          rawText,
+          normalizedText: rawText,
+          tribunal: index === 0 ? 'TJSP' : index === 1 ? 'TRT-2' : 'TJRJ',
+          processNumber: process.processNumber,
+          cpf: process.clientRecord?.cpfCnpj ?? null,
+          personName: process.client,
+          metadataJson: { seed: true, processId: process.id },
+          fingerprint: createCaptureFingerprint([
+            'seed-triage',
+            process.processNumber,
+            occurredAt.toISOString(),
+            rawText,
+          ]),
+          status: 'processado',
+          sourceJobId: sourceJob.id,
+        },
+      });
+
+      const event = await prisma.publicationEvent.create({
+        data: {
+          captureId: capture.id,
+          processId: process.id,
+          clientId: process.clientId ?? process.clientRecord?.id ?? null,
+          publicationId: process.publications[0]?.id ?? null,
+          eventType: index === 0 ? 'sentenca' : index === 1 ? 'intimacao' : 'movimentacao',
+          eventAt: occurredAt,
+          title: index === 0 ? 'Sentença publicada' : index === 1 ? 'Intimação para manifestação' : 'Movimentação informativa',
+          summary: rawText,
+          fullText: rawText,
+          riskLevel: index === 2 ? 'normal' : 'critico',
+          requiresAction: index !== 2,
+          timelinePosition: index + 1,
+        },
+      });
+
+      await prisma.triageItem.create({
+        data: {
+          captureId: capture.id,
+          eventId: event.id,
+          processId: process.id,
+          clientId: process.clientId ?? process.clientRecord?.id ?? null,
+          queueType: index === 2 ? 'normal' : 'critica',
+          status: index === 1 ? 'em_revisao_manual' : 'pendente',
+          suggestedAction: index === 0 ? 'criar_prazo' : 'criar_tarefa',
+          suggestedReason: index === 0
+            ? 'Sentença com indício de prazo recursal e necessidade de triagem imediata.'
+            : index === 1
+              ? 'Intimação com necessidade de ação operacional e documentação.'
+              : 'Movimentação informativa com necessidade de validação humana.',
+          aiConfidenceBand: index === 2 ? 'media' : 'alta',
+          aiScoreRaw: index === 2 ? 0.68 : 0.93,
+          sourceLabel: index === 2 ? 'Diário Oficial' : 'CNJ',
+        },
+      });
+    }
+
+    const prospectCapture = await prisma.publicationCapture.create({
+      data: {
+        sourceType: 'cpf',
+        sourceReference: 'SEED-TRIAGE-CPF-1',
+        occurredAt: new Date(),
+        rawText: 'Publicação associada ao CPF 98765432100 sem processo ativo na carteira.',
+        normalizedText: 'Publicação associada ao CPF 98765432100 sem processo ativo na carteira.',
+        tribunal: 'TJMG',
+        cpf: '98765432100',
+        personName: 'Contato Prospectado',
+        metadataJson: { seed: true, orphan: true },
+        fingerprint: createCaptureFingerprint(['seed-triage-cpf', '98765432100', new Date().toISOString()]),
+        status: 'processado',
+        sourceJobId: sourceJob.id,
+      },
+    });
+
+    const lead = await prisma.crmLead.create({
+      data: {
+        cpf: '98765432100',
+        personName: 'Contato Prospectado',
+        source: 'publicacao_automatizada',
+        status: 'novo',
+        summary: 'Lead criado a partir de publicação capturada por CPF sem cliente prévio.',
+      },
+    });
+
+    await prisma.triageItem.create({
+      data: {
+        captureId: prospectCapture.id,
+        crmLeadId: lead.id,
+        queueType: 'normal',
+        status: 'pendente',
+        suggestedAction: 'criar_lead',
+        suggestedReason: 'CPF identificado em publicação sem cliente ou processo ativo associado.',
+        aiConfidenceBand: 'media',
+        aiScoreRaw: 0.71,
+        sourceLabel: 'CPF',
+      },
+    });
+
+    await prisma.publicationSourceJob.update({
+      where: { id: sourceJob.id },
+      data: {
+        itemsCaptured: 4,
+        itemsCreated: 4,
+        itemsFlaggedCritical: 2,
+        itemsSentToCrm: 1,
+      },
+    });
+  }
+}
 }
 
 seedData().catch((err) => {
@@ -780,6 +944,35 @@ async function assertProcessAccess(user: UserToken, processId: number) {
   }
 
   return { process };
+}
+
+function canAccessTriage(user: UserToken) {
+  return ['ADM', 'ADV', 'ATD'].includes(user.role);
+}
+
+async function assertTriageAccess(user: UserToken, triageId: number) {
+  if (!canAccessTriage(user)) {
+    return { error: { status: 403, message: 'Acesso negado' } } as const;
+  }
+
+  const triageItem = await prisma.triageItem.findUnique({
+    where: { id: triageId },
+    include: {
+      process: true,
+      clientRecord: true,
+      crmLead: true,
+      crmOpportunity: true,
+      capture: true,
+      event: true,
+      decisions: { orderBy: { decidedAt: 'desc' } },
+    },
+  });
+
+  if (!triageItem) {
+    return { error: { status: 404, message: 'Item de triagem não encontrado' } } as const;
+  }
+
+  return { triageItem } as const;
 }
 
 function buildClientPayload(client: any) {
@@ -2990,6 +3183,298 @@ app.post('/processes/:id/atendimentos', async (req, res) => {
   });
   res.status(201).json(buildAttendancePayload(item));
 });
+
+app.get('/triage', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token nao fornecido ou invalido' });
+  if (!canAccessTriage(decoded)) return res.status(403).send({ message: 'Acesso negado' });
+
+  const queueType = typeof req.query.queueType === 'string' ? req.query.queueType : undefined;
+  const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+  const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+
+  const items = await prisma.triageItem.findMany({
+    where: {
+      ...(queueType ? { queueType } : {}),
+      ...(status ? { status } : {}),
+      ...(search
+        ? {
+            OR: [
+              { suggestedReason: { contains: search, mode: 'insensitive' } },
+              { capture: { normalizedText: { contains: search, mode: 'insensitive' } } },
+              { capture: { processNumber: { contains: search, mode: 'insensitive' } } },
+              { capture: { personName: { contains: search, mode: 'insensitive' } } },
+              { process: { title: { contains: search, mode: 'insensitive' } } },
+              { clientRecord: { name: { contains: search, mode: 'insensitive' } } },
+            ],
+          }
+        : {}),
+    },
+    include: {
+      process: true,
+      clientRecord: true,
+      crmLead: true,
+      crmOpportunity: true,
+      capture: true,
+      event: true,
+    },
+    orderBy: [
+      { queueType: 'asc' },
+      { createdAt: 'desc' },
+    ],
+  });
+
+  res.json(items.map((item: any) => buildTriageItemPayload(item)));
+});
+
+app.get('/triage/:id', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token nao fornecido ou invalido' });
+  const access = await assertTriageAccess(decoded, Number(req.params.id));
+  if ('error' in access && access.error) return res.status(access.error.status).send({ message: access.error.message });
+
+  const { triageItem } = access;
+
+  const timeline = triageItem.processId
+    ? await prisma.publicationEvent.findMany({
+        where: { processId: triageItem.processId },
+        orderBy: { eventAt: 'desc' },
+        take: 6,
+      })
+    : triageItem.capture.cpf
+      ? await prisma.publicationEvent.findMany({
+          where: {
+            capture: { cpf: triageItem.capture.cpf },
+          },
+          orderBy: { eventAt: 'desc' },
+          take: 6,
+        })
+      : [];
+
+  res.json({
+    ...buildTriageItemPayload(triageItem),
+    decisions: triageItem.decisions.map((decision: any) => buildTriageDecisionPayload(decision)),
+    timeline: timeline.map((event: any) => ({
+      id: event.id,
+      title: event.title,
+      summary: event.summary,
+      eventType: event.eventType,
+      eventAt: event.eventAt.toISOString(),
+      riskLevel: event.riskLevel,
+      requiresAction: event.requiresAction,
+    })),
+  });
+});
+
+app.put('/triage/:id', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token nao fornecido ou invalido' });
+  const access = await assertTriageAccess(decoded, Number(req.params.id));
+  if ('error' in access && access.error) return res.status(access.error.status).send({ message: access.error.message });
+
+  const { status, postponeUntil, assignedQueue } = req.body ?? {};
+  const data: Record<string, unknown> = {};
+
+  if (typeof status === 'string' && status.trim()) {
+    data.status = status.trim();
+    if (status === 'em_revisao_manual') {
+      data.queueType = access.triageItem.queueType;
+    }
+  }
+  if (typeof assignedQueue === 'string' && assignedQueue.trim()) {
+    data.assignedQueue = assignedQueue.trim();
+  }
+  if (typeof postponeUntil === 'string' && postponeUntil.trim()) {
+    data.postponeUntil = new Date(postponeUntil);
+    data.status = 'adiado';
+  } else if (postponeUntil === null) {
+    data.postponeUntil = null;
+  }
+
+  const updated = await prisma.triageItem.update({
+    where: { id: access.triageItem.id },
+    data,
+    include: {
+      process: true,
+      clientRecord: true,
+      crmLead: true,
+      crmOpportunity: true,
+      capture: true,
+      event: true,
+    },
+  });
+
+  res.json(buildTriageItemPayload(updated));
+});
+
+app.post('/triage/:id/decision', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token nao fornecido ou invalido' });
+  const access = await assertTriageAccess(decoded, Number(req.params.id));
+  if ('error' in access && access.error) return res.status(access.error.status).send({ message: access.error.message });
+
+  const triageItem = access.triageItem;
+  const { decisionType, decisionReason, decisionNote, postponeUntil, assignedQueue } = req.body ?? {};
+
+  if (!decisionType || typeof decisionType !== 'string') {
+    return res.status(400).send({ message: 'decisionType é obrigatório' });
+  }
+
+  if (decisionType === 'descartado' && (!decisionReason || typeof decisionReason !== 'string')) {
+    return res.status(400).send({ message: 'decisionReason é obrigatório para descarte' });
+  }
+
+  let generatedTaskId: number | null = null;
+  let generatedDeadlineId: number | null = null;
+  let generatedLeadId: number | null = null;
+  let generatedOpportunityId: number | null = null;
+
+  if (decisionType === 'confirmado') {
+    if (triageItem.suggestedAction === 'criar_prazo' && triageItem.processId) {
+      const deadline = await prisma.prazo.create({
+        data: {
+          processId: triageItem.processId,
+          title: triageItem.event?.title || `Prazo derivado da triagem #${triageItem.id}`,
+          dueDate: addDays(new Date(), 2),
+          status: 'critico',
+          priority: 'alta',
+          origin: 'publicacao',
+          responsible: getResponsibleLabel(decoded.email) || decoded.email,
+          legalArea: triageItem.process?.phase || null,
+          notes: triageItem.suggestedReason,
+          createdBy: getResponsibleLabel(decoded.email) || decoded.email,
+        },
+      });
+      generatedDeadlineId = deadline.id;
+
+      const task = await prisma.task.create({
+        data: {
+          title: `Tratar ${triageItem.event?.title?.toLowerCase() || 'publicação crítica'}`,
+          description: triageItem.suggestedReason,
+          processId: triageItem.processId,
+          clientId: triageItem.clientId,
+          clientName: triageItem.clientRecord?.name || triageItem.process?.client || null,
+          origin: 'publicacao',
+          dueDate: addDays(new Date(), 1),
+          status: 'pendente',
+          priority: 'alta',
+          owner: getResponsibleLabel(decoded.email) || decoded.email,
+          createdBy: getResponsibleLabel(decoded.email) || decoded.email,
+          notes: triageItem.capture.normalizedText,
+          linkedToDeadline: true,
+          linkedToPublication: true,
+          immediateAction: true,
+        },
+      });
+      generatedTaskId = task.id;
+    } else if (triageItem.suggestedAction === 'criar_tarefa' && triageItem.processId) {
+      const task = await prisma.task.create({
+        data: {
+          title: triageItem.event?.title || `Ação derivada da triagem #${triageItem.id}`,
+          description: triageItem.suggestedReason,
+          processId: triageItem.processId,
+          clientId: triageItem.clientId,
+          clientName: triageItem.clientRecord?.name || triageItem.process?.client || null,
+          origin: 'publicacao',
+          dueDate: addDays(new Date(), 1),
+          status: 'pendente',
+          priority: triageItem.queueType === 'critica' ? 'alta' : 'media',
+          owner: getResponsibleLabel(decoded.email) || decoded.email,
+          createdBy: getResponsibleLabel(decoded.email) || decoded.email,
+          notes: triageItem.capture.normalizedText,
+          linkedToPublication: true,
+          immediateAction: triageItem.queueType === 'critica',
+        },
+      });
+      generatedTaskId = task.id;
+    } else if (triageItem.suggestedAction === 'criar_oportunidade') {
+      if (triageItem.crmOpportunityId) {
+        generatedOpportunityId = triageItem.crmOpportunityId;
+      } else {
+        const opportunity = await prisma.crmOpportunity.create({
+          data: {
+            clientId: triageItem.clientId,
+            cpf: triageItem.capture.cpf || null,
+            personName: triageItem.clientRecord?.name || triageItem.capture.personName || 'Cliente identificado',
+            source: 'publicacao_automatizada',
+            status: 'acao_recomendada',
+            summary: triageItem.suggestedReason,
+          },
+        });
+        generatedOpportunityId = opportunity.id;
+      }
+    } else if (triageItem.suggestedAction === 'criar_lead') {
+      if (triageItem.crmLeadId) {
+        generatedLeadId = triageItem.crmLeadId;
+      } else {
+        const lead = await prisma.crmLead.create({
+          data: {
+            clientId: triageItem.clientId,
+            cpf: triageItem.capture.cpf || null,
+            personName: triageItem.capture.personName || 'Lead identificado',
+            source: 'publicacao_automatizada',
+            status: 'novo',
+            summary: triageItem.suggestedReason,
+          },
+        });
+        generatedLeadId = lead.id;
+      }
+    }
+  }
+
+  const decision = await prisma.triageDecision.create({
+    data: {
+      triageItemId: triageItem.id,
+      decisionType,
+      decisionReason: typeof decisionReason === 'string' ? decisionReason.trim() : null,
+      decisionNote: typeof decisionNote === 'string' ? decisionNote.trim() : null,
+      decidedBy: getResponsibleLabel(decoded.email) || decoded.email,
+      generatedTaskId,
+      generatedDeadlineId,
+      generatedLeadId,
+      generatedOpportunityId,
+    },
+  });
+
+  const nextStatus =
+    decisionType === 'confirmado' || decisionType === 'descartado'
+      ? decisionType
+      : decisionType === 'revisao_manual'
+        ? 'em_revisao_manual'
+        : decisionType === 'adiado'
+          ? 'adiado'
+          : 'pendente';
+
+  const updated = await prisma.triageItem.update({
+    where: { id: triageItem.id },
+    data: {
+      status: nextStatus,
+      queueType: decisionType === 'confirmado' || decisionType === 'descartado' ? 'tratados' : triageItem.queueType,
+      handledBy: getResponsibleLabel(decoded.email) || decoded.email,
+      handledAt: new Date(),
+      discardReason: decisionType === 'descartado' && typeof decisionReason === 'string' ? decisionReason.trim() : triageItem.discardReason,
+      discardNote: decisionType === 'descartado' && typeof decisionNote === 'string' ? decisionNote.trim() : triageItem.discardNote,
+      postponeUntil: decisionType === 'adiado' && typeof postponeUntil === 'string' ? new Date(postponeUntil) : triageItem.postponeUntil,
+      assignedQueue: typeof assignedQueue === 'string' && assignedQueue.trim() ? assignedQueue.trim() : triageItem.assignedQueue,
+      crmLeadId: generatedLeadId ?? triageItem.crmLeadId,
+      crmOpportunityId: generatedOpportunityId ?? triageItem.crmOpportunityId,
+    },
+    include: {
+      process: true,
+      clientRecord: true,
+      crmLead: true,
+      crmOpportunity: true,
+      capture: true,
+      event: true,
+    },
+  });
+
+  res.json({
+    item: buildTriageItemPayload(updated),
+    decision: buildTriageDecisionPayload(decision),
+  });
+});
+
 app.get('/', (req, res) => {
   res.send({ message: 'SaaS Jurídico API v1' });
 });

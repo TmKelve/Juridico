@@ -10,6 +10,7 @@ import {
   Landmark,
   PieChart,
   Scale,
+  ShieldAlert,
   Users,
 } from 'lucide-react'
 import { SidebarNavLink, SidebarNavButton } from './SidebarNavItem'
@@ -28,6 +29,7 @@ const mainNavItems: NavItem[] = [
   { kind: 'link',   label: 'Documentos',    icon: Folder,      to: '/documentos' },
   { kind: 'link',   label: 'Modelos',       icon: BookOpen,    to: '/modelos-pecas' },
   { kind: 'link',   label: 'Publicações',   icon: Bell,        to: '/publicacoes-intimacoes' },
+  { kind: 'link',   label: 'Triagem',       icon: ShieldAlert, to: '/triagem' },
   { kind: 'link',   label: 'Atendimentos',  icon: Users,       to: '/atendimentos' },
   { kind: 'link',   label: 'Clientes',      icon: Briefcase,   to: '/clientes'     },
   { kind: 'link',   label: 'Agenda',        icon: CalendarDays, to: '/agenda' },

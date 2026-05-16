@@ -1,0 +1,423 @@
+.triage-page {
+  display: grid;
+  gap: 20px;
+}
+
+.triage-hero,
+.triage-workspace,
+.triage-kpi,
+.triage-card,
+.triage-panel,
+.triage-drawer {
+  background: var(--surface-raised, #fff);
+  border: 1px solid var(--neutral-200, #dbe2ea);
+  border-radius: 16px;
+  box-shadow: var(--shadow-card, 0 1px 2px rgba(15, 23, 42, 0.06));
+}
+
+.triage-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px;
+}
+
+.triage-eyebrow {
+  display: inline-block;
+  margin-bottom: 8px;
+  color: var(--brand-700, #274c77);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.triage-hero h2 {
+  margin: 0 0 8px;
+  font-size: 32px;
+}
+
+.triage-hero p,
+.triage-muted {
+  margin: 0;
+  color: var(--neutral-600, #5f6f82);
+}
+
+.triage-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.triage-kpi {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  padding: 18px 18px 18px 22px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.triage-kpi::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  border-radius: 16px 0 0 16px;
+  background: var(--neutral-300, #cbd5e1);
+}
+
+.triage-kpi--critical::before { background: #dc2626; }
+.triage-kpi--info::before { background: #2563eb; }
+.triage-kpi--neutral::before { background: #cbd5e1; }
+
+.triage-kpi span,
+.triage-kpi small {
+  color: var(--neutral-600, #5f6f82);
+}
+
+.triage-kpi strong {
+  font-size: 30px;
+}
+
+.triage-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(340px, 420px);
+  gap: 0;
+  overflow: hidden;
+}
+
+.triage-main {
+  padding: 20px;
+  border-right: 1px solid var(--neutral-200, #dbe2ea);
+  display: grid;
+  gap: 16px;
+}
+
+.triage-toolbar {
+  display: grid;
+  gap: 16px;
+}
+
+.triage-tabs,
+.triage-card__source,
+.triage-filters,
+.triage-card__actions,
+.triage-drawer__badges,
+.triage-drawer__actions,
+.triage-drawer__links {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.triage-tab {
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--neutral-200, #dbe2ea);
+  background: #fff;
+  font-weight: 600;
+}
+
+.triage-tab.is-active {
+  background: var(--brand-700, #274c77);
+  border-color: var(--brand-700, #274c77);
+  color: #fff;
+}
+
+.triage-filters {
+  align-items: stretch;
+}
+
+.triage-search,
+.triage-status-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--neutral-200, #dbe2ea);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.triage-search {
+  flex: 1 1 340px;
+}
+
+.triage-search input,
+.triage-status-select select,
+.triage-panel select,
+.triage-panel textarea {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  outline: none;
+  font: inherit;
+}
+
+.triage-feedback {
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-weight: 600;
+}
+
+.triage-feedback--success {
+  background: #ecfdf5;
+  color: #166534;
+}
+
+.triage-feedback--error {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.triage-list-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  color: var(--neutral-600, #5f6f82);
+}
+
+.triage-list {
+  display: grid;
+  gap: 14px;
+}
+
+.triage-card {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  cursor: pointer;
+}
+
+.triage-card--critica {
+  border-left: 4px solid #dc2626;
+}
+
+.triage-card--normal {
+  border-left: 4px solid #2563eb;
+}
+
+.triage-card--tratados {
+  border-left: 4px solid #16a34a;
+}
+
+.triage-card.is-selected {
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+.triage-card__header,
+.triage-card__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  color: var(--neutral-600, #5f6f82);
+  font-size: 13px;
+}
+
+.triage-card h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.triage-card p,
+.triage-card__reason,
+.triage-panel p {
+  margin: 0;
+  color: var(--neutral-700, #334155);
+}
+
+.triage-source,
+.triage-confidence,
+.triage-action-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.triage-source--cnj { background: #e0f2fe; color: #075985; }
+.triage-source--diario_oficial { background: #eff6ff; color: #1d4ed8; }
+.triage-source--cpf { background: #ecfccb; color: #3f6212; }
+
+.triage-confidence--alta { background: #fee2e2; color: #991b1b; }
+.triage-confidence--media { background: #fef3c7; color: #92400e; }
+.triage-confidence--baixa { background: #e2e8f0; color: #475569; }
+
+.triage-action-chip {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.triage-empty,
+.triage-drawer__empty {
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  text-align: center;
+  color: var(--neutral-600, #5f6f82);
+}
+
+.triage-drawer {
+  padding: 20px;
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  border: 0;
+  box-shadow: none;
+}
+
+.triage-drawer__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.triage-drawer__header h3 {
+  margin: 0 0 6px;
+  font-size: 24px;
+}
+
+.triage-close {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid var(--neutral-200, #dbe2ea);
+  background: #fff;
+}
+
+.triage-panel {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.triage-panel h4 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.triage-panel__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.triage-panel__grid span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--neutral-600, #5f6f82);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.triage-panel__grid strong {
+  font-size: 14px;
+}
+
+.triage-panel__hint {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 12px;
+  border-radius: 12px;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.triage-timeline,
+.triage-decisions {
+  display: grid;
+  gap: 10px;
+}
+
+.triage-timeline__item,
+.triage-decision {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.triage-timeline__icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.triage-decision {
+  grid-template-columns: 1fr;
+  padding: 12px;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid #ef4444;
+  background: #fff;
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.triage-drawer__links a,
+.triage-drawer__links button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--brand-700, #274c77);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+}
+
+@media (max-width: 1280px) {
+  .triage-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .triage-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .triage-main {
+    border-right: 0;
+    border-bottom: 1px solid var(--neutral-200, #dbe2ea);
+  }
+}
+
+@media (max-width: 768px) {
+  .triage-hero,
+  .triage-list-header,
+  .triage-card__header,
+  .triage-card__meta {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .triage-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .triage-panel__grid {
+    grid-template-columns: 1fr;
+  }
+}

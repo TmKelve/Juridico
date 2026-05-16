@@ -61,6 +61,10 @@ Carteiras operacionais:
 - `POST /templates`
 - `PUT /templates/:id`
 - `POST /templates/:id/generate-document`
+- `GET /triage`
+- `GET /triage/:id`
+- `PUT /triage/:id`
+- `POST /triage/:id/decision`
 - `GET /attendances`
 - `GET /attendances/:id`
 - `POST /attendances`
@@ -257,6 +261,40 @@ Campos observados:
 - `convertidaEmPrazo`
 - `prazoDerivedoLabel`
 - `derivedDeadlineId`
+
+Origem:
+
+- direto da API
+
+### Triage Item
+
+Campos observados:
+
+- `id`
+- `queueType`
+- `status`
+- `suggestedAction`
+- `suggestedReason`
+- `aiConfidenceBand`
+- `aiScoreRaw`
+- `postponeUntil`
+- `assignedQueue`
+- `handledBy`
+- `handledAt`
+- `discardReason`
+- `discardNote`
+- `sourceLabel`
+- `processId`
+- `processLabel`
+- `processTitle`
+- `clientId`
+- `client`
+- `crmLeadId`
+- `crmOpportunityId`
+- `capture`
+- `event`
+- `decisions?`
+- `timeline?`
 
 Origem:
 

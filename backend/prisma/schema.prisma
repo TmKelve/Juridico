@@ -33,6 +33,10 @@ model Client {
   tasks      Task[]
   agendaEvents AgendaEvent[]
   publications Publication[]
+  publicationEvents PublicationEvent[]
+  triageItems TriageItem[]
+  crmLeads CrmLead[]
+  crmOpportunities CrmOpportunity[]
 }
 
 model Process {
@@ -53,6 +57,8 @@ model Process {
   tasks        Task[]
   agendaEvents AgendaEvent[]
   publications Publication[]
+  publicationEvents PublicationEvent[]
+  triageItems TriageItem[]
 }
 
 model Publication {
@@ -78,6 +84,146 @@ model Publication {
   createdBy         String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+  publicationEvents PublicationEvent[]
+}
+
+model PublicationCapture {
+  id                Int      @id @default(autoincrement())
+  sourceType        String
+  sourceReference   String
+  capturedAt        DateTime @default(now())
+  occurredAt        DateTime
+  rawText           String
+  normalizedText    String
+  tribunal          String?
+  processNumber     String?
+  oabNumber         String?
+  lawyerName        String?
+  cpf               String?
+  personName        String?
+  metadataJson      Json
+  fingerprint       String   @unique
+  status            String   @default("novo")
+  sourceJobId       Int?
+  sourceJob         PublicationSourceJob? @relation(fields: [sourceJobId], references: [id])
+  publicationEvents PublicationEvent[]
+  triageItems       TriageItem[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model PublicationEvent {
+  id               Int      @id @default(autoincrement())
+  captureId        Int
+  capture          PublicationCapture @relation(fields: [captureId], references: [id])
+  processId        Int?
+  process          Process? @relation(fields: [processId], references: [id])
+  clientId         Int?
+  clientRecord     Client?  @relation(fields: [clientId], references: [id])
+  publicationId    Int?
+  publication      Publication? @relation(fields: [publicationId], references: [id])
+  eventType        String
+  eventAt          DateTime
+  title            String
+  summary          String
+  fullText         String
+  riskLevel        String   @default("normal")
+  requiresAction   Boolean  @default(false)
+  timelinePosition Int      @default(0)
+  triageItems      TriageItem[]
+  createdAt        DateTime @default(now())
+}
+
+model PublicationSourceJob {
+  id                Int      @id @default(autoincrement())
+  sourceType        String
+  scheduledFor      DateTime
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  status            String   @default("pending")
+  itemsCaptured     Int      @default(0)
+  itemsCreated      Int      @default(0)
+  itemsUpdated      Int      @default(0)
+  itemsFlaggedCritical Int   @default(0)
+  itemsSentToCrm    Int      @default(0)
+  errorLog          String?
+  captures          PublicationCapture[]
+  createdAt         DateTime @default(now())
+}
+
+model CrmLead {
+  id             Int      @id @default(autoincrement())
+  clientId       Int?
+  clientRecord   Client?  @relation(fields: [clientId], references: [id])
+  cpf            String?
+  personName     String
+  source         String
+  status         String   @default("novo")
+  summary        String
+  triageItems    TriageItem[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model CrmOpportunity {
+  id             Int      @id @default(autoincrement())
+  clientId       Int?
+  clientRecord   Client?  @relation(fields: [clientId], references: [id])
+  cpf            String?
+  personName     String
+  source         String
+  status         String   @default("acao_recomendada")
+  summary        String
+  triageItems    TriageItem[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model TriageItem {
+  id               Int      @id @default(autoincrement())
+  captureId        Int
+  capture          PublicationCapture @relation(fields: [captureId], references: [id])
+  eventId          Int?
+  event            PublicationEvent? @relation(fields: [eventId], references: [id])
+  processId        Int?
+  process          Process? @relation(fields: [processId], references: [id])
+  clientId         Int?
+  clientRecord     Client?  @relation(fields: [clientId], references: [id])
+  crmLeadId        Int?
+  crmLead          CrmLead? @relation(fields: [crmLeadId], references: [id])
+  crmOpportunityId Int?
+  crmOpportunity   CrmOpportunity? @relation(fields: [crmOpportunityId], references: [id])
+  queueType        String
+  status           String   @default("pendente")
+  suggestedAction  String
+  suggestedReason  String
+  aiConfidenceBand String?
+  aiScoreRaw       Float?
+  postponeUntil    DateTime?
+  assignedQueue    String   @default("fila_central")
+  handledBy        String?
+  handledAt        DateTime?
+  discardReason    String?
+  discardNote      String?
+  sourceLabel      String?
+  decisions        TriageDecision[]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model TriageDecision {
+  id                     Int      @id @default(autoincrement())
+  triageItemId           Int
+  triageItem             TriageItem @relation(fields: [triageItemId], references: [id])
+  decisionType           String
+  decisionReason         String?
+  decisionNote           String?
+  decidedBy              String
+  decidedAt              DateTime @default(now())
+  generatedTaskId        Int?
+  generatedDeadlineId    Int?
+  generatedLeadId        Int?
+  generatedOpportunityId Int?
 }
 
 model Andamento {

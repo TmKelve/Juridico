@@ -234,6 +234,76 @@ export interface ApiTemplate {
   versions: ApiTemplateVersion[];
 }
 
+export interface ApiTriageEvent {
+  id: number;
+  title: string;
+  summary: string;
+  riskLevel: string;
+  requiresAction: boolean;
+  eventAt: string;
+}
+
+export interface ApiTriageDecision {
+  id: number;
+  decisionType: string;
+  decisionReason: string;
+  decisionNote: string;
+  decidedBy: string;
+  decidedAt: string;
+  generatedTaskId: number | null;
+  generatedDeadlineId: number | null;
+  generatedLeadId: number | null;
+  generatedOpportunityId: number | null;
+}
+
+export interface ApiTriageItem {
+  id: number;
+  queueType: 'critica' | 'normal' | 'tratados';
+  status: 'pendente' | 'em_revisao_manual' | 'adiado' | 'confirmado' | 'descartado';
+  suggestedAction: 'criar_prazo' | 'criar_tarefa' | 'criar_oportunidade' | 'criar_lead' | 'registrar_publicacao' | 'sem_acao';
+  suggestedReason: string;
+  aiConfidenceBand: 'alta' | 'media' | 'baixa';
+  aiScoreRaw: number | null;
+  postponeUntil: string | null;
+  assignedQueue: string;
+  handledBy: string | null;
+  handledAt: string | null;
+  discardReason: string | null;
+  discardNote: string | null;
+  sourceLabel: string;
+  createdAt: string;
+  updatedAt: string;
+  processId: number | null;
+  processLabel: string;
+  processTitle: string;
+  clientId: number | null;
+  client: string;
+  crmLeadId: number | null;
+  crmOpportunityId: number | null;
+  capture: {
+    id: number;
+    sourceType: string;
+    sourceReference: string;
+    occurredAt: string;
+    tribunal: string;
+    processNumber: string;
+    cpf: string;
+    personName: string;
+    normalizedText: string;
+  };
+  event: ApiTriageEvent | null;
+  decisions?: ApiTriageDecision[];
+  timeline?: Array<{
+    id: number;
+    title: string;
+    summary: string;
+    eventType: string;
+    eventAt: string;
+    riskLevel: string;
+    requiresAction: boolean;
+  }>;
+}
+
 interface LoginResponse {
   user: ApiUser;
 }
@@ -708,4 +778,31 @@ export const api = {
     notes: string;
   }>) =>
     apiClient<ApiAgendaEvent>(`/agenda/${id}`, { method: 'PUT', body: data }),
+
+  getTriage: (params?: { queueType?: string; status?: string; search?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.queueType) query.set('queueType', params.queueType);
+    if (params?.status) query.set('status', params.status);
+    if (params?.search) query.set('search', params.search);
+    return apiClient<ApiTriageItem[]>(`/triage${query.size ? `?${query.toString()}` : ''}`);
+  },
+
+  getTriageItem: (id: number) =>
+    apiClient<ApiTriageItem>(`/triage/${id}`),
+
+  updateTriageItem: (id: number, data: Partial<{
+    status: ApiTriageItem['status'];
+    postponeUntil: string | null;
+    assignedQueue: string;
+  }>) =>
+    apiClient<ApiTriageItem>(`/triage/${id}`, { method: 'PUT', body: data }),
+
+  decideTriageItem: (id: number, data: {
+    decisionType: 'confirmado' | 'descartado' | 'revisao_manual' | 'adiado' | 'reatribuido';
+    decisionReason?: string;
+    decisionNote?: string;
+    postponeUntil?: string;
+    assignedQueue?: string;
+  }) =>
+    apiClient<{ item: ApiTriageItem; decision: ApiTriageDecision }>(`/triage/${id}/decision`, { method: 'POST', body: data }),
 };

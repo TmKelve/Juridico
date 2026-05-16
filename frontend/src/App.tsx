@@ -13,6 +13,7 @@ import { Publications } from './Publications'
 import { Processes } from './Processes'
 import { ProcessDetail } from './ProcessDetail'
 import { Tasks } from './Tasks'
+import { Triagem } from './Triagem'
 import { Dashboard } from './Dashboard'
 import { Sidebar } from './sidebar/Sidebar'
 import { Topbar } from './topbar/Topbar'
@@ -106,6 +107,14 @@ function getPageMeta(pathname: string, role: string) {
       title: 'Publicações e Intimações',
       subtitle: 'Monitore novas publicações, identifique impacto e transforme intimações em ação jurídica com rastreabilidade.',
       badge: 'Operação',
+    }
+  }
+
+  if (pathname === '/triagem') {
+    return {
+      title: 'Triagem',
+      subtitle: 'Centralize capturas automatizadas, confirme ações sugeridas e preserve auditoria da automação jurídica.',
+      badge: 'Automação',
     }
   }
 
@@ -272,6 +281,7 @@ function AppShell({
             <Route path="/atendimentos" element={<Atendimentos user={user} />} />
             <Route path="/clientes" element={<Clients user={user} />} />
             <Route path="/publicacoes-intimacoes" element={<Publications user={user} />} />
+            <Route path="/triagem" element={<Triagem user={user} />} />
             <Route
               path="/usuarios"
               element={user.role === 'ADM' ? <UsersList users={users} onRefresh={fetchUsers} /> : <Navigate to="/" replace />}
