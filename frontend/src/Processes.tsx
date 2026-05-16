@@ -198,6 +198,22 @@ function formatDate(date: Date) {
   return date.toLocaleDateString('pt-BR');
 }
 
+function formatDueContext(target: Date) {
+  const diff = dayDiff(target, new Date());
+  if (diff < 0) return { label: `Vencido há ${Math.abs(diff)} dia(s)`, tone: 'error' };
+  if (diff === 0) return { label: 'Vence hoje', tone: 'error' };
+  if (diff === 1) return { label: 'Vence amanhã', tone: 'warning' };
+  if (diff <= 7) return { label: `Vence em ${diff} dia(s)`, tone: 'warning' };
+  return { label: 'Prazo futuro', tone: 'neutral' };
+}
+
+function formatStaleContext(target: Date) {
+  const diff = Math.abs(dayDiff(target, new Date()));
+  if (diff === 0) return 'Movimentado hoje';
+  if (diff === 1) return 'Há 1 dia';
+  return `Há ${diff} dias`;
+}
+
 function enrichProcess(process: Process, index: number): EnrichedProcess {
   const today = new Date();
   const area = AREAS[(process.id + index) % AREAS.length];
@@ -659,11 +675,11 @@ export function Processes({ user }: ProcessesProps) {
     const highPriority = enrichedProcesses.filter((process) => process.priority === 'alta').length;
 
     return [
-      { label: 'Total de processos', value: total, icon: FolderOpen, tone: 'primary' },
-      { label: 'Aguardando acao', value: awaitingAction, icon: Timer, tone: 'info' },
-      { label: 'Com prazo critico', value: critical, icon: ShieldAlert, tone: 'error' },
-      { label: 'Sem atualizacao', value: stale, icon: RefreshCw, tone: 'warning' },
-      { label: 'Alta prioridade', value: highPriority, icon: UserRound, tone: 'success' },
+      { label: 'Total de processos', value: total, description: 'Carteira completa', icon: FolderOpen, tone: 'primary', onClick: () => clearFilters() },
+      { label: 'Aguardando ação', value: awaitingAction, description: awaitingAction === 0 ? 'Nenhum caso parado' : 'Responsabilidade interna pendente', icon: Timer, tone: 'info', onClick: () => updateFilter('status', 'aguardando_acao') },
+      { label: 'Prazo crítico', value: critical, description: critical === 0 ? 'Sem urgências hoje' : 'Exigem priorização', icon: ShieldAlert, tone: 'error', onClick: () => setFilters({ ...EMPTY_FILTERS, prazo: 'critico' }) },
+      { label: 'Sem atualização', value: stale, description: stale === 0 ? 'Carteira atualizada' : 'Sem movimentação recente', icon: RefreshCw, tone: 'warning', onClick: () => setFilters({ ...EMPTY_FILTERS, staleDays: '15' }) },
+      { label: 'Alta prioridade', value: highPriority, description: highPriority === 0 ? 'Sem casos quentes' : 'Acompanhamento próximo', icon: UserRound, tone: 'success', onClick: () => updateFilter('priority', 'alta') },
     ];
   }, [enrichedProcesses]);
 
@@ -689,6 +705,8 @@ export function Processes({ user }: ProcessesProps) {
 
   const emptyWithoutData = !loading && !error && enrichedProcesses.length === 0;
   const emptyWithFilter = !loading && !error && enrichedProcesses.length > 0 && sortedProcesses.length === 0;
+  const selectedProcessPrimaryAction = selectedProcess ? getPrimaryDrawerAction(selectedProcess) : null;
+  const selectedProcessDueContext = selectedProcess ? formatDueContext(selectedProcess.nextDeadlineAt) : null;
 
   function openProcessDetail(processId: number) {
     setSelectedProcess(null);
@@ -727,6 +745,22 @@ export function Processes({ user }: ProcessesProps) {
         {labels[priority]}
       </span>
     );
+  }
+
+  function getPrimaryDrawerAction(process: EnrichedProcess) {
+    if (process.operationalStatus === 'aguardando_documentos') {
+      return { label: 'Solicitar documento', secondary: 'Anexar documento' };
+    }
+
+    if (dayDiff(process.nextDeadlineAt, new Date()) <= 1) {
+      return { label: 'Ver prazo', secondary: 'Criar tarefa' };
+    }
+
+    if (Math.abs(dayDiff(process.lastMovementAt, new Date())) >= 15) {
+      return { label: 'Registrar andamento', secondary: 'Criar tarefa' };
+    }
+
+    return { label: 'Abrir detalhe completo', secondary: 'Registrar andamento' };
   }
 
   if (loading) {
@@ -781,7 +815,7 @@ export function Processes({ user }: ProcessesProps) {
 
       <section className="my-processes-kpis" aria-label="Resumo da carteira">
         {kpiData.map((kpi) => (
-          <article key={kpi.label} className="my-processes-kpi-card" data-kpi-color={kpi.tone}>
+          <button key={kpi.label} type="button" className="my-processes-kpi-card" data-kpi-color={kpi.tone} onClick={kpi.onClick}>
             <div className="kpi-card-top">
               <strong>{kpi.value}</strong>
               <span className="kpi-card-icon" aria-hidden="true">
@@ -789,7 +823,8 @@ export function Processes({ user }: ProcessesProps) {
               </span>
             </div>
             <p>{kpi.label}</p>
-          </article>
+            <small>{kpi.description}</small>
+          </button>
         ))}
       </section>
 
@@ -1029,7 +1064,7 @@ export function Processes({ user }: ProcessesProps) {
             <span className="filters-total-pill">{sortedProcesses.length} em exibicao</span>
             <button type="button" className="btn-ghost btn-filter-density" onClick={toggleFiltersDensity}>
               <Filter size={14} aria-hidden="true" />
-              {isFiltersCompact ? 'Expandir filtros' : 'Compactar filtros'}
+              {isFiltersCompact ? 'Mais filtros' : 'Ocultar filtros extras'}
             </button>
           </div>
         </div>
@@ -1112,17 +1147,35 @@ export function Processes({ user }: ProcessesProps) {
 
       {!emptyWithoutData && !emptyWithFilter && viewMode === 'table' && (
         <section className="my-processes-table-wrapper" aria-label="Tabela de processos">
+          <div className="processes-table-toolbar">
+            <div className="processes-table-summary">
+              <strong>{sortedProcesses.length}</strong>
+              <span>processo(s) na carteira atual</span>
+            </div>
+            <div className="processes-table-controls">
+              <label htmlFor="filter-sort">
+                Ordenação
+                <select id="filter-sort" value={sortBy} onChange={(event) => setSortBy(event.target.value as SortField)}>
+                  <option value="nextDeadline">Próximo prazo</option>
+                  <option value="priority">Prioridade</option>
+                  <option value="lastMovement">Última movimentação</option>
+                </select>
+              </label>
+              <button type="button" className="btn-secondary" onClick={() => setViewMode((prev) => (prev === 'table' ? 'kanban' : 'table'))}>
+                <KanbanSquare size={14} aria-hidden="true" />
+                Ver Kanban
+              </button>
+            </div>
+          </div>
           <table className="my-processes-table">
             <thead>
               <tr>
                 <th scope="col">Processo</th>
-                <th scope="col">Cliente</th>
-                <th scope="col">Area</th>
                 <th scope="col">Fase</th>
                 <th scope="col">Proximo prazo</th>
-                <th scope="col">Status operacional</th>
+                <th scope="col">Situação</th>
                 <th scope="col">Ultima movimentacao</th>
-                <th scope="col">Prioridade</th>
+                <th scope="col">Responsável</th>
                 <th scope="col">Acoes</th>
               </tr>
             </thead>
@@ -1147,23 +1200,40 @@ export function Processes({ user }: ProcessesProps) {
                 >
                   <td>
                     <div className="process-primary">
-                      <strong>#{process.id}</strong>
-                      <span>{process.title}</span>
+                      <strong>#{process.id} · {process.title}</strong>
+                      <span>{process.client} · {process.area}</span>
+                      <small>{process.processNumber ? `Nº ${process.processNumber}` : process.party}</small>
                     </div>
                   </td>
-                  <td>{process.client}</td>
-                  <td>{process.area}</td>
-                  <td>{process.phase}</td>
                   <td>
-                    <span className={dayDiff(process.nextDeadlineAt, new Date()) <= 1 ? 'text-critical' : ''}>
-                      {formatDate(process.nextDeadlineAt)}
-                    </span>
+                    <div className="process-meta-stack">
+                      <strong>{process.phase}</strong>
+                      <span>{process.tribunal}</span>
+                    </div>
                   </td>
-                  <td>{renderStatusBadge(process.operationalStatus)}</td>
-                  <td>{formatDate(process.lastMovementAt)}</td>
-                  <td>{renderPriorityBadge(process.priority)}</td>
+                  <td>
+                    <div className="process-meta-stack">
+                      <strong className={dayDiff(process.nextDeadlineAt, new Date()) <= 1 ? 'text-critical' : ''}>{formatDate(process.nextDeadlineAt)}</strong>
+                      <span className={`deadline-context deadline-context--${formatDueContext(process.nextDeadlineAt).tone}`}>{formatDueContext(process.nextDeadlineAt).label}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div className="process-status-cell">
+                      {renderStatusBadge(process.operationalStatus)}
+                      {renderPriorityBadge(process.priority)}
+                    </div>
+                  </td>
+                  <td>
+                    <div className="process-meta-stack">
+                      <strong>{formatDate(process.lastMovementAt)}</strong>
+                      <span>{formatStaleContext(process.lastMovementAt)}</span>
+                    </div>
+                  </td>
+                  <td>{process.owner?.email ?? '—'}</td>
                   <td className="table-cell-actions">
                     <div className="row-actions" onClick={(event) => event.stopPropagation()}>
+                      <button type="button" className="btn-link-inline" onClick={() => setSelectedProcess(process)}>Abrir</button>
+                      <button type="button" className="btn-link-inline" onClick={() => openProcessDetail(process.id)}>Detalhe</button>
                       <button
                         type="button"
                         className="row-actions-trigger"
@@ -1176,6 +1246,10 @@ export function Processes({ user }: ProcessesProps) {
                         <div className="row-action-menu" role="menu" aria-label="Menu de acoes">
                           <button type="button" onClick={() => setSelectedProcess(process)}>Detalhe rapido</button>
                           <button type="button" onClick={() => openProcessDetail(process.id)}>Abrir detalhe</button>
+                          <button type="button">Registrar andamento</button>
+                          <button type="button">Criar tarefa</button>
+                          <button type="button">Anexar documento</button>
+                          <button type="button">Registrar atendimento</button>
                           <button type="button" onClick={() => handleEdit(process)}>Editar</button>
                           <button type="button" onClick={() => handleDelete(process.id)}>Excluir</button>
                         </div>
@@ -1281,6 +1355,21 @@ export function Processes({ user }: ProcessesProps) {
                 </div>
               </section>
 
+              <section className="drawer-risk-summary">
+                <div>
+                  <span>Próximo prazo</span>
+                  <strong>{formatDate(selectedProcess.nextDeadlineAt)}</strong>
+                  {selectedProcessDueContext && (
+                    <small className={`deadline-context deadline-context--${selectedProcessDueContext.tone}`}>{selectedProcessDueContext.label}</small>
+                  )}
+                </div>
+                <div>
+                  <span>Última movimentação</span>
+                  <strong>{formatDate(selectedProcess.lastMovementAt)}</strong>
+                  <small>{formatStaleContext(selectedProcess.lastMovementAt)}</small>
+                </div>
+              </section>
+
               <section className="drawer-facts-grid" aria-label="Resumo rapido do processo">
                 <article className="drawer-fact-card">
                   <span>Area</span>
@@ -1320,10 +1409,17 @@ export function Processes({ user }: ProcessesProps) {
                 <p>{selectedProcess.nextStep}</p>
               </div>
 
+              <div className="drawer-checklist">
+                <h4>Checklist operacional</h4>
+                <label><input type="checkbox" readOnly checked={selectedProcess.pendingDocuments === 0} /> Solicitar documento</label>
+                <label><input type="checkbox" readOnly checked={!selectedProcess.hasNewPublication} /> Revisar publicações</label>
+                <label><input type="checkbox" readOnly checked={dayDiff(selectedProcess.nextDeadlineAt, new Date()) > 1} /> Conferir prazo crítico</label>
+                <label><input type="checkbox" readOnly checked={Math.abs(dayDiff(selectedProcess.lastMovementAt, new Date())) < 15} /> Registrar andamento</label>
+              </div>
+
               <div className="drawer-actions">
-                <button type="button" className="btn-primary" onClick={() => openProcessDetail(selectedProcess.id)}>Abrir detalhe completo</button>
-                <button type="button" className="btn-secondary">Registrar andamento</button>
-                <button type="button" className="btn-secondary">Criar tarefa</button>
+                <button type="button" className="btn-primary" onClick={() => openProcessDetail(selectedProcess.id)}>{selectedProcessPrimaryAction?.label ?? 'Abrir detalhe completo'}</button>
+                <button type="button" className="btn-secondary">{selectedProcessPrimaryAction?.secondary ?? 'Registrar andamento'}</button>
                 <button type="button" className="btn-secondary">Anexar documento</button>
                 <button type="button" className="btn-secondary">Registrar atendimento</button>
               </div>
