@@ -6,6 +6,7 @@ import { signUserToken, verifyToken, type UserToken } from './auth';
 import { buildAgendaPayload } from './agenda.contract';
 import { buildDeadlinePayload } from './deadlines.contract';
 import { buildDocumentPayload } from './documents.contract';
+import { buildPublicationPayload } from './publications.contract';
 import { buildTaskPayload } from './tasks.contract';
 
 const app = express();
@@ -38,6 +39,25 @@ const externalProcessRegistry = [
     phase: 'Recurso',
     status: 'pausado',
   },
+] as const;
+
+const publicationSeedTypes = ['intimacao', 'citacao', 'despacho', 'sentenca', 'acordao', 'edital', 'outros'] as const;
+const publicationSeedImpacts = ['critico', 'alto', 'medio', 'baixo', 'informativo'] as const;
+const publicationSeedStatuses = ['nova', 'lida', 'em_analise', 'tratada', 'ignorada'] as const;
+const publicationSeedTribunals = ['TJSP', 'TJRJ', 'TJMG', 'TRT-2', 'TRF-3', 'STJ'] as const;
+const publicationSeedSummaries = [
+  'Intimação para manifestação no prazo de 15 dias sobre documentos juntados.',
+  'Despacho determinando a juntada de documentos complementares.',
+  'Sentença parcialmente procedente com prazo recursal em aberto.',
+  'Acórdão publicado com necessidade de revisão imediata.',
+  'Edital de citação disponibilizado no diário oficial.',
+] as const;
+const publicationSeedTexts = [
+  'Vistos. Intimem-se as partes para manifestação no prazo legal, sob pena de preclusão.',
+  'Junte a parte autora os documentos faltantes, no prazo de 10 dias, sob pena de extinção.',
+  'DISPOSITIVO: Julgo procedente em parte o pedido formulado na inicial.',
+  'ACORDAM os Desembargadores em negar provimento ao recurso.',
+  'Cite-se por edital ante a ausência de localização da parte ré.',
 ] as const;
 
 function buildAllowedOrigins(primaryOrigin: string) {
@@ -491,6 +511,65 @@ async function seedData() {
     }
   }
 
+  const publicationCount = await prisma.publication.count();
+  if (publicationCount === 0) {
+    const seededProcesses = await prisma.process.findMany({
+      include: {
+        owner: { select: { email: true } },
+        clientRecord: true,
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    for (const [index, process] of seededProcesses.entries()) {
+      const publishedAt = new Date();
+      publishedAt.setDate(publishedAt.getDate() - (index + 1));
+      publishedAt.setHours(8 + index, 0, 0, 0);
+
+      await prisma.publication.create({
+        data: {
+          processId: process.id,
+          clientId: process.clientId ?? process.clientRecord?.id ?? null,
+          publicationType: publicationSeedTypes[index % publicationSeedTypes.length],
+          status: publicationSeedStatuses[index % publicationSeedStatuses.length],
+          impact: publicationSeedImpacts[index % publicationSeedImpacts.length],
+          tribunal: publicationSeedTribunals[index % publicationSeedTribunals.length],
+          origin: `Diário de Justiça Eletrônico — ${publicationSeedTribunals[index % publicationSeedTribunals.length]}`,
+          publishedAt,
+          summary: publicationSeedSummaries[index % publicationSeedSummaries.length],
+          relevantText: publicationSeedTexts[index % publicationSeedTexts.length],
+          requiresAction: index % 3 !== 0,
+          convertedToDeadline: index % 2 === 0,
+          derivedDeadlineLabel: index % 2 === 0 ? `Prazo: ${new Date(publishedAt.getTime() + 15 * 86400000).toISOString().slice(0, 10)}` : null,
+          notes: index % 2 === 0 ? 'Validar necessidade de prazo derivado e retorno ao cliente.' : '',
+          read: index % 2 === 1,
+          createdBy: getResponsibleLabel(process.owner?.email) ?? 'admin',
+        },
+      });
+
+      await prisma.publication.create({
+        data: {
+          processId: process.id,
+          clientId: process.clientId ?? process.clientRecord?.id ?? null,
+          publicationType: publicationSeedTypes[(index + 2) % publicationSeedTypes.length],
+          status: publicationSeedStatuses[(index + 1) % publicationSeedStatuses.length],
+          impact: publicationSeedImpacts[(index + 1) % publicationSeedImpacts.length],
+          tribunal: publicationSeedTribunals[(index + 1) % publicationSeedTribunals.length],
+          origin: `Diário Oficial — ${publicationSeedTribunals[(index + 1) % publicationSeedTribunals.length]}`,
+          publishedAt: new Date(publishedAt.getTime() - 2 * 86400000),
+          summary: publicationSeedSummaries[(index + 1) % publicationSeedSummaries.length],
+          relevantText: publicationSeedTexts[(index + 1) % publicationSeedTexts.length],
+          requiresAction: index % 2 === 0,
+          convertedToDeadline: false,
+          derivedDeadlineLabel: null,
+          notes: '',
+          read: false,
+          createdBy: getResponsibleLabel(process.owner?.email) ?? 'admin',
+        },
+      });
+    }
+  }
+
   const agendaCount = await prisma.agendaEvent.count();
   if (agendaCount === 0) {
     const seededProcesses = await prisma.process.findMany({
@@ -734,6 +813,18 @@ function canReadDocument(user: UserToken, document: {
     document.createdBy === getResponsibleLabel(user.email) ||
     document.responsible === getResponsibleLabel(user.email) ||
     (document.process ? canReadProcess(user, document.process) : false)
+  );
+}
+
+function canReadPublication(user: UserToken, publication: {
+  createdBy?: string | null;
+  process?: { ownerId: number } | null;
+}) {
+  return (
+    user.role === 'ADM' ||
+    user.role === 'FIN' ||
+    publication.createdBy === getResponsibleLabel(user.email) ||
+    (publication.process ? canReadProcess(user, publication.process) : false)
   );
 }
 
@@ -1468,6 +1559,155 @@ app.put('/documents/:id', async (req, res) => {
   });
 
   res.json(buildDocumentPayload(updated));
+});
+
+app.get('/publications', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const publications = await prisma.publication.findMany({
+    where: decoded.role === 'ADM' || decoded.role === 'FIN'
+      ? undefined
+      : { process: { ownerId: decoded.sub } },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+      clientRecord: true,
+    },
+    orderBy: [
+      { publishedAt: 'desc' },
+      { createdAt: 'desc' },
+    ],
+  });
+
+  res.json(publications.map((publication) => buildPublicationPayload(publication)));
+});
+
+app.get('/publications/:id', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const publication = await prisma.publication.findUnique({
+    where: { id: Number(req.params.id) },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+      clientRecord: true,
+    },
+  });
+
+  if (!publication) return res.status(404).send({ message: 'Publicação não encontrada' });
+  if (!canReadPublication(decoded, publication)) return res.status(403).send({ message: 'Acesso negado' });
+
+  res.json(buildPublicationPayload(publication));
+});
+
+app.post('/publications', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const {
+    processId,
+    tipo,
+    impacto,
+    status,
+    tribunal,
+    origem,
+    dataPublicacao,
+    resumo,
+    textoRelevante,
+    exigeAcao,
+    observacoes,
+  } = req.body;
+
+  const access = await assertProcessAccess(decoded, Number(processId));
+  if (access.error) return res.status(access.error.status).send({ message: access.error.message });
+  if (!tipo || !tribunal || !origem || !dataPublicacao || !resumo || !textoRelevante) {
+    return res.status(400).send({ message: 'Dados incompletos para a publicação' });
+  }
+
+  const created = await prisma.publication.create({
+    data: {
+      processId: access.process.id,
+      clientId: access.process.clientId ?? access.process.clientRecord?.id ?? null,
+      publicationType: tipo,
+      status: status || 'nova',
+      impact: impacto || 'medio',
+      tribunal: tribunal.trim(),
+      origin: origem.trim(),
+      publishedAt: new Date(`${dataPublicacao}T00:00:00`),
+      summary: resumo.trim(),
+      relevantText: textoRelevante.trim(),
+      requiresAction: Boolean(exigeAcao),
+      notes: typeof observacoes === 'string' ? observacoes.trim() : null,
+      read: status === 'lida' || status === 'tratada',
+      createdBy: getResponsibleLabel(decoded.email) || decoded.email,
+    },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+      clientRecord: true,
+    },
+  });
+
+  res.status(201).json(buildPublicationPayload(created));
+});
+
+app.put('/publications/:id', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const current = await prisma.publication.findUnique({
+    where: { id: Number(req.params.id) },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+      clientRecord: true,
+    },
+  });
+
+  if (!current) return res.status(404).send({ message: 'Publicação não encontrada' });
+  if (!canReadPublication(decoded, current)) return res.status(403).send({ message: 'Acesso negado' });
+
+  const updated = await prisma.publication.update({
+    where: { id: current.id },
+    data: {
+      status: req.body.status ?? current.status,
+      impact: req.body.impacto ?? current.impact,
+      requiresAction: req.body.exigeAcao ?? current.requiresAction,
+      convertedToDeadline: req.body.convertidaEmPrazo ?? current.convertedToDeadline,
+      derivedDeadlineLabel: req.body.prazoDerivedoLabel === undefined ? current.derivedDeadlineLabel : req.body.prazoDerivedoLabel,
+      notes: req.body.observacoes === undefined ? current.notes : (typeof req.body.observacoes === 'string' ? req.body.observacoes.trim() : null),
+      read: req.body.lida ?? current.read,
+    },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+      clientRecord: true,
+    },
+  });
+
+  res.json(buildPublicationPayload(updated));
 });
 
 app.get('/tasks', async (req, res) => {

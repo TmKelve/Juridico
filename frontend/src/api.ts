@@ -180,6 +180,27 @@ export interface ApiDocument {
   previewUrl?: string;
 }
 
+export interface ApiPublication {
+  id: number;
+  tipo: 'intimacao' | 'citacao' | 'despacho' | 'sentenca' | 'acordao' | 'edital' | 'outros';
+  status: 'nova' | 'lida' | 'em_analise' | 'tratada' | 'ignorada';
+  impacto: 'critico' | 'alto' | 'medio' | 'baixo' | 'informativo';
+  processId: number;
+  processLabel: string;
+  processTitle: string;
+  client: string;
+  tribunal: string;
+  origem: string;
+  dataPublicacao: string;
+  resumo: string;
+  textoRelevante: string;
+  exigeAcao: boolean;
+  convertidaEmPrazo: boolean;
+  prazoDerivedoLabel: string | null;
+  observacoes: string;
+  lida: boolean;
+}
+
 interface LoginResponse {
   user: ApiUser;
 }
@@ -435,6 +456,38 @@ export const api = {
 
   getAttendances: () =>
     apiClient<ApiAttendance[]>('/attendances'),
+
+  getPublications: () =>
+    apiClient<ApiPublication[]>('/publications'),
+
+  getPublication: (id: number) =>
+    apiClient<ApiPublication>(`/publications/${id}`),
+
+  createPublication: (data: {
+    processId: number;
+    tipo: ApiPublication['tipo'];
+    impacto?: ApiPublication['impacto'];
+    status?: ApiPublication['status'];
+    tribunal: string;
+    origem: string;
+    dataPublicacao: string;
+    resumo: string;
+    textoRelevante: string;
+    exigeAcao?: boolean;
+    observacoes?: string;
+  }) =>
+    apiClient<ApiPublication>('/publications', { method: 'POST', body: data }),
+
+  updatePublication: (id: number, data: Partial<{
+    status: ApiPublication['status'];
+    impacto: ApiPublication['impacto'];
+    exigeAcao: boolean;
+    convertidaEmPrazo: boolean;
+    prazoDerivedoLabel: string | null;
+    observacoes: string;
+    lida: boolean;
+  }>) =>
+    apiClient<ApiPublication>(`/publications/${id}`, { method: 'PUT', body: data }),
 
   getAttendance: (id: number) =>
     apiClient<ApiAttendance>(`/attendances/${id}`),

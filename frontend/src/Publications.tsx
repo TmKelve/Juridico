@@ -20,23 +20,13 @@ import {
   Search,
   X,
 } from 'lucide-react';
-import { api } from './api';
+import { api, type ApiPublication } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import { ProcessCombobox } from './ProcessCombobox';
 import './Publications.css';
 
 interface PublicationsProps {
   user: { id: number; email: string; role: string };
-}
-
-interface ProcessRecord {
-  id: number;
-  title: string;
-  client: string;
-  phase: string;
-  status: string;
-  ownerId: number;
-  owner?: { id: number; email: string; role: string };
 }
 
 type PubStatus = 'nova' | 'lida' | 'em_analise' | 'tratada' | 'ignorada';
@@ -52,26 +42,7 @@ type PubTipo =
 type ViewMode = 'lista' | 'timeline';
 type SortField = 'data' | 'impacto' | 'status' | 'processo';
 
-interface PublicationItem {
-  id: string;
-  tipo: PubTipo;
-  status: PubStatus;
-  impacto: PubImpacto;
-  processId: number;
-  processLabel: string;
-  processTitle: string;
-  client: string;
-  tribunal: string;
-  origem: string;
-  dataPublicacao: string;
-  resumo: string;
-  textoRelevante: string;
-  exigeAcao: boolean;
-  convertidaEmPrazo: boolean;
-  prazoDerivedoLabel: string | null;
-  observacoes: string;
-  lida: boolean;
-}
+type PublicationItem = ApiPublication;
 
 interface PubFilters {
   query: string;
@@ -127,36 +98,9 @@ const TIPO_LABEL: Record<PubTipo, string> = {
   outros:     'Outros',
 };
 
-const TRIBUNAIS = [
-  'TJSP', 'TJRJ', 'TJMG', 'TJRS', 'TRT-2', 'TRT-15',
-  'TRF-3', 'STJ', 'STF', 'TST',
-];
-
-const RESUMOS = [
-  'Intimação para manifestação no prazo de 15 dias sobre documentos juntados.',
-  'Citação para contestar ação trabalhista no prazo de 30 dias úteis.',
-  'Despacho determinando a juntada de documentos complementares.',
-  'Sentença procedente em parte — recurso cabível em 15 dias.',
-  'Acórdão proferido. Prazo para oposição de embargos de declaração: 5 dias.',
-  'Edital de citação publicado em razão de endereço não localizado.',
-  'Intimação para apresentar cálculos de liquidação de sentença.',
-  'Despacho de saneamento com prazo de 10 dias para esclarecimentos.',
-  'Decisão interlocutória — agravo de instrumento cabível em 15 dias.',
-  'Intimação para recolhimento de custas no prazo de 5 dias.',
-];
-
-const TEXTOS = [
-  'Vistos. Intimem-se as partes para manifestação no prazo legal, sob pena de preclusão.',
-  'Cite-se o réu para comparecer à audiência designada, devendo ser cumprido o mandado no prazo de 30 dias.',
-  'Junte a parte autora os documentos faltantes sob pena de extinção do feito sem resolução do mérito.',
-  'DISPOSITIVO: Julgo procedente em parte o pedido formulado na inicial. Transitada em julgado, arquive-se.',
-  'ACORDAM os Desembargadores em negar provimento ao recurso, nos termos do voto do Relator.',
-];
-
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 function toIsoDate(d: Date) { return d.toISOString().slice(0, 10); }
-function addDays(d: Date, n: number) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
 
 function formatDate(iso: string) {
   return new Date(`${iso}T00:00:00`).toLocaleDateString('pt-BR');
@@ -165,63 +109,6 @@ function formatDate(iso: string) {
 function isWithinDays(iso: string, days: number) {
   const diff = (Date.now() - new Date(iso).getTime()) / 864e5;
   return diff >= 0 && diff <= days;
-}
-
-// ─── mock data ────────────────────────────────────────────────────────────────
-
-function makePublications(processes: ProcessRecord[]): PublicationItem[] {
-  const base = new Date();
-  const tipos: PubTipo[] = ['intimacao', 'citacao', 'despacho', 'sentenca', 'acordao', 'edital', 'outros'];
-  const impactos: PubImpacto[] = ['critico', 'alto', 'medio', 'baixo', 'informativo'];
-  const statuses: PubStatus[] = ['nova', 'nova', 'lida', 'em_analise', 'tratada', 'ignorada'];
-
-  return processes.flatMap((p, idx) => {
-    const pub1: PublicationItem = {
-      id: `pub-${p.id}-1`,
-      tipo: tipos[(p.id + idx) % tipos.length],
-      status: statuses[(p.id + idx) % statuses.length],
-      impacto: impactos[(p.id + idx) % impactos.length],
-      processId: p.id,
-      processLabel: `#${p.id}`,
-      processTitle: p.title,
-      client: p.client,
-      tribunal: TRIBUNAIS[(p.id + idx) % TRIBUNAIS.length],
-      origem: `Diário de Justiça Eletrônico — ${TRIBUNAIS[(p.id + idx) % TRIBUNAIS.length]}`,
-      dataPublicacao: toIsoDate(addDays(base, -((p.id * 2 + idx) % 30))),
-      resumo: RESUMOS[(p.id + idx) % RESUMOS.length],
-      textoRelevante: TEXTOS[(p.id + idx) % TEXTOS.length],
-      exigeAcao: (p.id + idx) % 3 !== 0,
-      convertidaEmPrazo: (p.id + idx) % 4 === 0,
-      prazoDerivedoLabel: (p.id + idx) % 4 === 0
-        ? `Prazo: ${formatDate(toIsoDate(addDays(base, (p.id % 10) + 5)))}`
-        : null,
-      observacoes: '',
-      lida: (p.id + idx) % 2 === 0,
-    };
-
-    const pub2: PublicationItem = {
-      id: `pub-${p.id}-2`,
-      tipo: tipos[(p.id + idx + 2) % tipos.length],
-      status: statuses[(p.id + idx + 1) % statuses.length],
-      impacto: impactos[(p.id + idx + 1) % impactos.length],
-      processId: p.id,
-      processLabel: `#${p.id}`,
-      processTitle: p.title,
-      client: p.client,
-      tribunal: TRIBUNAIS[(p.id + idx + 3) % TRIBUNAIS.length],
-      origem: `Diário Oficial — ${TRIBUNAIS[(p.id + idx + 3) % TRIBUNAIS.length]}`,
-      dataPublicacao: toIsoDate(addDays(base, -((p.id * 3 + idx * 2) % 14))),
-      resumo: RESUMOS[(p.id + idx + 2) % RESUMOS.length],
-      textoRelevante: TEXTOS[(p.id + idx + 1) % TEXTOS.length],
-      exigeAcao: (p.id + idx) % 2 === 0,
-      convertidaEmPrazo: false,
-      prazoDerivedoLabel: null,
-      observacoes: '',
-      lida: (p.id + idx) % 3 === 0,
-    };
-
-    return [pub1, pub2];
-  });
 }
 
 // ─── sub-components ────────────────────────────────────────────────────────────
@@ -258,7 +145,6 @@ export function Publications({ user }: PublicationsProps) {
   const navigate = useNavigate();
 
   const [publications, setPublications] = useState<PublicationItem[]>([]);
-  const [processes, setProcesses]       = useState<ProcessRecord[]>([]);
   const [loading, setLoading]           = useState(true);
   const [error, setError]               = useState('');
   const [success, setSuccess]           = useState('');
@@ -269,10 +155,9 @@ export function Publications({ user }: PublicationsProps) {
   const [sortDesc, setSortDesc]         = useState(true);
   const [page, setPage]                 = useState(1);
   const [selected, setSelected]         = useState<PublicationItem | null>(null);
-  const [openMenuId, setOpenMenuId]     = useState<string | null>(null);
+  const [openMenuId, setOpenMenuId]     = useState<number | null>(null);
   const [obsInput, setObsInput]         = useState('');
 
-  const isAdv = user.role === 'ADV';
   const PER_PAGE = 15;
 
   useEffect(() => {
@@ -290,19 +175,13 @@ export function Publications({ user }: PublicationsProps) {
     setLoading(true);
     setError('');
     try {
-      const res = await api.getProcesses();
+      const res = await api.getPublications();
       if (res.status !== 200 || !Array.isArray(res.data)) {
         setError(res.error || 'Não foi possível carregar publicações.');
-        setLoading(false);
         return;
       }
-      const scoped = isAdv
-        ? (res.data as ProcessRecord[]).filter((p) => p.ownerId === user.id)
-        : (res.data as ProcessRecord[]);
-      setProcesses(scoped);
-      const pubs = makePublications(scoped);
-      setPublications(pubs);
-      trackEvent('publications_loaded', { count: pubs.length });
+      setPublications(res.data as PublicationItem[]);
+      trackEvent('publications_loaded', { count: (res.data as PublicationItem[]).length });
     } catch (err) {
       setError((err as Error).message || 'Erro ao carregar publicações.');
       captureException(err as Error, { context: 'loadPublications' });
@@ -318,42 +197,73 @@ export function Publications({ user }: PublicationsProps) {
   function clearFilters() { setFilters(EMPTY_FILTERS); setSuccess('Filtros limpos.'); }
   function saveFilters()  { localStorage.setItem('lexora_pub_filter', JSON.stringify(filters)); setSuccess('Filtro salvo.'); }
 
-  function markRead(id: string) {
-    setPublications((prev) => prev.map((p) => p.id === id ? { ...p, lida: true, status: p.status === 'nova' ? 'lida' : p.status } : p));
-    if (selected?.id === id) setSelected((s) => s ? { ...s, lida: true, status: s.status === 'nova' ? 'lida' : s.status } : null);
+  async function refreshSelected(id: number) {
+    const latest = await api.getPublication(id);
+    if (latest.status === 200 && latest.data) {
+      setSelected(latest.data as PublicationItem);
+      setObsInput((latest.data as PublicationItem).observacoes);
+    }
+  }
+
+  async function markRead(id: number) {
+    const response = await api.updatePublication(id, { lida: true, status: 'lida' });
+    if (response.status !== 200 || !response.data) {
+      setError(response.error || 'Não foi possível atualizar a publicação.');
+      return;
+    }
+    setPublications((prev) => prev.map((p) => p.id === id ? response.data as PublicationItem : p));
+    if (selected?.id === id) await refreshSelected(id);
     setOpenMenuId(null);
     setSuccess('Publicação marcada como lida.');
   }
 
-  function markTratada(id: string) {
-    setPublications((prev) => prev.map((p) => p.id === id ? { ...p, status: 'tratada', lida: true } : p));
-    if (selected?.id === id) setSelected((s) => s ? { ...s, status: 'tratada', lida: true } : null);
+  async function markTratada(id: number) {
+    const response = await api.updatePublication(id, { status: 'tratada', lida: true });
+    if (response.status !== 200 || !response.data) {
+      setError(response.error || 'Não foi possível atualizar a publicação.');
+      return;
+    }
+    setPublications((prev) => prev.map((p) => p.id === id ? response.data as PublicationItem : p));
+    if (selected?.id === id) await refreshSelected(id);
     setOpenMenuId(null);
     setSuccess('Publicação marcada como tratada.');
   }
 
-  function convertToPrazo(id: string) {
+  async function convertToPrazo(id: number) {
     const pub = publications.find((p) => p.id === id);
-    const label = `Prazo: ${toIsoDate(addDays(new Date(), 15))}`;
-    setPublications((prev) => prev.map((p) =>
-      p.id === id ? { ...p, convertidaEmPrazo: true, prazoDerivedoLabel: label, status: 'em_analise' } : p
-    ));
-    if (selected?.id === id) setSelected((s) => s ? { ...s, convertidaEmPrazo: true, prazoDerivedoLabel: label } : null);
+    const label = `Prazo: ${formatDate(toIsoDate(new Date(Date.now() + 15 * 86400000)))}`;
+    const response = await api.updatePublication(id, {
+      convertidaEmPrazo: true,
+      prazoDerivedoLabel: label,
+      status: 'em_analise',
+      lida: true,
+    });
+    if (response.status !== 200 || !response.data) {
+      setError(response.error || 'Não foi possível converter a publicação em prazo.');
+      return;
+    }
+    setPublications((prev) => prev.map((p) => p.id === id ? response.data as PublicationItem : p));
+    if (selected?.id === id) await refreshSelected(id);
     setOpenMenuId(null);
     trackEvent('pub_converted_prazo', { id, processId: pub?.processId ?? 0 });
     setSuccess('Prazo criado a partir da publicação.');
   }
 
-  function createTask(id: string) {
+  function createTask(id: number) {
     const pub = publications.find((p) => p.id === id);
     trackEvent('pub_create_task', { id, processId: pub?.processId ?? 0 });
     setOpenMenuId(null);
-    setSuccess('Tarefa criada a partir da publicação.');
+    navigate('/tarefas');
   }
 
-  function saveObs(id: string) {
-    setPublications((prev) => prev.map((p) => p.id === id ? { ...p, observacoes: obsInput } : p));
-    if (selected?.id === id) setSelected((s) => s ? { ...s, observacoes: obsInput } : null);
+  async function saveObs(id: number) {
+    const response = await api.updatePublication(id, { observacoes: obsInput });
+    if (response.status !== 200 || !response.data) {
+      setError(response.error || 'Não foi possível salvar a observação.');
+      return;
+    }
+    setPublications((prev) => prev.map((p) => p.id === id ? response.data as PublicationItem : p));
+    if (selected?.id === id) await refreshSelected(id);
     setSuccess('Observação registrada.');
   }
 
@@ -388,8 +298,8 @@ export function Publications({ user }: PublicationsProps) {
 
   const uniqueClients   = useMemo(() => [...new Set(publications.map((p) => p.client))].sort(), [publications]);
   const processOptions  = useMemo(
-    () => processes.map((p) => ({ value: String(p.id), label: `#${p.id} · ${p.title}`, searchText: `${p.client} ${p.phase}` })),
-    [processes],
+    () => [...new Map(publications.map((p) => [p.processId, { value: String(p.processId), label: `${p.processLabel} · ${p.processTitle}`, searchText: p.client }])).values()],
+    [publications],
   );
   const uniqueTribunais = useMemo(() => [...new Set(publications.map((p) => p.tribunal))].sort(), [publications]);
 

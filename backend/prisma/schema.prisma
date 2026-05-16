@@ -32,6 +32,7 @@ model Client {
   atendimentos Atendimento[]
   tasks      Task[]
   agendaEvents AgendaEvent[]
+  publications Publication[]
 }
 
 model Process {
@@ -51,6 +52,31 @@ model Process {
   atendimentos Atendimento[]
   tasks        Task[]
   agendaEvents AgendaEvent[]
+  publications Publication[]
+}
+
+model Publication {
+  id                Int      @id @default(autoincrement())
+  processId         Int
+  process           Process  @relation(fields: [processId], references: [id])
+  clientId          Int?
+  clientRecord      Client?  @relation(fields: [clientId], references: [id])
+  publicationType   String
+  status            String   @default("nova")
+  impact            String   @default("medio")
+  tribunal          String
+  origin            String
+  publishedAt       DateTime
+  summary           String
+  relevantText      String
+  requiresAction    Boolean  @default(false)
+  convertedToDeadline Boolean @default(false)
+  derivedDeadlineLabel String?
+  notes             String?
+  read              Boolean  @default(false)
+  createdBy         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model Andamento {
