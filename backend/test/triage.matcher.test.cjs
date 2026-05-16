@@ -41,4 +41,16 @@ test('resolveTriageTarget matches process first, then cpf', async () => {
     }),
     'criar_oportunidade',
   );
+
+  assert.equal(
+    inferSuggestedAction({
+      sourceType: 'cpf',
+      queueType: 'normal',
+      processId: null,
+      clientId: null,
+      hasExistingClient: false,
+      normalizedText: 'Publicação por CPF sem cliente conhecido.',
+    }),
+    'criar_lead',
+  );
 });

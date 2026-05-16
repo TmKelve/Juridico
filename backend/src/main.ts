@@ -4,6 +4,7 @@ import bcrypt from 'bcrypt';
 import { PrismaClient } from '@prisma/client';
 import { signUserToken, verifyToken, type UserToken } from './auth';
 import { buildAgendaPayload } from './agenda.contract';
+import { collectCnjPublications } from './cnj-publications.provider';
 import { buildDeadlinePayload } from './deadlines.contract';
 import { buildDocumentPayload } from './documents.contract';
 import { lookupExternalProcess } from './process-lookup.provider';
@@ -189,6 +190,306 @@ function createCaptureFingerprint(parts: Array<string | number | null | undefine
     .join('|')
     .replace(/\s+/g, ' ')
     .slice(0, 400);
+}
+
+function getScheduledHours() {
+  return [6, 12, 18];
+}
+
+function computeNextScheduleDate(from = new Date()) {
+  const next = new Date(from);
+  const hours = getScheduledHours();
+  const currentHour = from.getHours();
+  const currentMinute = from.getMinutes();
+
+  const nextHour = hours.find((hour) => hour > currentHour || (hour === currentHour && currentMinute === 0));
+  if (typeof nextHour === 'number') {
+    next.setHours(nextHour, 0, 0, 0);
+    if (next <= from) {
+      next.setHours(nextHour + 6, 0, 0, 0);
+    }
+    return next;
+  }
+
+  next.setDate(next.getDate() + 1);
+  next.setHours(hours[0], 0, 0, 0);
+  return next;
+}
+
+async function ingestCnjPublications(triggeredBy: string) {
+  const candidates = await prisma.process.findMany({
+    where: { processNumber: { not: null } },
+    include: { clientRecord: true },
+    orderBy: { id: 'asc' },
+  });
+
+  const sourceJob = await prisma.publicationSourceJob.create({
+    data: {
+      sourceType: 'cnj',
+      scheduledFor: new Date(),
+      startedAt: new Date(),
+      status: 'running',
+    },
+  });
+
+  let itemsCaptured = 0;
+  let itemsCreated = 0;
+  let itemsUpdated = 0;
+  let itemsFlaggedCritical = 0;
+  let itemsSentToCrm = 0;
+
+  try {
+    const captures = await collectCnjPublications(
+      candidates.map((process: any) => ({
+        processNumber: process.processNumber,
+        clientName: process.client,
+        cpf: process.clientRecord?.cpfCnpj ?? null,
+      })),
+    );
+
+    const processes = candidates.map((process: any) => ({
+      id: process.id,
+      processNumber: process.processNumber,
+      client: process.client,
+      clientId: process.clientId ?? process.clientRecord?.id ?? null,
+    }));
+
+    const clients = await clientStore.findMany({
+      select: { id: true, cpfCnpj: true, name: true },
+    });
+
+    itemsCaptured = captures.length;
+
+    for (const capturePayload of captures) {
+      const fingerprint = createCaptureFingerprint([
+        'cnj',
+        capturePayload.sourceReference,
+        capturePayload.processNumber,
+        capturePayload.occurredAt,
+        capturePayload.rawText,
+      ]);
+
+      let capture = await prisma.publicationCapture.findUnique({
+        where: { fingerprint },
+      });
+
+      if (capture) {
+        capture = await prisma.publicationCapture.update({
+          where: { id: capture.id },
+          data: {
+            sourceReference: capturePayload.sourceReference,
+            occurredAt: new Date(capturePayload.occurredAt),
+            tribunal: capturePayload.tribunal,
+            processNumber: capturePayload.processNumber,
+            cpf: capturePayload.cpf ?? null,
+            personName: capturePayload.personName ?? null,
+            rawText: capturePayload.rawText,
+            normalizedText: capturePayload.rawText,
+            status: 'atualizado',
+            sourceJobId: sourceJob.id,
+          },
+        });
+        itemsUpdated += 1;
+      } else {
+        capture = await prisma.publicationCapture.create({
+          data: {
+            sourceType: 'cnj',
+            sourceReference: capturePayload.sourceReference,
+            occurredAt: new Date(capturePayload.occurredAt),
+            rawText: capturePayload.rawText,
+            normalizedText: capturePayload.rawText,
+            tribunal: capturePayload.tribunal,
+            processNumber: capturePayload.processNumber,
+            cpf: capturePayload.cpf ?? null,
+            personName: capturePayload.personName ?? null,
+            metadataJson: { triggeredBy, source: 'cnj' },
+            fingerprint,
+            status: 'processado',
+            sourceJobId: sourceJob.id,
+          },
+        });
+        itemsCreated += 1;
+      }
+
+      const target = resolveTriageTarget(
+        {
+          processNumber: capturePayload.processNumber,
+          cpf: capturePayload.cpf ?? null,
+          sourceType: 'cnj',
+          normalizedText: capturePayload.rawText,
+        },
+        processes,
+        clients,
+      );
+
+      const queueType = inferQueueType('cnj', capturePayload.rawText);
+      const suggestedAction = inferSuggestedAction({
+        sourceType: 'cnj',
+        queueType,
+        processId: target.processId,
+        clientId: target.clientId,
+        hasExistingClient: Boolean(target.clientId),
+        normalizedText: capturePayload.rawText,
+      });
+
+      if (queueType === 'critica') itemsFlaggedCritical += 1;
+
+      const existingEvent = await prisma.publicationEvent.findFirst({
+        where: {
+          captureId: capture.id,
+          title: capturePayload.title,
+          eventAt: new Date(capturePayload.occurredAt),
+        },
+      });
+
+      const event = existingEvent ?? await prisma.publicationEvent.create({
+        data: {
+          captureId: capture.id,
+          processId: target.processId,
+          clientId: target.clientId,
+          eventType: capturePayload.title.toLowerCase().includes('sentença') ? 'sentenca' : 'publicacao',
+          eventAt: new Date(capturePayload.occurredAt),
+          title: capturePayload.title,
+          summary: capturePayload.summary,
+          fullText: capturePayload.rawText,
+          riskLevel: queueType === 'critica' ? 'critico' : 'normal',
+          requiresAction: true,
+          timelinePosition: 1,
+        },
+      });
+
+      let crmLeadId: number | null = null;
+      let crmOpportunityId: number | null = null;
+
+      if (suggestedAction === 'criar_oportunidade') {
+        const opportunity = await prisma.crmOpportunity.create({
+          data: {
+            clientId: target.clientId,
+            cpf: capturePayload.cpf ?? null,
+            personName: capturePayload.personName || 'Cliente identificado',
+            source: 'publicacao_automatizada',
+            status: 'acao_recomendada',
+            summary: capturePayload.summary,
+          },
+        });
+        crmOpportunityId = opportunity.id;
+        itemsSentToCrm += 1;
+      } else if (suggestedAction === 'criar_lead') {
+        const lead = await prisma.crmLead.create({
+          data: {
+            clientId: target.clientId,
+            cpf: capturePayload.cpf ?? null,
+            personName: capturePayload.personName || 'Lead identificado',
+            source: 'publicacao_automatizada',
+            status: 'novo',
+            summary: capturePayload.summary,
+          },
+        });
+        crmLeadId = lead.id;
+        itemsSentToCrm += 1;
+      }
+
+      const existingTriage = await prisma.triageItem.findFirst({
+        where: {
+          captureId: capture.id,
+          suggestedAction,
+          processId: target.processId,
+          clientId: target.clientId,
+          status: { in: ['pendente', 'em_revisao_manual', 'adiado'] },
+        },
+      });
+
+      if (existingTriage) {
+        await prisma.triageItem.update({
+          where: { id: existingTriage.id },
+          data: {
+            eventId: event.id,
+            queueType,
+            suggestedReason: capturePayload.summary,
+            sourceLabel: 'CNJ',
+            crmLeadId: crmLeadId ?? existingTriage.crmLeadId,
+            crmOpportunityId: crmOpportunityId ?? existingTriage.crmOpportunityId,
+          },
+        });
+      } else {
+        await prisma.triageItem.create({
+          data: {
+            captureId: capture.id,
+            eventId: event.id,
+            processId: target.processId,
+            clientId: target.clientId,
+            crmLeadId,
+            crmOpportunityId,
+            queueType,
+            status: 'pendente',
+            suggestedAction,
+            suggestedReason: capturePayload.summary,
+            aiConfidenceBand: queueType === 'critica' ? 'alta' : 'media',
+            aiScoreRaw: queueType === 'critica' ? 0.89 : 0.74,
+            sourceLabel: 'CNJ',
+          },
+        });
+      }
+    }
+
+    await prisma.publicationSourceJob.update({
+      where: { id: sourceJob.id },
+      data: {
+        finishedAt: new Date(),
+        status: 'success',
+        itemsCaptured,
+        itemsCreated,
+        itemsUpdated,
+        itemsFlaggedCritical,
+        itemsSentToCrm,
+      },
+    });
+
+    return {
+      sourceJobId: sourceJob.id,
+      itemsCaptured,
+      itemsCreated,
+      itemsUpdated,
+      itemsFlaggedCritical,
+      itemsSentToCrm,
+    };
+  } catch (error) {
+    await prisma.publicationSourceJob.update({
+      where: { id: sourceJob.id },
+      data: {
+        finishedAt: new Date(),
+        status: 'failed',
+        itemsCaptured,
+        itemsCreated,
+        itemsUpdated,
+        itemsFlaggedCritical,
+        itemsSentToCrm,
+        errorLog: error instanceof Error ? error.message : 'Erro desconhecido na coleta CNJ',
+      },
+    });
+    throw error;
+  }
+}
+
+function scheduleCnjCollector() {
+  const disabled = process.env.TRIAGE_SCHEDULER_DISABLED === 'true';
+  if (disabled) return;
+
+  const run = async () => {
+    try {
+      await ingestCnjPublications('scheduler');
+    } catch (error) {
+      console.error('[triage] CNJ scheduler failed:', error);
+    } finally {
+      const nextRun = computeNextScheduleDate(new Date(Date.now() + 60000));
+      const waitMs = Math.max(60000, nextRun.getTime() - Date.now());
+      setTimeout(run, waitMs);
+    }
+  };
+
+  const firstRun = computeNextScheduleDate();
+  const initialWaitMs = Math.max(60000, firstRun.getTime() - Date.now());
+  setTimeout(run, initialWaitMs);
 }
 
 async function syncClientsFromProcesses() {
@@ -911,6 +1212,7 @@ async function seedData() {
 seedData().catch((err) => {
   console.error('Erro ao semear dados', err);
 });
+scheduleCnjCollector();
 
 function getUserFromReq(req: express.Request): UserToken | null {
   const token = getAuthToken(req);
@@ -3473,6 +3775,45 @@ app.post('/triage/:id/decision', async (req, res) => {
     item: buildTriageItemPayload(updated),
     decision: buildTriageDecisionPayload(decision),
   });
+});
+
+app.get('/triage/jobs', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token nao fornecido ou invalido' });
+  if (!canAccessTriage(decoded)) return res.status(403).send({ message: 'Acesso negado' });
+
+  const jobs = await prisma.publicationSourceJob.findMany({
+    orderBy: { createdAt: 'desc' },
+    take: 20,
+  });
+
+  res.json(jobs.map((job: any) => ({
+    id: job.id,
+    sourceType: job.sourceType,
+    scheduledFor: job.scheduledFor.toISOString(),
+    startedAt: job.startedAt ? job.startedAt.toISOString() : null,
+    finishedAt: job.finishedAt ? job.finishedAt.toISOString() : null,
+    status: job.status,
+    itemsCaptured: job.itemsCaptured,
+    itemsCreated: job.itemsCreated,
+    itemsUpdated: job.itemsUpdated,
+    itemsFlaggedCritical: job.itemsFlaggedCritical,
+    itemsSentToCrm: job.itemsSentToCrm,
+    errorLog: job.errorLog ?? null,
+  })));
+});
+
+app.post('/triage/jobs/run-cnj', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token nao fornecido ou invalido' });
+  if (!canAccessTriage(decoded)) return res.status(403).send({ message: 'Acesso negado' });
+
+  try {
+    const result = await ingestCnjPublications(getResponsibleLabel(decoded.email) || decoded.email);
+    res.status(201).json(result);
+  } catch (error) {
+    res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao executar coleta CNJ' });
+  }
 });
 
 app.get('/', (req, res) => {

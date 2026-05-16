@@ -81,7 +81,7 @@ export function inferSuggestedAction(params: {
   if (params.processId) {
     return 'criar_tarefa';
   }
-  if (params.clientId || params.hasExistingClient || params.sourceType === 'cpf') {
+  if (params.clientId || params.hasExistingClient) {
     return 'criar_oportunidade';
   }
   return 'criar_lead';
