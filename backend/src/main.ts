@@ -6,6 +6,7 @@ import { signUserToken, verifyToken, type UserToken } from './auth';
 import { buildAgendaPayload } from './agenda.contract';
 import { buildDeadlinePayload } from './deadlines.contract';
 import { buildDocumentPayload } from './documents.contract';
+import { lookupExternalProcess } from './process-lookup.provider';
 import { buildPublicationPayload } from './publications.contract';
 import { buildTaskPayload } from './tasks.contract';
 import { buildTemplatePayload } from './templates.contract';
@@ -159,6 +160,16 @@ function getResponsibleLabel(email?: string | null) {
 
 function normalizeProcessNumber(value?: string | null) {
   return (value ?? '').replace(/\D/g, '');
+}
+
+function formatDateLabel(date: Date) {
+  return date.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+}
+
+function addDays(base: Date, amount: number) {
+  const next = new Date(base);
+  next.setUTCDate(next.getUTCDate() + amount);
+  return next;
 }
 
 async function syncClientsFromProcesses() {
@@ -1787,6 +1798,111 @@ app.put('/publications/:id', async (req, res) => {
   res.json(buildPublicationPayload(updated));
 });
 
+app.post('/publications/:id/create-deadline', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const publication = await prisma.publication.findUnique({
+    where: { id: Number(req.params.id) },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+      clientRecord: true,
+    },
+  });
+
+  if (!publication) return res.status(404).send({ message: 'Publicação não encontrada' });
+  if (!canReadPublication(decoded, publication)) return res.status(403).send({ message: 'Acesso negado' });
+
+  const derivedDeadlineId = (publication as { derivedDeadlineId?: number | null }).derivedDeadlineId;
+  if (derivedDeadlineId) {
+    const existingDeadline = await prisma.prazo.findUnique({
+      where: { id: derivedDeadlineId },
+      include: {
+        process: {
+          include: {
+            owner: { select: { id: true, email: true, role: true } },
+            clientRecord: true,
+          },
+        },
+      },
+    });
+
+    if (existingDeadline) {
+      return res.json({
+        publication: buildPublicationPayload(publication),
+        deadline: buildDeadlinePayload(existingDeadline),
+      });
+    }
+  }
+
+  const dueDate = req.body?.dueDate
+    ? new Date(req.body.dueDate)
+    : addDays(publication.publishedAt, 15);
+  const title = typeof req.body?.title === 'string' && req.body.title.trim()
+    ? req.body.title.trim()
+    : `Prazo de manifestação - ${publication.process.title}`;
+  const priority = req.body?.priority || (publication.impact === 'critico' || publication.impact === 'alto' ? 'alta' : 'media');
+  const status = req.body?.status || (publication.impact === 'critico' ? 'critico' : 'aberto');
+  const responsible = req.body?.responsible || getResponsibleLabel(decoded.email) || decoded.email;
+  const notes = typeof req.body?.notes === 'string' && req.body.notes.trim()
+    ? req.body.notes.trim()
+    : `Prazo criado a partir da publicação ${publication.tribunal} em ${formatDateLabel(publication.publishedAt)}. ${publication.summary}`;
+
+  const createdDeadline = await prisma.prazo.create({
+    data: {
+      processId: publication.processId,
+      title,
+      dueDate,
+      priority,
+      status,
+      origin: 'publicacao',
+      responsible,
+      legalArea: publication.process.phase,
+      notes,
+      createdBy: getResponsibleLabel(decoded.email) || decoded.email,
+    },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+    },
+  });
+
+  const updatedPublication = await prisma.publication.update({
+    where: { id: publication.id },
+    data: {
+      status: publication.status === 'tratada' ? publication.status : 'em_analise',
+      requiresAction: true,
+      convertedToDeadline: true,
+      derivedDeadlineId: createdDeadline.id,
+      derivedDeadlineLabel: `Prazo: ${formatDateLabel(createdDeadline.dueDate)}`,
+      read: true,
+    },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+      clientRecord: true,
+    },
+  });
+
+  res.status(201).json({
+    publication: buildPublicationPayload(updatedPublication),
+    deadline: buildDeadlinePayload(createdDeadline),
+  });
+});
+
 app.get('/templates', async (req, res) => {
   const decoded = getUserFromReq(req);
   if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
@@ -1912,6 +2028,89 @@ app.put('/templates/:id', async (req, res) => {
   });
 
   res.json(buildTemplatePayload(updated));
+});
+
+app.post('/templates/:id/generate-document', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const template = await prisma.template.findUnique({
+    where: { id: Number(req.params.id) },
+  });
+
+  if (!template) return res.status(404).send({ message: 'Modelo não encontrado' });
+  if (!canReadTemplate(decoded, template)) return res.status(403).send({ message: 'Acesso negado' });
+
+  const processId = Number(req.body?.processId);
+  if (!processId) {
+    return res.status(400).send({ message: 'Processo vinculado é obrigatório' });
+  }
+
+  const access = await assertProcessAccess(decoded, processId);
+  if (access.error) return res.status(access.error.status).send({ message: access.error.message });
+
+  const processRecord = access.process;
+  const title = typeof req.body?.title === 'string' && req.body.title.trim()
+    ? req.body.title.trim()
+    : `${template.pieceType} - ${processRecord.client}`;
+  const fields: unknown[] = Array.isArray(req.body?.fields) ? req.body.fields : [];
+  const fieldLines = fields
+    .filter((field) => field && typeof field === 'object')
+    .map((field) => {
+      const key = typeof (field as Record<string, unknown>).label === 'string' && String((field as Record<string, unknown>).label).trim()
+        ? String((field as Record<string, unknown>).label).trim()
+        : typeof (field as Record<string, unknown>).key === 'string'
+          ? String((field as Record<string, unknown>).key)
+          : 'campo';
+      const value = typeof (field as Record<string, unknown>).value === 'string' && String((field as Record<string, unknown>).value).trim()
+        ? String((field as Record<string, unknown>).value).trim()
+        : 'não informado';
+      return `- ${key}: ${value}`;
+    });
+
+  const description = [
+    `Peça gerada a partir do modelo ${template.name} (${template.version}).`,
+    `Processo: #${processRecord.id} - ${processRecord.title}`,
+    `Cliente: ${processRecord.client}`,
+    fieldLines.length ? 'Campos preenchidos:' : null,
+    ...(fieldLines.length ? fieldLines : []),
+  ].filter(Boolean).join('\n');
+
+  const createdDocument = await prisma.documento.create({
+    data: {
+      processId: processRecord.id,
+      title,
+      description,
+      status: 'aguardando_validacao',
+      category: 'Peticao',
+      origin: 'interno',
+      responsible: getResponsibleLabel(decoded.email) || decoded.email,
+      requiredChecklist: false,
+      pendingForAdvance: false,
+      mimeType: 'application/octet-stream',
+      previewUrl: null,
+      createdBy: getResponsibleLabel(decoded.email) || decoded.email,
+    },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+    },
+  });
+
+  const usedAt = new Date();
+  await prisma.template.update({
+    where: { id: template.id },
+    data: { lastUsedAt: usedAt, updatedOn: usedAt },
+  });
+
+  res.status(201).json({
+    document: buildDocumentPayload(createdDocument),
+    templateLastUsedAt: usedAt.toISOString().slice(0, 10),
+  });
 });
 
 app.get('/tasks', async (req, res) => {
@@ -2429,7 +2628,24 @@ app.get('/processes/lookup', async (req, res) => {
     return res.json({
       found: true,
       alreadyRegistered: true,
+      source: 'registered',
       process: existing,
+    });
+  }
+
+  try {
+    const external = await lookupExternalProcess(number);
+    if (external) {
+      return res.json({
+        found: true,
+        alreadyRegistered: false,
+        source: 'external',
+        process: external,
+      });
+    }
+  } catch (error) {
+    return res.status(502).send({
+      message: (error as Error).message || 'Falha ao consultar a integração externa de processos',
     });
   }
 
@@ -2441,6 +2657,7 @@ app.get('/processes/lookup', async (req, res) => {
   return res.json({
     found: true,
     alreadyRegistered: false,
+    source: 'fallback',
     process: suggested,
   });
 });

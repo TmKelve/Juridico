@@ -277,11 +277,6 @@ function PieceTemplates({ user }: PieceTemplatesProps) {
     setSuccess('Nova versão criada.');
   }
 
-  async function markUsed(id: string) {
-    const nextDate = toIsoDate(new Date());
-    await syncTemplate(id, { usoRecente: nextDate });
-  }
-
   function openGenerateFlow(templateId?: string) {
     const template = templateId ? models.find((m) => m.id === templateId) : null;
     const defaultProcess = processes[0];
@@ -316,16 +311,38 @@ function PieceTemplates({ user }: PieceTemplatesProps) {
     setGeneration((prev) => ({ ...prev, step: Math.max(1, (prev.step - 1) as 1) as 1 | 2 | 3 | 4 }));
   }
 
-  function confirmGeneratePiece() {
+  async function confirmGeneratePiece() {
     const selectedModel = models.find((m) => m.id === generation.templateId);
-    if (selectedModel) {
-      void markUsed(selectedModel.id);
-      setSuccess(`Peça gerada a partir de ${selectedModel.nome}. Rascunho aberto no editor.`);
-      trackEvent('piece_generated_from_template', {
-        templateId: selectedModel.id,
-        processId: generation.processId,
-      });
+    const processId = Number(generation.processId);
+    if (!selectedModel || !processId) {
+      setError('Selecione um modelo e um processo antes de gerar a peça.');
+      return;
     }
+
+    const response = await api.generateTemplateDocument(selectedModel.id, {
+      processId,
+      title: generation.draftTitle,
+      fields: generation.fields,
+    });
+
+    if (response.status !== 201 || !response.data) {
+      setError(response.error || 'Não foi possível gerar a peça como documento.');
+      return;
+    }
+
+    setModels((prev) =>
+      prev.map((model) =>
+        model.id === selectedModel.id
+          ? { ...model, usoRecente: response.data?.templateLastUsedAt ?? model.usoRecente }
+          : model,
+      ),
+    );
+    setSuccess(`Peça gerada a partir de ${selectedModel.nome} e registrada em Documentos.`);
+    trackEvent('piece_generated_from_template', {
+      templateId: selectedModel.id,
+      processId: generation.processId,
+      documentId: response.data.document.id,
+    });
     closeGenerateFlow();
   }
 

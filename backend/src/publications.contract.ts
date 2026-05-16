@@ -11,6 +11,7 @@ type RawPublicationRecord = {
   requiresAction?: boolean | null;
   convertedToDeadline?: boolean | null;
   derivedDeadlineLabel?: string | null;
+  derivedDeadlineId?: number | null;
   notes?: string | null;
   read?: boolean | null;
   processId: number;
@@ -44,6 +45,7 @@ export function buildPublicationPayload(publication: RawPublicationRecord) {
     exigeAcao: Boolean(publication.requiresAction),
     convertidaEmPrazo: Boolean(publication.convertedToDeadline),
     prazoDerivedoLabel: publication.derivedDeadlineLabel ?? null,
+    derivedDeadlineId: publication.derivedDeadlineId ?? null,
     observacoes: publication.notes ?? '',
     lida: Boolean(publication.read),
   };

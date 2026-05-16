@@ -17,6 +17,7 @@ test('buildPublicationPayload composes publication data for the publicacoes scre
     requiresAction: true,
     convertedToDeadline: true,
     derivedDeadlineLabel: 'Prazo: 30/05/2026',
+    derivedDeadlineId: 22,
     notes: 'Priorizar triagem do conteúdo antes do retorno ao cliente.',
     read: true,
     processId: 7,
@@ -44,6 +45,7 @@ test('buildPublicationPayload composes publication data for the publicacoes scre
   assert.equal(payload.exigeAcao, true);
   assert.equal(payload.convertidaEmPrazo, true);
   assert.equal(payload.prazoDerivedoLabel, 'Prazo: 30/05/2026');
+  assert.equal(payload.derivedDeadlineId, 22);
   assert.equal(payload.observacoes, 'Priorizar triagem do conteúdo antes do retorno ao cliente.');
   assert.equal(payload.lida, true);
 });

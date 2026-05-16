@@ -31,6 +31,7 @@ export interface ApiProcess {
 export interface ApiProcessLookup {
   found: boolean;
   alreadyRegistered: boolean;
+  source?: 'registered' | 'external' | 'fallback';
   process: ApiProcess;
 }
 
@@ -197,6 +198,7 @@ export interface ApiPublication {
   exigeAcao: boolean;
   convertidaEmPrazo: boolean;
   prazoDerivedoLabel: string | null;
+  derivedDeadlineId: number | null;
   observacoes: string;
   lida: boolean;
 }
@@ -515,10 +517,24 @@ export const api = {
     exigeAcao: boolean;
     convertidaEmPrazo: boolean;
     prazoDerivedoLabel: string | null;
+    derivedDeadlineId: number | null;
     observacoes: string;
     lida: boolean;
   }>) =>
     apiClient<ApiPublication>(`/publications/${id}`, { method: 'PUT', body: data }),
+
+  createDeadlineFromPublication: (id: number, data?: Partial<{
+    title: string;
+    dueDate: string;
+    priority: ApiDeadline['priority'];
+    status: ApiDeadline['status'];
+    responsible: string;
+    notes: string;
+  }>) =>
+    apiClient<{ publication: ApiPublication; deadline: ApiDeadline }>(`/publications/${id}/create-deadline`, {
+      method: 'POST',
+      body: data ?? {},
+    }),
 
   getTemplates: () =>
     apiClient<ApiTemplate[]>('/templates'),
@@ -566,6 +582,16 @@ export const api = {
     versions: ApiTemplateVersion[];
   }>) =>
     apiClient<ApiTemplate>(`/templates/${id}`, { method: 'PUT', body: data }),
+
+  generateTemplateDocument: (id: string, data: {
+    processId: number;
+    title: string;
+    fields: Array<{ key: string; label: string; value: string }>;
+  }) =>
+    apiClient<{ document: ApiDocument; templateLastUsedAt: string }>(`/templates/${id}/generate-document`, {
+      method: 'POST',
+      body: data,
+    }),
 
   getAttendance: (id: number) =>
     apiClient<ApiAttendance>(`/attendances/${id}`),

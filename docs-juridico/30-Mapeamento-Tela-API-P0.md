@@ -55,10 +55,12 @@ Carteiras operacionais:
 - `GET /publications/:id`
 - `POST /publications`
 - `PUT /publications/:id`
+- `POST /publications/:id/create-deadline`
 - `GET /templates`
 - `GET /templates/:id`
 - `POST /templates`
 - `PUT /templates/:id`
+- `POST /templates/:id/generate-document`
 - `GET /attendances`
 - `GET /attendances/:id`
 - `POST /attendances`
@@ -145,6 +147,9 @@ Campos observados:
 - `dueDate`
 - `status`
 - `priority`
+- `origin`
+- `responsible`
+- `notes`
 
 Origem:
 
@@ -159,6 +164,9 @@ Campos observados:
 - `title`
 - `description`
 - `status`
+- `origin`
+- `category`
+- `version`
 
 Origem:
 
@@ -223,6 +231,54 @@ Campos observados:
 - `locationOrChannel`
 - `notes`
 - `origin`
+
+Origem:
+
+- direto da API
+
+### Publication
+
+Campos observados:
+
+- `id`
+- `processId`
+- `processLabel`
+- `processTitle`
+- `client`
+- `tipo`
+- `status`
+- `impacto`
+- `tribunal`
+- `origem`
+- `dataPublicacao`
+- `resumo`
+- `textoRelevante`
+- `exigeAcao`
+- `convertidaEmPrazo`
+- `prazoDerivedoLabel`
+- `derivedDeadlineId`
+
+Origem:
+
+- direto da API
+
+### Template
+
+Campos observados:
+
+- `id`
+- `nome`
+- `area`
+- `tipoPeca`
+- `status`
+- `oficial`
+- `favorito`
+- `autoFill`
+- `fase`
+- `autor`
+- `versao`
+- `ultimaAtualizacao`
+- `usoRecente`
 
 Origem:
 
@@ -438,6 +494,7 @@ Endpoints:
 - `GET /publications/:id`
 - `POST /publications`
 - `PUT /publications/:id`
+- `POST /publications/:id/create-deadline`
 
 Origem:
 
@@ -447,9 +504,9 @@ Persistencia:
 
 - `Publication` agora e entidade persistente autonoma
 
-Gap:
+Observacao:
 
-- a conversao em prazo ainda marca o workflow no modulo, mas nao cria um `Prazo` real automaticamente
+- a conversao em prazo agora cria `Prazo` real e devolve o vinculo derivado no contrato da publicacao
 
 ### Modelos De Pecas
 
@@ -459,18 +516,19 @@ Endpoints:
 - `GET /templates/:id`
 - `POST /templates`
 - `PUT /templates/:id`
+- `POST /templates/:id/generate-document`
 
 Origem:
 
-- direta da API, com fluxo de geracao ainda orquestrado no frontend
+- direta da API, com fluxo de geracao persistido via backend
 
 Persistencia:
 
 - `Template` agora e entidade persistente autonoma
 
-Gap:
+Observacao:
 
-- a geracao de peca ainda nao persiste rascunho final em entidade documental propria
+- a geracao de peca agora persiste artefato documental real em `Documento`
 
 ## 6. Classificacao De Maturidade Por Tela
 
@@ -491,9 +549,9 @@ Gap:
 
 ## 7. Conflitos E Gaps Reais
 
-- a geracao de pecas ainda nao grava um artefato documental proprio apos usar o template.
 - `Dashboard` ainda segue parcialmente dependente de `GET /processes` como fonte universal, o que cria acoplamento alto.
 - `GET /permissions` retorna apenas lista simples de strings, insuficiente para politica granular de producao.
+- o lookup de processo agora aceita integracao externa configuravel por ambiente, mas ainda depende da URL/token do provedor para operar fora do fallback local
 
 ## 8. Implicacao Para Postgres
 

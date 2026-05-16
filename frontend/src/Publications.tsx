@@ -100,8 +100,6 @@ const TIPO_LABEL: Record<PubTipo, string> = {
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-function toIsoDate(d: Date) { return d.toISOString().slice(0, 10); }
-
 function formatDate(iso: string) {
   return new Date(`${iso}T00:00:00`).toLocaleDateString('pt-BR');
 }
@@ -231,22 +229,21 @@ export function Publications({ user }: PublicationsProps) {
 
   async function convertToPrazo(id: number) {
     const pub = publications.find((p) => p.id === id);
-    const label = `Prazo: ${formatDate(toIsoDate(new Date(Date.now() + 15 * 86400000)))}`;
-    const response = await api.updatePublication(id, {
-      convertidaEmPrazo: true,
-      prazoDerivedoLabel: label,
-      status: 'em_analise',
-      lida: true,
-    });
-    if (response.status !== 200 || !response.data) {
+    const response = await api.createDeadlineFromPublication(id);
+    if (response.status !== 201 && response.status !== 200 || !response.data) {
       setError(response.error || 'Não foi possível converter a publicação em prazo.');
       return;
     }
-    setPublications((prev) => prev.map((p) => p.id === id ? response.data as PublicationItem : p));
+    const updatedPublication = response.data.publication as PublicationItem;
+    setPublications((prev) => prev.map((p) => p.id === id ? updatedPublication : p));
     if (selected?.id === id) await refreshSelected(id);
     setOpenMenuId(null);
-    trackEvent('pub_converted_prazo', { id, processId: pub?.processId ?? 0 });
-    setSuccess('Prazo criado a partir da publicação.');
+    trackEvent('pub_converted_prazo', {
+      id,
+      processId: pub?.processId ?? 0,
+      deadlineId: response.data.deadline?.id ?? 0,
+    });
+    setSuccess('Prazo criado a partir da publicação e vinculado ao processo.');
   }
 
   function createTask(id: number) {

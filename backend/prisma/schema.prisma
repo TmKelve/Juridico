@@ -72,6 +72,7 @@ model Publication {
   requiresAction    Boolean  @default(false)
   convertedToDeadline Boolean @default(false)
   derivedDeadlineLabel String?
+  derivedDeadlineId Int?
   notes             String?
   read              Boolean  @default(false)
   createdBy         String?
