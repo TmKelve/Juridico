@@ -390,6 +390,27 @@
   display: none;
 }
 
+.active-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.active-filter-chip {
+  min-height: 28px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--brand-200);
+  background: var(--brand-100);
+  color: var(--brand-700);
+  padding: 0 var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
 .filters-head {
   display: flex;
   align-items: flex-start;
@@ -723,6 +744,30 @@
   padding: 0 var(--space-2);
 }
 
+.density-toggle {
+  display: inline-flex;
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--white);
+}
+
+.density-toggle__btn {
+  min-height: 34px;
+  padding: 0 var(--space-3);
+  border: none;
+  background: transparent;
+  color: var(--neutral-600);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.density-toggle__btn.is-active {
+  background: var(--brand-100);
+  color: var(--brand-700);
+}
+
 .filter-chip-active {
   display: inline-flex;
   align-items: center;
@@ -798,6 +843,21 @@
 
 .my-processes-table td:last-child {
   border-right: none;
+}
+
+.my-processes-table--compact td {
+  padding: var(--space-2);
+}
+
+.my-processes-table--compact .process-primary strong,
+.my-processes-table--compact .process-meta-stack strong {
+  font-size: var(--font-size-xs);
+}
+
+.my-processes-table--compact .process-primary span,
+.my-processes-table--compact .process-primary small,
+.my-processes-table--compact .process-meta-stack span {
+  font-size: 11px;
 }
 
 .my-processes-table tbody tr {
@@ -1116,6 +1176,17 @@
   color: var(--neutral-600);
 }
 
+.kanban-column-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kanban-column-title-block small {
+  color: var(--neutral-500);
+  font-size: 11px;
+}
+
 .kanban-column-count {
   min-width: 26px;
   height: 26px;
@@ -1209,6 +1280,11 @@
   line-height: 1.35;
 }
 
+.kanban-card-context {
+  color: var(--neutral-500);
+  font-size: 11px;
+}
+
 .kanban-card-next-step {
   font-size: 11px;
   color: var(--neutral-600);
@@ -1218,11 +1294,17 @@
 .kanban-card-meta {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
 
-.kanban-card-meta time {
+.kanban-card-deadline {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kanban-card-deadline time {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
   color: var(--neutral-700);

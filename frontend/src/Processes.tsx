@@ -56,6 +56,7 @@ type SortField = 'nextDeadline' | 'priority' | 'lastMovement';
 type SortDirection = 'asc' | 'desc';
 type FilterPresetKey = 'critical_today' | 'stale_15' | 'pending_docs' | 'new_publications';
 type ProcessEntryMode = 'novo' | 'andamento';
+type DensityMode = 'comfortable' | 'compact';
 type KanbanStage =
   | 'aguardando_acao'
   | 'aguardando_documentos'
@@ -274,6 +275,7 @@ export function Processes({ user }: ProcessesProps) {
   const [sortBy, setSortBy] = useState<SortField>('nextDeadline');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [viewMode, setViewMode] = useState<ViewMode>('table');
+  const [densityMode, setDensityMode] = useState<DensityMode>('comfortable');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedProcess, setSelectedProcess] = useState<EnrichedProcess | null>(null);
   const [menuOpenId, setMenuOpenId] = useState<number | null>(null);
@@ -696,6 +698,22 @@ export function Processes({ user }: ProcessesProps) {
       filters.staleDays !== '';
   }, [filters]);
 
+  const activeFilterChips = useMemo(() => {
+    const chips: Array<{ key: string; label: string; clear: () => void }> = [];
+
+    if (filters.area) chips.push({ key: 'area', label: `Área: ${filters.area}`, clear: () => updateFilter('area', '') });
+    if (filters.phase) chips.push({ key: 'phase', label: `Fase: ${filters.phase}`, clear: () => updateFilter('phase', '') });
+    if (filters.tribunal) chips.push({ key: 'tribunal', label: `Tribunal: ${filters.tribunal}`, clear: () => updateFilter('tribunal', '') });
+    if (filters.priority) chips.push({ key: 'priority', label: `Prioridade: ${filters.priority}`, clear: () => updateFilter('priority', '') });
+    if (filters.status) chips.push({ key: 'status', label: `Situação: ${filters.status}`, clear: () => updateFilter('status', '') });
+    if (filters.prazo !== 'todos') chips.push({ key: 'prazo', label: `Prazo: ${filters.prazo}`, clear: () => updateFilter('prazo', 'todos') });
+    if (filters.staleDays) chips.push({ key: 'stale', label: `Sem atualização: ${filters.staleDays}d`, clear: () => updateFilter('staleDays', '') });
+    if (filters.pendingDocsOnly) chips.push({ key: 'docs', label: 'Com pendências', clear: () => updateFilter('pendingDocsOnly', false) });
+    if (filters.newPublicationOnly) chips.push({ key: 'publications', label: 'Publicação nova', clear: () => updateFilter('newPublicationOnly', false) });
+
+    return chips;
+  }, [filters]);
+
   const activePresetMap = useMemo<Record<FilterPresetKey, boolean>>(() => ({
     critical_today: filters.prazo === 'hoje' && filters.priority === 'alta' && filters.query === '' && filters.area === '' && filters.phase === '' && filters.tribunal === '' && filters.status === '' && !filters.pendingDocsOnly && !filters.newPublicationOnly && filters.staleDays === '',
     stale_15: filters.staleDays === '15' && filters.query === '' && filters.area === '' && filters.phase === '' && filters.tribunal === '' && filters.priority === '' && filters.status === '' && filters.prazo === 'todos' && !filters.pendingDocsOnly && !filters.newPublicationOnly,
@@ -1105,6 +1123,17 @@ export function Processes({ user }: ProcessesProps) {
           </label>
         </div>
 
+        {activeFilterChips.length > 0 && (
+          <div className="active-filter-chips" aria-label="Filtros ativos">
+            {activeFilterChips.map((chip) => (
+              <button key={chip.key} type="button" className="active-filter-chip" onClick={chip.clear}>
+                {chip.label}
+                <X size={12} aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="filters-bottom-row filter-row-card">
           <label htmlFor="filter-priority" className="filter-field filter-cascade-item"><span>Prioridade</span><select id="filter-priority" value={filters.priority} onChange={(event) => updateFilter('priority', event.target.value)}><option value="">Todas</option><option value="alta">Alta</option><option value="media">Media</option><option value="baixa">Baixa</option></select></label>
           <label htmlFor="filter-status" className="filter-field filter-cascade-item"><span>Status operacional</span><select id="filter-status" value={filters.status} onChange={(event) => updateFilter('status', event.target.value)}><option value="">Todos</option>{KANBAN_COLUMNS.map((column) => (<option key={column.key} value={column.key}>{column.label}</option>))}</select></label>
@@ -1153,6 +1182,14 @@ export function Processes({ user }: ProcessesProps) {
               <span>processo(s) na carteira atual</span>
             </div>
             <div className="processes-table-controls">
+              <div className="density-toggle" role="group" aria-label="Densidade da tabela">
+                <button type="button" className={`density-toggle__btn${densityMode === 'comfortable' ? ' is-active' : ''}`} onClick={() => setDensityMode('comfortable')}>
+                  Confortável
+                </button>
+                <button type="button" className={`density-toggle__btn${densityMode === 'compact' ? ' is-active' : ''}`} onClick={() => setDensityMode('compact')}>
+                  Compacta
+                </button>
+              </div>
               <label htmlFor="filter-sort">
                 Ordenação
                 <select id="filter-sort" value={sortBy} onChange={(event) => setSortBy(event.target.value as SortField)}>
@@ -1167,7 +1204,7 @@ export function Processes({ user }: ProcessesProps) {
               </button>
             </div>
           </div>
-          <table className="my-processes-table">
+          <table className={`my-processes-table my-processes-table--${densityMode}`}>
             <thead>
               <tr>
                 <th scope="col">Processo</th>
@@ -1292,7 +1329,10 @@ export function Processes({ user }: ProcessesProps) {
           {KANBAN_COLUMNS.map((column) => (
             <article key={column.key} className="kanban-column" data-stage={column.key}>
               <header className="kanban-column-head">
-                <h3>{column.label}</h3>
+                <div className="kanban-column-title-block">
+                  <h3>{column.label}</h3>
+                  <small>{kanbanGroups[column.key].length === 0 ? 'Sem processos' : `${kanbanGroups[column.key].length} em acompanhamento`}</small>
+                </div>
                 <span className="kanban-column-count">{kanbanGroups[column.key].length}</span>
               </header>
               <div className="kanban-cards">
@@ -1313,9 +1353,14 @@ export function Processes({ user }: ProcessesProps) {
                       <strong className="kanban-card-client">{process.client}</strong>
                     </div>
                     <p className="kanban-card-matter">{process.title}</p>
+                    <small className="kanban-card-context">{process.area} · {process.phase}</small>
                     <div className="kanban-card-meta">
+                      {renderStatusBadge(process.operationalStatus)}
                       {renderPriorityBadge(process.priority)}
+                    </div>
+                    <div className="kanban-card-deadline">
                       <time dateTime={process.nextDeadlineAt.toISOString()}>{formatDate(process.nextDeadlineAt)}</time>
+                      <span className={`deadline-context deadline-context--${formatDueContext(process.nextDeadlineAt).tone}`}>{formatDueContext(process.nextDeadlineAt).label}</span>
                     </div>
                     <small className="kanban-card-next-step">{process.nextStep}</small>
                   </button>
