@@ -55,6 +55,10 @@ Carteiras operacionais:
 - `GET /publications/:id`
 - `POST /publications`
 - `PUT /publications/:id`
+- `GET /templates`
+- `GET /templates/:id`
+- `POST /templates`
+- `PUT /templates/:id`
 - `GET /attendances`
 - `GET /attendances/:id`
 - `POST /attendances`
@@ -449,17 +453,24 @@ Gap:
 
 ### Modelos De Pecas
 
-Endpoint consumido hoje:
+Endpoints:
 
-- `GET /processes`
+- `GET /templates`
+- `GET /templates/:id`
+- `POST /templates`
+- `PUT /templates/:id`
 
 Origem:
 
-- parcialmente simulada/derivada no frontend
+- direta da API, com fluxo de geracao ainda orquestrado no frontend
+
+Persistencia:
+
+- `Template` agora e entidade persistente autonoma
 
 Gap:
 
-- nao existe entidade nem endpoint dedicados
+- a geracao de peca ainda nao persiste rascunho final em entidade documental propria
 
 ## 6. Classificacao De Maturidade Por Tela
 
@@ -476,12 +487,11 @@ Gap:
 
 ### Telas ainda sustentadas por derivacao local
 
-- Modelos de Pecas
+- nenhuma tela P0 permanece sustentada apenas por derivacao local
 
 ## 7. Conflitos E Gaps Reais
 
-- O frontend ainda nao possui entidade dedicada para `Modelos de Pecas`.
-- `Modelos de Pecas` ainda nao possui tabela ou endpoint dedicados.
+- a geracao de pecas ainda nao grava um artefato documental proprio apos usar o template.
 - `Dashboard` ainda segue parcialmente dependente de `GET /processes` como fonte universal, o que cria acoplamento alto.
 - `GET /permissions` retorna apenas lista simples de strings, insuficiente para politica granular de producao.
 
@@ -496,8 +506,7 @@ Grupo A - migracao estrutural sem ampliar dominio:
 
 Grupo B - evolucao de contrato:
 
-- criar entidades reais para `Client`, `Task`, `Publication`, `Template`
-- `Publication` ja foi promovida a entidade real; permanece pendente apenas `Template`
+- `Client`, `Task`, `Publication` e `Template` ja foram promovidas a entidades reais
 - criar endpoints dedicados por modulo
 
 Recomendacao:
@@ -535,4 +544,4 @@ Evidencia observada em 12/05/2026:
 1. Escolher um schema Prisma soberano.
 2. Congelar o dominio atual do Grupo A.
 3. Criar plano de migracao SQLite -> Postgres sem ampliar entidades.
-4. Em paralelo, abrir backlog de contrato dedicado para `Modelos de Pecas`.
+4. Em paralelo, abrir backlog para o artefato final de peça gerada e seu versionamento documental.

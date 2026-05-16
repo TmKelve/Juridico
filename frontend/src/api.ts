@@ -201,6 +201,37 @@ export interface ApiPublication {
   lida: boolean;
 }
 
+export interface ApiTemplateVersion {
+  id: string;
+  version: string;
+  author: string;
+  date: string;
+  description: string;
+  current: boolean;
+}
+
+export interface ApiTemplate {
+  id: string;
+  nome: string;
+  area: string;
+  tipoPeca: string;
+  status: 'ativo' | 'revisao' | 'rascunho' | 'arquivado';
+  oficial: boolean;
+  favorito: boolean;
+  autoFill: boolean;
+  fase: string;
+  autor: string;
+  versao: string;
+  ultimaAtualizacao: string;
+  usoRecente: string | null;
+  precisaRevisao: boolean;
+  descricao: string;
+  tags: string[];
+  placeholders: string[];
+  preview: string;
+  versions: ApiTemplateVersion[];
+}
+
 interface LoginResponse {
   user: ApiUser;
 }
@@ -488,6 +519,53 @@ export const api = {
     lida: boolean;
   }>) =>
     apiClient<ApiPublication>(`/publications/${id}`, { method: 'PUT', body: data }),
+
+  getTemplates: () =>
+    apiClient<ApiTemplate[]>('/templates'),
+
+  getTemplate: (id: string) =>
+    apiClient<ApiTemplate>(`/templates/${id}`),
+
+  createTemplate: (data: {
+    nome: string;
+    area: string;
+    tipoPeca: string;
+    status?: ApiTemplate['status'];
+    oficial?: boolean;
+    favorito?: boolean;
+    autoFill?: boolean;
+    fase: string;
+    autor?: string;
+    versao?: string;
+    precisaRevisao?: boolean;
+    descricao: string;
+    tags: string[];
+    placeholders: string[];
+    preview: string;
+    versions: ApiTemplateVersion[];
+  }) =>
+    apiClient<ApiTemplate>('/templates', { method: 'POST', body: data }),
+
+  updateTemplate: (id: string, data: Partial<{
+    nome: string;
+    area: string;
+    tipoPeca: string;
+    status: ApiTemplate['status'];
+    oficial: boolean;
+    favorito: boolean;
+    autoFill: boolean;
+    fase: string;
+    autor: string;
+    versao: string;
+    usoRecente: string | null;
+    precisaRevisao: boolean;
+    descricao: string;
+    tags: string[];
+    placeholders: string[];
+    preview: string;
+    versions: ApiTemplateVersion[];
+  }>) =>
+    apiClient<ApiTemplate>(`/templates/${id}`, { method: 'PUT', body: data }),
 
   getAttendance: (id: number) =>
     apiClient<ApiAttendance>(`/attendances/${id}`),

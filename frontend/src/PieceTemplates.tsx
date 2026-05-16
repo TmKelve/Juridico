@@ -22,7 +22,7 @@ import {
   WandSparkles,
   X,
 } from 'lucide-react';
-import { api } from './api';
+import { api, type ApiProcess, type ApiTemplate } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import { ProcessCombobox } from './ProcessCombobox';
 import './PieceTemplates.css';
@@ -31,50 +31,11 @@ interface PieceTemplatesProps {
   user: { id: number; email: string; role: string };
 }
 
-interface ProcessRecord {
-  id: number;
-  title: string;
-  client: string;
-  phase: string;
-  status: string;
-  ownerId: number;
-  owner?: { id: number; email: string; role: string };
-}
-
 type TemplateStatus = 'ativo' | 'revisao' | 'rascunho' | 'arquivado';
 type ViewMode = 'lista' | 'cards';
 type SortField = 'nome' | 'atualizacao' | 'versao' | 'uso';
 
-interface VersionEntry {
-  id: string;
-  version: string;
-  author: string;
-  date: string;
-  description: string;
-  current: boolean;
-}
-
-interface TemplateModel {
-  id: string;
-  nome: string;
-  area: string;
-  tipoPeca: string;
-  status: TemplateStatus;
-  oficial: boolean;
-  favorito: boolean;
-  autoFill: boolean;
-  fase: string;
-  autor: string;
-  versao: string;
-  ultimaAtualizacao: string;
-  usoRecente: string | null;
-  precisaRevisao: boolean;
-  descricao: string;
-  tags: string[];
-  placeholders: string[];
-  preview: string;
-  versions: VersionEntry[];
-}
+type TemplateModel = ApiTemplate;
 
 interface TemplateFilters {
   query: string;
@@ -102,8 +63,6 @@ interface GenerationState {
 const AREAS = ['Trabalhista', 'Cível', 'Tributário', 'Empresarial', 'Previdenciário'];
 const TIPOS = ['Petição Inicial', 'Contestação', 'Réplica', 'Recurso', 'Embargos', 'Manifestação', 'Parecer'];
 const FASES = ['Conhecimento', 'Saneamento', 'Instrução', 'Recursal', 'Execução'];
-const TAGS = ['urgente', 'cliente-pj', 'audiência', 'custas', 'acordo', 'recurso', 'provas'];
-
 const STATUS_CFG: Record<TemplateStatus, { label: string; variant: string }> = {
   ativo: { label: 'Ativo', variant: 'success' },
   revisao: { label: 'Revisão', variant: 'warning' },
@@ -128,12 +87,6 @@ function toIsoDate(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
-function addDays(d: Date, n: number) {
-  const result = new Date(d);
-  result.setDate(result.getDate() + n);
-  return result;
-}
-
 function formatDate(iso: string) {
   return new Date(`${iso}T00:00:00`).toLocaleDateString('pt-BR');
 }
@@ -146,83 +99,6 @@ function formatRelative(iso: string | null): string {
   if (diff < 7) return `${diff} dias`;
   if (diff < 30) return `${Math.floor(diff / 7)} sem`;
   return formatDate(iso);
-}
-
-function buildPreview(nome: string, tipo: string): string {
-  return `${tipo}: ${nome}\n\nExcelentíssimo(a) Senhor(a) Doutor(a) Juiz(a) de Direito da {{vara}}\n\nProcesso nº {{numero_processo}}\n\n{{nome_cliente}}, já qualificado(a), por seu advogado, vem respeitosamente apresentar {{tipo_peca}} em face de {{parte_contraria}}.\n\nI. Síntese\n{{resumo_fatos}}\n\nII. Fundamentos\n{{fundamentacao}}\n\nIII. Pedidos\n{{pedidos}}\n\nTermos em que,\nPede deferimento.`;
-}
-
-function makeTemplates(processes: ProcessRecord[], userEmail: string): TemplateModel[] {
-  const base = new Date();
-  const author = userEmail.split('@')[0];
-
-  return Array.from({ length: 24 }).map((_, idx) => {
-    const area = AREAS[idx % AREAS.length];
-    const tipoPeca = TIPOS[idx % TIPOS.length];
-    const fase = FASES[idx % FASES.length];
-    const official = idx % 3 !== 0;
-    const statusList: TemplateStatus[] = ['ativo', 'ativo', 'revisao', 'rascunho', 'arquivado'];
-    const status = statusList[idx % statusList.length];
-    const version = `v${1 + Math.floor(idx / 4)}.${idx % 5}`;
-    const updatedAt = toIsoDate(addDays(base, -((idx * 3) % 90)));
-    const usedAt = idx % 4 === 0 ? toIsoDate(addDays(base, -((idx * 2) % 20))) : null;
-    const autoFill = idx % 5 !== 0;
-
-    const process = processes[idx % Math.max(1, processes.length)];
-    const nome = `${tipoPeca} — ${area}${process ? ` (${process.phase})` : ''}`;
-
-    const placeholders = [
-      'vara',
-      'numero_processo',
-      'nome_cliente',
-      'tipo_peca',
-      'parte_contraria',
-      'resumo_fatos',
-      'fundamentacao',
-      'pedidos',
-    ].slice(0, 5 + (idx % 4));
-
-    const versions: VersionEntry[] = [
-      {
-        id: `${idx}-v2`,
-        version,
-        author,
-        date: updatedAt,
-        description: 'Ajustes de fundamentação e atualização de precedentes recentes.',
-        current: true,
-      },
-      {
-        id: `${idx}-v1`,
-        version: `v${Math.max(1, Math.floor(idx / 4))}.${Math.max(0, (idx % 5) - 1)}`,
-        author,
-        date: toIsoDate(addDays(base, -((idx * 3) % 90) - 14)),
-        description: 'Estrutura inicial do modelo com cabeçalho padrão.',
-        current: false,
-      },
-    ];
-
-    return {
-      id: `tpl-${idx + 1}`,
-      nome,
-      area,
-      tipoPeca,
-      status,
-      oficial: official,
-      favorito: idx % 6 === 0,
-      autoFill,
-      fase,
-      autor: author,
-      versao: version,
-      ultimaAtualizacao: updatedAt,
-      usoRecente: usedAt,
-      precisaRevisao: status === 'revisao' || idx % 7 === 0,
-      descricao: `Modelo ${tipoPeca.toLowerCase()} para fase ${fase.toLowerCase()}, com linguagem institucional e checkpoints de validação jurídica.`,
-      tags: [TAGS[idx % TAGS.length], TAGS[(idx + 2) % TAGS.length], area.toLowerCase()].slice(0, 2 + (idx % 2)),
-      placeholders,
-      preview: buildPreview(nome, tipoPeca),
-      versions,
-    };
-  });
 }
 
 function StatusBadge({ status }: { status: TemplateStatus }) {
@@ -241,7 +117,7 @@ function AutoFillBadge({ enabled }: { enabled: boolean }) {
 
 function PieceTemplates({ user }: PieceTemplatesProps) {
   const [models, setModels] = useState<TemplateModel[]>([]);
-  const [processes, setProcesses] = useState<ProcessRecord[]>([]);
+  const [processes, setProcesses] = useState<ApiProcess[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -264,7 +140,6 @@ function PieceTemplates({ user }: PieceTemplatesProps) {
     fields: [],
   });
 
-  const isAdv = user.role === 'ADV';
   const PER_PAGE = 12;
 
   useEffect(() => {
@@ -287,19 +162,14 @@ function PieceTemplates({ user }: PieceTemplatesProps) {
     setLoading(true);
     setError('');
     try {
-      const res = await api.getProcesses();
-      if (res.status !== 200 || !Array.isArray(res.data)) {
-        setError(res.error || 'Não foi possível carregar modelos de peças.');
-        setLoading(false);
+      const [processRes, templateRes] = await Promise.all([api.getProcesses(), api.getTemplates()]);
+      if (processRes.status !== 200 || !Array.isArray(processRes.data) || templateRes.status !== 200 || !Array.isArray(templateRes.data)) {
+        setError(processRes.error || templateRes.error || 'Não foi possível carregar modelos de peças.');
         return;
       }
-      const scoped = isAdv
-        ? (res.data as ProcessRecord[]).filter((p) => p.ownerId === user.id)
-        : (res.data as ProcessRecord[]);
-      setProcesses(scoped);
-      const mapped = makeTemplates(scoped, user.email);
-      setModels(mapped);
-      trackEvent('templates_loaded', { count: mapped.length });
+      setProcesses(processRes.data as ApiProcess[]);
+      setModels(templateRes.data as TemplateModel[]);
+      trackEvent('templates_loaded', { count: (templateRes.data as TemplateModel[]).length });
     } catch (err) {
       setError((err as Error).message || 'Erro ao carregar modelos.');
       captureException(err as Error, { context: 'loadTemplates' });
@@ -322,64 +192,94 @@ function PieceTemplates({ user }: PieceTemplatesProps) {
     setSuccess('Filtro salvo.');
   }
 
-  function toggleFavorite(id: string) {
-    setModels((prev) => prev.map((m) => (m.id === id ? { ...m, favorito: !m.favorito } : m)));
-    if (selected?.id === id) {
-      setSelected((prev) => (prev ? { ...prev, favorito: !prev.favorito } : null));
+  async function syncTemplate(id: string, data: Partial<ApiTemplate>) {
+    const response = await api.updateTemplate(id, data);
+    if (response.status !== 200 || !response.data) {
+      setError(response.error || 'Não foi possível atualizar o modelo.');
+      return null;
     }
+    const updated = response.data as TemplateModel;
+    setModels((prev) => prev.map((m) => (m.id === id ? updated : m)));
+    if (selected?.id === id) setSelected(updated);
+    return updated;
+  }
+
+  async function toggleFavorite(id: string) {
+    const model = models.find((m) => m.id === id);
+    if (!model) return;
+    await syncTemplate(id, { favorito: !model.favorito });
     setOpenMenuId(null);
   }
 
-  function duplicateTemplate(id: string) {
+  async function duplicateTemplate(id: string) {
     const model = models.find((m) => m.id === id);
     if (!model) return;
-    const clone: TemplateModel = {
-      ...model,
-      id: `tpl-clone-${Date.now()}`,
+    const response = await api.createTemplate({
       nome: `${model.nome} (Cópia)`,
+      area: model.area,
+      tipoPeca: model.tipoPeca,
       status: 'rascunho',
       oficial: false,
+      favorito: false,
+      autoFill: model.autoFill,
+      fase: model.fase,
+      autor: user.email.split('@')[0],
       versao: 'v1.0',
-      ultimaAtualizacao: toIsoDate(new Date()),
-      usoRecente: null,
-    };
-    setModels((prev) => [clone, ...prev]);
+      precisaRevisao: true,
+      descricao: model.descricao,
+      tags: model.tags,
+      placeholders: model.placeholders,
+      preview: model.preview,
+      versions: [
+        {
+          id: `dup-${Date.now()}`,
+          version: 'v1.0',
+          author: user.email.split('@')[0],
+          date: toIsoDate(new Date()),
+          description: 'Cópia criada a partir de modelo existente.',
+          current: true,
+        },
+      ],
+    });
+    if (response.status !== 201 || !response.data) {
+      setError(response.error || 'Não foi possível duplicar o modelo.');
+      return;
+    }
+    setModels((prev) => [response.data as TemplateModel, ...prev]);
+    setSelected(response.data as TemplateModel);
     setOpenMenuId(null);
     setSuccess('Modelo duplicado.');
   }
 
-  function createNewVersion(id: string) {
-    setModels((prev) =>
-      prev.map((m) => {
-        if (m.id !== id) return m;
-        const [major, minor] = m.versao.replace('v', '').split('.').map((n) => Number(n));
-        const nextVersion = `v${major}.${(minor || 0) + 1}`;
-        const nextDate = toIsoDate(new Date());
-        const newHistory = m.versions.map((v) => ({ ...v, current: false }));
-        newHistory.unshift({
-          id: `${id}-${Date.now()}`,
-          version: nextVersion,
-          author: user.email.split('@')[0],
-          date: nextDate,
-          description: 'Nova versão gerada com atualização de estrutura e placeholders.',
-          current: true,
-        });
-        return {
-          ...m,
-          versao: nextVersion,
-          ultimaAtualizacao: nextDate,
-          status: 'revisao',
-          precisaRevisao: true,
-          versions: newHistory,
-        };
-      })
-    );
+  async function createNewVersion(id: string) {
+    const model = models.find((m) => m.id === id);
+    if (!model) return;
+    const [major, minor] = model.versao.replace('v', '').split('.').map((n) => Number(n));
+    const nextVersion = `v${major}.${(minor || 0) + 1}`;
+    const nextDate = toIsoDate(new Date());
+    const newHistory = model.versions.map((v) => ({ ...v, current: false }));
+    newHistory.unshift({
+      id: `${id}-${Date.now()}`,
+      version: nextVersion,
+      author: user.email.split('@')[0],
+      date: nextDate,
+      description: 'Nova versão gerada com atualização de estrutura e placeholders.',
+      current: true,
+    });
+    await syncTemplate(id, {
+      versao: nextVersion,
+      ultimaAtualizacao: nextDate,
+      status: 'revisao',
+      precisaRevisao: true,
+      versions: newHistory,
+    });
     setOpenMenuId(null);
     setSuccess('Nova versão criada.');
   }
 
-  function markUsed(id: string) {
-    setModels((prev) => prev.map((m) => (m.id === id ? { ...m, usoRecente: toIsoDate(new Date()) } : m)));
+  async function markUsed(id: string) {
+    const nextDate = toIsoDate(new Date());
+    await syncTemplate(id, { usoRecente: nextDate });
   }
 
   function openGenerateFlow(templateId?: string) {
@@ -419,7 +319,7 @@ function PieceTemplates({ user }: PieceTemplatesProps) {
   function confirmGeneratePiece() {
     const selectedModel = models.find((m) => m.id === generation.templateId);
     if (selectedModel) {
-      markUsed(selectedModel.id);
+      void markUsed(selectedModel.id);
       setSuccess(`Peça gerada a partir de ${selectedModel.nome}. Rascunho aberto no editor.`);
       trackEvent('piece_generated_from_template', {
         templateId: selectedModel.id,

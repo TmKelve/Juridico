@@ -8,6 +8,7 @@ import { buildDeadlinePayload } from './deadlines.contract';
 import { buildDocumentPayload } from './documents.contract';
 import { buildPublicationPayload } from './publications.contract';
 import { buildTaskPayload } from './tasks.contract';
+import { buildTemplatePayload } from './templates.contract';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -59,6 +60,10 @@ const publicationSeedTexts = [
   'ACORDAM os Desembargadores em negar provimento ao recurso.',
   'Cite-se por edital ante a ausência de localização da parte ré.',
 ] as const;
+const templateSeedAreas = ['Trabalhista', 'Cível', 'Tributário', 'Empresarial', 'Previdenciário'] as const;
+const templateSeedTypes = ['Petição Inicial', 'Contestação', 'Réplica', 'Recurso', 'Embargos', 'Manifestação', 'Parecer'] as const;
+const templateSeedPhases = ['Conhecimento', 'Saneamento', 'Instrução', 'Recursal', 'Execução'] as const;
+const templateSeedTags = ['urgente', 'cliente-pj', 'audiência', 'custas', 'acordo', 'recurso', 'provas'] as const;
 
 function buildAllowedOrigins(primaryOrigin: string) {
   const allowed = new Set([primaryOrigin]);
@@ -570,6 +575,69 @@ async function seedData() {
     }
   }
 
+  const templateCount = await prisma.template.count();
+  if (templateCount === 0) {
+    const authors = ['advogado', 'admin', 'financeiro'];
+
+    for (let index = 0; index < 16; index += 1) {
+      const area = templateSeedAreas[index % templateSeedAreas.length];
+      const pieceType = templateSeedTypes[index % templateSeedTypes.length];
+      const phase = templateSeedPhases[index % templateSeedPhases.length];
+      const author = authors[index % authors.length];
+      const status = ['ativo', 'ativo', 'revisao', 'rascunho', 'arquivado'][index % 5];
+      const version = `v${1 + Math.floor(index / 4)}.${index % 4}`;
+      const updatedOn = new Date();
+      updatedOn.setDate(updatedOn.getDate() - (index * 3));
+      const lastUsedAt = index % 4 === 0 ? new Date(Date.now() - (index + 2) * 86400000) : null;
+      const placeholders = ['vara', 'numero_processo', 'nome_cliente', 'parte_contraria', 'fundamentacao', 'pedidos'].slice(0, 4 + (index % 3));
+      const tags = [templateSeedTags[index % templateSeedTags.length], templateSeedTags[(index + 2) % templateSeedTags.length], area.toLowerCase()].slice(0, 2 + (index % 2));
+      const name = `${pieceType} — ${area} (${phase})`;
+      const preview = `${pieceType}: ${name}\n\nExcelentíssimo(a) Senhor(a) Doutor(a) Juiz(a) de Direito da {{vara}}\n\nProcesso nº {{numero_processo}}\n\n{{nome_cliente}}, já qualificado(a), apresenta ${pieceType.toLowerCase()} em face de {{parte_contraria}}.`;
+      const versionsJson = [
+        {
+          id: `${index + 1}-v2`,
+          version,
+          author,
+          date: updatedOn.toISOString().slice(0, 10),
+          description: 'Ajustes de fundamentação e atualização de precedentes recentes.',
+          current: true,
+        },
+        {
+          id: `${index + 1}-v1`,
+          version: `v${Math.max(1, Math.floor(index / 4))}.${Math.max(0, (index % 4) - 1)}`,
+          author,
+          date: new Date(updatedOn.getTime() - 14 * 86400000).toISOString().slice(0, 10),
+          description: 'Estrutura inicial do modelo com cabeçalho padrão.',
+          current: false,
+        },
+      ];
+
+      await prisma.template.create({
+        data: {
+          name,
+          legalArea: area,
+          pieceType,
+          status,
+          official: index % 3 !== 0,
+          favorite: index % 6 === 0,
+          autoFill: index % 5 !== 0,
+          phase,
+          author,
+          version,
+          updatedOn,
+          lastUsedAt,
+          needsReview: status === 'revisao' || index % 7 === 0,
+          description: `Modelo ${pieceType.toLowerCase()} para fase ${phase.toLowerCase()}, com linguagem institucional e checkpoints de validação jurídica.`,
+          tags,
+          placeholders,
+          preview,
+          versionsJson,
+          createdBy: author,
+        },
+      });
+    }
+  }
+
   const agendaCount = await prisma.agendaEvent.count();
   if (agendaCount === 0) {
     const seededProcesses = await prisma.process.findMany({
@@ -825,6 +893,15 @@ function canReadPublication(user: UserToken, publication: {
     user.role === 'FIN' ||
     publication.createdBy === getResponsibleLabel(user.email) ||
     (publication.process ? canReadProcess(user, publication.process) : false)
+  );
+}
+
+function canReadTemplate(user: UserToken, template: { createdBy?: string | null; official?: boolean | null }) {
+  return (
+    user.role === 'ADM' ||
+    user.role === 'FIN' ||
+    template.createdBy === getResponsibleLabel(user.email) ||
+    Boolean(template.official)
   );
 }
 
@@ -1708,6 +1785,133 @@ app.put('/publications/:id', async (req, res) => {
   });
 
   res.json(buildPublicationPayload(updated));
+});
+
+app.get('/templates', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const templates = await prisma.template.findMany({
+    where: decoded.role === 'ADM' || decoded.role === 'FIN'
+      ? undefined
+      : {
+          OR: [
+            { official: true },
+            { createdBy: getResponsibleLabel(decoded.email) ?? decoded.email },
+          ],
+        },
+    orderBy: [
+      { updatedOn: 'desc' },
+      { createdAt: 'desc' },
+    ],
+  });
+
+  res.json(templates.map((template) => buildTemplatePayload(template)));
+});
+
+app.get('/templates/:id', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const template = await prisma.template.findUnique({
+    where: { id: Number(req.params.id) },
+  });
+
+  if (!template) return res.status(404).send({ message: 'Modelo não encontrado' });
+  if (!canReadTemplate(decoded, template)) return res.status(403).send({ message: 'Acesso negado' });
+
+  res.json(buildTemplatePayload(template));
+});
+
+app.post('/templates', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const {
+    nome,
+    area,
+    tipoPeca,
+    status,
+    oficial,
+    favorito,
+    autoFill,
+    fase,
+    autor,
+    versao,
+    precisaRevisao,
+    descricao,
+    tags,
+    placeholders,
+    preview,
+    versions,
+  } = req.body;
+
+  if (!nome || !area || !tipoPeca || !fase || !descricao || !preview) {
+    return res.status(400).send({ message: 'Dados incompletos para o modelo' });
+  }
+
+  const created = await prisma.template.create({
+    data: {
+      name: nome.trim(),
+      legalArea: area.trim(),
+      pieceType: tipoPeca.trim(),
+      status: status || 'rascunho',
+      official: Boolean(oficial),
+      favorite: Boolean(favorito),
+      autoFill: Boolean(autoFill),
+      phase: fase.trim(),
+      author: typeof autor === 'string' && autor.trim() ? autor.trim() : getResponsibleLabel(decoded.email) ?? decoded.email,
+      version: typeof versao === 'string' && versao.trim() ? versao.trim() : 'v1.0',
+      updatedOn: new Date(),
+      needsReview: Boolean(precisaRevisao),
+      description: descricao.trim(),
+      tags: Array.isArray(tags) ? tags : [],
+      placeholders: Array.isArray(placeholders) ? placeholders : [],
+      preview: preview.trim(),
+      versionsJson: Array.isArray(versions) ? versions : [],
+      createdBy: getResponsibleLabel(decoded.email) ?? decoded.email,
+    },
+  });
+
+  res.status(201).json(buildTemplatePayload(created));
+});
+
+app.put('/templates/:id', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const current = await prisma.template.findUnique({
+    where: { id: Number(req.params.id) },
+  });
+
+  if (!current) return res.status(404).send({ message: 'Modelo não encontrado' });
+  if (!canReadTemplate(decoded, current)) return res.status(403).send({ message: 'Acesso negado' });
+
+  const updated = await prisma.template.update({
+    where: { id: current.id },
+    data: {
+      name: req.body.nome === undefined ? current.name : String(req.body.nome).trim(),
+      legalArea: req.body.area === undefined ? current.legalArea : String(req.body.area).trim(),
+      pieceType: req.body.tipoPeca === undefined ? current.pieceType : String(req.body.tipoPeca).trim(),
+      status: req.body.status ?? current.status,
+      official: req.body.oficial ?? current.official,
+      favorite: req.body.favorito ?? current.favorite,
+      autoFill: req.body.autoFill ?? current.autoFill,
+      phase: req.body.fase === undefined ? current.phase : String(req.body.fase).trim(),
+      author: req.body.autor === undefined ? current.author : String(req.body.autor).trim(),
+      version: req.body.versao === undefined ? current.version : String(req.body.versao).trim(),
+      updatedOn: new Date(),
+      lastUsedAt: req.body.usoRecente ? new Date(`${req.body.usoRecente}T00:00:00`) : req.body.usoRecente === null ? null : current.lastUsedAt,
+      needsReview: req.body.precisaRevisao ?? current.needsReview,
+      description: req.body.descricao === undefined ? current.description : String(req.body.descricao).trim(),
+      tags: Array.isArray(req.body.tags) ? req.body.tags : current.tags,
+      placeholders: Array.isArray(req.body.placeholders) ? req.body.placeholders : current.placeholders,
+      preview: req.body.preview === undefined ? current.preview : String(req.body.preview),
+      versionsJson: Array.isArray(req.body.versions) ? req.body.versions : current.versionsJson,
+    },
+  });
+
+  res.json(buildTemplatePayload(updated));
 });
 
 app.get('/tasks', async (req, res) => {

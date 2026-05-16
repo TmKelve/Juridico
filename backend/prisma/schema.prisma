@@ -202,3 +202,28 @@ model AgendaEvent {
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 }
+
+model Template {
+  id               Int      @id @default(autoincrement())
+  name             String
+  legalArea        String
+  pieceType        String
+  status           String   @default("ativo")
+  official         Boolean  @default(false)
+  favorite         Boolean  @default(false)
+  autoFill         Boolean  @default(false)
+  phase            String
+  author           String
+  version          String   @default("v1.0")
+  updatedOn        DateTime @default(now())
+  lastUsedAt       DateTime?
+  needsReview      Boolean  @default(false)
+  description      String
+  tags             Json
+  placeholders     Json
+  preview          String
+  versionsJson     Json
+  createdBy        String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
