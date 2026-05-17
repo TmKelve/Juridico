@@ -2954,6 +2954,7 @@ app.get('/crm/leads', async (req, res) => {
     include: {
       clientRecord: true,
       triageItems: true,
+      contactEvents: { orderBy: { createdAt: 'desc' } },
     },
     orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
   });
@@ -2970,6 +2971,7 @@ app.get('/crm/opportunities', async (req, res) => {
     include: {
       clientRecord: true,
       triageItems: true,
+      contactEvents: { orderBy: { createdAt: 'desc' } },
     },
     orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
   });
@@ -2984,9 +2986,15 @@ app.put('/crm/leads/:id', async (req, res) => {
 
   const current = await prisma.crmLead.findUnique({
     where: { id: Number(req.params.id) },
-    include: { clientRecord: true, triageItems: true },
+    include: { clientRecord: true, triageItems: true, contactEvents: { orderBy: { createdAt: 'desc' } } },
   });
   if (!current) return res.status(404).send({ message: 'Lead não encontrado' });
+
+  const nextContactAt = typeof req.body?.nextContactAt === 'string' && req.body.nextContactAt.trim()
+    ? new Date(req.body.nextContactAt)
+    : req.body?.nextContactAt === null
+      ? null
+      : current.nextContactAt;
 
   const updated = await prisma.crmLead.update({
     where: { id: current.id },
@@ -2994,8 +3002,10 @@ app.put('/crm/leads/:id', async (req, res) => {
       status: typeof req.body?.status === 'string' && req.body.status.trim() ? req.body.status.trim() : current.status,
       summary: typeof req.body?.summary === 'string' && req.body.summary.trim() ? req.body.summary.trim() : current.summary,
       personName: typeof req.body?.personName === 'string' && req.body.personName.trim() ? req.body.personName.trim() : current.personName,
+      responsible: typeof req.body?.responsible === 'string' ? req.body.responsible.trim() || null : current.responsible,
+      nextContactAt,
     },
-    include: { clientRecord: true, triageItems: true },
+    include: { clientRecord: true, triageItems: true, contactEvents: { orderBy: { createdAt: 'desc' } } },
   });
 
   res.json(buildCrmLeadPayload(updated));
@@ -3008,9 +3018,15 @@ app.put('/crm/opportunities/:id', async (req, res) => {
 
   const current = await prisma.crmOpportunity.findUnique({
     where: { id: Number(req.params.id) },
-    include: { clientRecord: true, triageItems: true },
+    include: { clientRecord: true, triageItems: true, contactEvents: { orderBy: { createdAt: 'desc' } } },
   });
   if (!current) return res.status(404).send({ message: 'Oportunidade não encontrada' });
+
+  const nextContactAt = typeof req.body?.nextContactAt === 'string' && req.body.nextContactAt.trim()
+    ? new Date(req.body.nextContactAt)
+    : req.body?.nextContactAt === null
+      ? null
+      : current.nextContactAt;
 
   const updated = await prisma.crmOpportunity.update({
     where: { id: current.id },
@@ -3018,11 +3034,89 @@ app.put('/crm/opportunities/:id', async (req, res) => {
       status: typeof req.body?.status === 'string' && req.body.status.trim() ? req.body.status.trim() : current.status,
       summary: typeof req.body?.summary === 'string' && req.body.summary.trim() ? req.body.summary.trim() : current.summary,
       personName: typeof req.body?.personName === 'string' && req.body.personName.trim() ? req.body.personName.trim() : current.personName,
+      responsible: typeof req.body?.responsible === 'string' ? req.body.responsible.trim() || null : current.responsible,
+      nextContactAt,
     },
-    include: { clientRecord: true, triageItems: true },
+    include: { clientRecord: true, triageItems: true, contactEvents: { orderBy: { createdAt: 'desc' } } },
   });
 
   res.json(buildCrmOpportunityPayload(updated));
+});
+
+app.post('/crm/leads/:id/contact-events', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+  if (!canAccessCrm(decoded)) return res.status(403).send({ message: 'Acesso negado' });
+
+  const lead = await prisma.crmLead.findUnique({
+    where: { id: Number(req.params.id) },
+    include: { clientRecord: true, triageItems: true, contactEvents: { orderBy: { createdAt: 'desc' } } },
+  });
+  if (!lead) return res.status(404).send({ message: 'Lead não encontrado' });
+
+  const summary = typeof req.body?.summary === 'string' ? req.body.summary.trim() : '';
+  if (!summary) return res.status(400).send({ message: 'Resumo do contato é obrigatório' });
+
+  const kind = typeof req.body?.kind === 'string' && req.body.kind.trim() ? req.body.kind.trim() : 'contato';
+  const nextContactAt = typeof req.body?.nextContactAt === 'string' && req.body.nextContactAt.trim()
+    ? new Date(req.body.nextContactAt)
+    : null;
+
+  const updated = await prisma.crmLead.update({
+    where: { id: lead.id },
+    data: {
+      lastContactAt: new Date(),
+      nextContactAt: nextContactAt ?? lead.nextContactAt,
+      contactEvents: {
+        create: {
+          kind,
+          summary,
+          createdBy: decoded.email,
+        },
+      },
+    },
+    include: { clientRecord: true, triageItems: true, contactEvents: { orderBy: { createdAt: 'desc' } } },
+  });
+
+  res.status(201).json(buildCrmLeadPayload(updated));
+});
+
+app.post('/crm/opportunities/:id/contact-events', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+  if (!canAccessCrm(decoded)) return res.status(403).send({ message: 'Acesso negado' });
+
+  const opportunity = await prisma.crmOpportunity.findUnique({
+    where: { id: Number(req.params.id) },
+    include: { clientRecord: true, triageItems: true, contactEvents: { orderBy: { createdAt: 'desc' } } },
+  });
+  if (!opportunity) return res.status(404).send({ message: 'Oportunidade não encontrada' });
+
+  const summary = typeof req.body?.summary === 'string' ? req.body.summary.trim() : '';
+  if (!summary) return res.status(400).send({ message: 'Resumo do contato é obrigatório' });
+
+  const kind = typeof req.body?.kind === 'string' && req.body.kind.trim() ? req.body.kind.trim() : 'contato';
+  const nextContactAt = typeof req.body?.nextContactAt === 'string' && req.body.nextContactAt.trim()
+    ? new Date(req.body.nextContactAt)
+    : null;
+
+  const updated = await prisma.crmOpportunity.update({
+    where: { id: opportunity.id },
+    data: {
+      lastContactAt: new Date(),
+      nextContactAt: nextContactAt ?? opportunity.nextContactAt,
+      contactEvents: {
+        create: {
+          kind,
+          summary,
+          createdBy: decoded.email,
+        },
+      },
+    },
+    include: { clientRecord: true, triageItems: true, contactEvents: { orderBy: { createdAt: 'desc' } } },
+  });
+
+  res.status(201).json(buildCrmOpportunityPayload(updated));
 });
 
 app.post('/crm/leads/:id/convert', async (req, res) => {
@@ -3032,7 +3126,7 @@ app.post('/crm/leads/:id/convert', async (req, res) => {
 
   const lead = await prisma.crmLead.findUnique({
     where: { id: Number(req.params.id) },
-    include: { clientRecord: true, triageItems: true },
+    include: { clientRecord: true, triageItems: true, contactEvents: { orderBy: { createdAt: 'desc' } } },
   });
   if (!lead) return res.status(404).send({ message: 'Lead não encontrado' });
 
@@ -3043,9 +3137,24 @@ app.post('/crm/leads/:id/convert', async (req, res) => {
       personName: typeof req.body?.personName === 'string' && req.body.personName.trim() ? req.body.personName.trim() : lead.personName,
       source: lead.source,
       status: typeof req.body?.status === 'string' && req.body.status.trim() ? req.body.status.trim() : 'acao_recomendada',
+      responsible: lead.responsible,
       summary: typeof req.body?.summary === 'string' && req.body.summary.trim() ? req.body.summary.trim() : lead.summary,
+      lastContactAt: lead.lastContactAt,
+      nextContactAt: lead.nextContactAt,
+      contactEvents: lead.contactEvents.length
+        ? {
+            createMany: {
+              data: lead.contactEvents.map((event: any) => ({
+                kind: event.kind,
+                summary: event.summary,
+                createdBy: event.createdBy,
+                createdAt: event.createdAt,
+              })),
+            },
+          }
+        : undefined,
     },
-    include: { clientRecord: true, triageItems: true },
+    include: { clientRecord: true, triageItems: true, contactEvents: { orderBy: { createdAt: 'desc' } } },
   });
 
   await prisma.crmLead.update({

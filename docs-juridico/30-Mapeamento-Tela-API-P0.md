@@ -327,6 +327,31 @@ Origem:
 
 - direto da API
 
+### CRM Jurídico
+
+Campos observados:
+
+- `id`
+- `cpf`
+- `personName`
+- `source`
+- `status`
+- `responsible`
+- `summary`
+- `clientId`
+- `client`
+- `triageCount`
+- `hasCriticalTriage`
+- `lastContactAt`
+- `nextContactAt`
+- `contactEvents[]`
+- `createdAt`
+- `updatedAt`
+
+Origem:
+
+- direto da API
+
 ## 5. Mapeamento Por Tela
 
 ### Login

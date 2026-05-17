@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { RefreshCw, Search, ShieldAlert, TrendingUp } from 'lucide-react';
+import { CalendarClock, RefreshCw, Search, ShieldAlert, TrendingUp } from 'lucide-react';
 import { api, type ApiCrmLead, type ApiCrmOpportunity } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import './CrmJuridico.css';
@@ -17,6 +17,14 @@ function formatDateTime(iso: string) {
   return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 }
 
+function formatDateTimeLocal(iso: string | null) {
+  if (!iso) return '';
+  const date = new Date(iso);
+  const offset = date.getTimezoneOffset();
+  const local = new Date(date.getTime() - offset * 60000);
+  return local.toISOString().slice(0, 16);
+}
+
 export function CrmJuridico({ user }: CrmJuridicoProps) {
   const [tab, setTab] = useState<TabKey>('opportunities');
   const [leads, setLeads] = useState<ApiCrmLead[]>([]);
@@ -27,6 +35,8 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
   const [search, setSearch] = useState('');
   const [selectedLead, setSelectedLead] = useState<ApiCrmLead | null>(null);
   const [selectedOpportunity, setSelectedOpportunity] = useState<ApiCrmOpportunity | null>(null);
+  const [contactNote, setContactNote] = useState('');
+  const [nextContactDraft, setNextContactDraft] = useState('');
 
   useEffect(() => {
     trackPageView('crm_juridico', { role: user.role });
@@ -98,6 +108,82 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     setSuccess('Lead convertido em oportunidade.');
     trackEvent('crm_lead_converted', { leadId: item.id, opportunityId: response.data.opportunity.id });
   }
+
+  async function updateLeadOwner(item: ApiCrmLead, responsible: string) {
+    const response = await api.updateCrmLead(item.id, {
+      responsible,
+      nextContactAt: nextContactDraft || null,
+    });
+    if (response.status !== 200 || !response.data) {
+      setError(response.error || 'Não foi possível atualizar o lead.');
+      return;
+    }
+    setLeads((prev) => prev.map((entry) => entry.id === item.id ? response.data as ApiCrmLead : entry));
+    setSelectedLead(response.data as ApiCrmLead);
+    setSuccess('Lead atualizado.');
+  }
+
+  async function updateOpportunityOwner(item: ApiCrmOpportunity, responsible: string) {
+    const response = await api.updateCrmOpportunity(item.id, {
+      responsible,
+      nextContactAt: nextContactDraft || null,
+    });
+    if (response.status !== 200 || !response.data) {
+      setError(response.error || 'Não foi possível atualizar a oportunidade.');
+      return;
+    }
+    setOpportunities((prev) => prev.map((entry) => entry.id === item.id ? response.data as ApiCrmOpportunity : entry));
+    setSelectedOpportunity(response.data as ApiCrmOpportunity);
+    setSuccess('Oportunidade atualizada.');
+  }
+
+  async function addLeadContactEvent(item: ApiCrmLead) {
+    const summary = contactNote.trim();
+    if (!summary) {
+      setError('Informe um resumo do contato.');
+      return;
+    }
+    const response = await api.addCrmLeadContactEvent(item.id, {
+      summary,
+      nextContactAt: nextContactDraft || null,
+    });
+    if (response.status !== 201 || !response.data) {
+      setError(response.error || 'Não foi possível registrar o contato.');
+      return;
+    }
+    setLeads((prev) => prev.map((entry) => entry.id === item.id ? response.data as ApiCrmLead : entry));
+    setSelectedLead(response.data as ApiCrmLead);
+    setContactNote('');
+    setNextContactDraft(formatDateTimeLocal((response.data as ApiCrmLead).nextContactAt));
+    setSuccess('Contato registrado.');
+  }
+
+  async function addOpportunityContactEvent(item: ApiCrmOpportunity) {
+    const summary = contactNote.trim();
+    if (!summary) {
+      setError('Informe um resumo do contato.');
+      return;
+    }
+    const response = await api.addCrmOpportunityContactEvent(item.id, {
+      summary,
+      nextContactAt: nextContactDraft || null,
+    });
+    if (response.status !== 201 || !response.data) {
+      setError(response.error || 'Não foi possível registrar o contato.');
+      return;
+    }
+    setOpportunities((prev) => prev.map((entry) => entry.id === item.id ? response.data as ApiCrmOpportunity : entry));
+    setSelectedOpportunity(response.data as ApiCrmOpportunity);
+    setContactNote('');
+    setNextContactDraft(formatDateTimeLocal((response.data as ApiCrmOpportunity).nextContactAt));
+    setSuccess('Contato registrado.');
+  }
+
+  useEffect(() => {
+    const selected = tab === 'leads' ? selectedLead : selectedOpportunity;
+    setContactNote('');
+    setNextContactDraft(formatDateTimeLocal(selected?.nextContactAt ?? null));
+  }, [tab, selectedLead?.id, selectedOpportunity?.id]);
 
   const filteredLeads = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -219,7 +305,10 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                   <div><span>Status</span><strong>{selectedLead.status}</strong></div>
                   <div><span>Origem</span><strong>{selectedLead.source}</strong></div>
                   <div><span>Cliente</span><strong>{selectedLead.client || '—'}</strong></div>
+                  <div><span>Responsável</span><strong>{selectedLead.responsible || 'Não definido'}</strong></div>
                   <div><span>Criado em</span><strong>{formatDateTime(selectedLead.createdAt)}</strong></div>
+                  <div><span>Último contato</span><strong>{selectedLead.lastContactAt ? formatDateTime(selectedLead.lastContactAt) : '—'}</strong></div>
+                  <div><span>Próximo contato</span><strong>{selectedLead.nextContactAt ? formatDateTime(selectedLead.nextContactAt) : '—'}</strong></div>
                 </div>
                 <section className="crm-panel">
                   <h4>Resumo</h4>
@@ -228,6 +317,51 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                 <section className="crm-panel">
                   <h4>Contexto de triagem</h4>
                   <p>{selectedLead.triageCount} item(ns) associado(s){selectedLead.hasCriticalTriage ? ' com sinal crítico recente.' : '.'}</p>
+                </section>
+                <section className="crm-panel">
+                  <h4>Gestão comercial</h4>
+                  <label className="crm-inline-field">
+                    <span>Responsável</span>
+                    <input
+                      value={selectedLead.responsible}
+                      onChange={(event) => setSelectedLead((prev) => prev ? { ...prev, responsible: event.target.value } : prev)}
+                      placeholder="advogado@juridico.com"
+                    />
+                  </label>
+                  <label className="crm-inline-field">
+                    <span>Próximo contato</span>
+                    <input type="datetime-local" value={nextContactDraft} onChange={(event) => setNextContactDraft(event.target.value)} />
+                  </label>
+                  <button className="btn-secondary" onClick={() => void updateLeadOwner(selectedLead, selectedLead.responsible)}>
+                    <CalendarClock size={14} />
+                    Salvar responsável
+                  </button>
+                </section>
+                <section className="crm-panel">
+                  <h4>Registrar contato</h4>
+                  <textarea
+                    value={contactNote}
+                    onChange={(event) => setContactNote(event.target.value)}
+                    placeholder="Resumo do contato, próxima objeção ou passo acordado..."
+                    rows={4}
+                  />
+                  <button className="btn-secondary" onClick={() => void addLeadContactEvent(selectedLead)}>Adicionar histórico</button>
+                </section>
+                <section className="crm-panel">
+                  <h4>Histórico</h4>
+                  {selectedLead.contactEvents.length === 0 ? (
+                    <p>Nenhum contato registrado.</p>
+                  ) : (
+                    <div className="crm-history">
+                      {selectedLead.contactEvents.map((event) => (
+                        <article key={event.id} className="crm-history__item">
+                          <strong>{event.kind}</strong>
+                          <p>{event.summary}</p>
+                          <small>{formatDateTime(event.createdAt)}{event.createdBy ? ` · ${event.createdBy}` : ''}</small>
+                        </article>
+                      ))}
+                    </div>
+                  )}
                 </section>
                 <div className="crm-drawer__actions">
                   <button className="btn-primary" onClick={() => void convertLead(selectedLead)}><TrendingUp size={14} /> Converter em oportunidade</button>
@@ -242,6 +376,9 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                 <div><span>Status</span><strong>{selectedOpportunity.status}</strong></div>
                 <div><span>Origem</span><strong>{selectedOpportunity.source}</strong></div>
                 <div><span>Cliente</span><strong>{selectedOpportunity.client || '—'}</strong></div>
+                <div><span>Responsável</span><strong>{selectedOpportunity.responsible || 'Não definido'}</strong></div>
+                <div><span>Último contato</span><strong>{selectedOpportunity.lastContactAt ? formatDateTime(selectedOpportunity.lastContactAt) : '—'}</strong></div>
+                <div><span>Próximo contato</span><strong>{selectedOpportunity.nextContactAt ? formatDateTime(selectedOpportunity.nextContactAt) : '—'}</strong></div>
                 <div><span>Atualizada em</span><strong>{formatDateTime(selectedOpportunity.updatedAt)}</strong></div>
               </div>
               <section className="crm-panel">
@@ -251,6 +388,51 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
               <section className="crm-panel">
                 <h4>Contexto de triagem</h4>
                 <p>{selectedOpportunity.triageCount} item(ns) associado(s){selectedOpportunity.hasCriticalTriage ? ' com triagem crítica ativa.' : '.'}</p>
+              </section>
+              <section className="crm-panel">
+                <h4>Gestão comercial</h4>
+                <label className="crm-inline-field">
+                  <span>Responsável</span>
+                  <input
+                    value={selectedOpportunity.responsible}
+                    onChange={(event) => setSelectedOpportunity((prev) => prev ? { ...prev, responsible: event.target.value } : prev)}
+                    placeholder="advogado@juridico.com"
+                  />
+                </label>
+                <label className="crm-inline-field">
+                  <span>Próximo contato</span>
+                  <input type="datetime-local" value={nextContactDraft} onChange={(event) => setNextContactDraft(event.target.value)} />
+                </label>
+                <button className="btn-secondary" onClick={() => void updateOpportunityOwner(selectedOpportunity, selectedOpportunity.responsible)}>
+                  <CalendarClock size={14} />
+                  Salvar responsável
+                </button>
+              </section>
+              <section className="crm-panel">
+                <h4>Registrar contato</h4>
+                <textarea
+                  value={contactNote}
+                  onChange={(event) => setContactNote(event.target.value)}
+                  placeholder="Resumo do contato, avanço da negociação ou próximo passo..."
+                  rows={4}
+                />
+                <button className="btn-secondary" onClick={() => void addOpportunityContactEvent(selectedOpportunity)}>Adicionar histórico</button>
+              </section>
+              <section className="crm-panel">
+                <h4>Histórico</h4>
+                {selectedOpportunity.contactEvents.length === 0 ? (
+                  <p>Nenhum contato registrado.</p>
+                ) : (
+                  <div className="crm-history">
+                    {selectedOpportunity.contactEvents.map((event) => (
+                      <article key={event.id} className="crm-history__item">
+                        <strong>{event.kind}</strong>
+                        <p>{event.summary}</p>
+                        <small>{formatDateTime(event.createdAt)}{event.createdBy ? ` · ${event.createdBy}` : ''}</small>
+                      </article>
+                    ))}
+                  </div>
+                )}
               </section>
             </>
           ) : <div className="crm-empty">Selecione uma oportunidade para ver o detalhe.</div>}

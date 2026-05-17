@@ -326,11 +326,21 @@ export interface ApiCrmLead {
   personName: string;
   source: string;
   status: string;
+  responsible: string;
   summary: string;
   clientId: number | null;
   client: string;
   triageCount: number;
   hasCriticalTriage: boolean;
+  lastContactAt: string | null;
+  nextContactAt: string | null;
+  contactEvents: Array<{
+    id: number;
+    kind: string;
+    summary: string;
+    createdBy: string;
+    createdAt: string;
+  }>;
   createdAt: string;
   updatedAt: string;
 }
@@ -341,11 +351,21 @@ export interface ApiCrmOpportunity {
   personName: string;
   source: string;
   status: string;
+  responsible: string;
   summary: string;
   clientId: number | null;
   client: string;
   triageCount: number;
   hasCriticalTriage: boolean;
+  lastContactAt: string | null;
+  nextContactAt: string | null;
+  contactEvents: Array<{
+    id: number;
+    kind: string;
+    summary: string;
+    createdBy: string;
+    createdAt: string;
+  }>;
   createdAt: string;
   updatedAt: string;
 }
@@ -848,14 +868,20 @@ export const api = {
   getCrmOpportunities: () =>
     apiClient<ApiCrmOpportunity[]>('/crm/opportunities'),
 
-  updateCrmLead: (id: number, data: Partial<Pick<ApiCrmLead, 'status' | 'summary' | 'personName'>>) =>
+  updateCrmLead: (id: number, data: Partial<Pick<ApiCrmLead, 'status' | 'summary' | 'personName' | 'responsible' | 'nextContactAt'>>) =>
     apiClient<ApiCrmLead>(`/crm/leads/${id}`, { method: 'PUT', body: data }),
 
-  updateCrmOpportunity: (id: number, data: Partial<Pick<ApiCrmOpportunity, 'status' | 'summary' | 'personName'>>) =>
+  updateCrmOpportunity: (id: number, data: Partial<Pick<ApiCrmOpportunity, 'status' | 'summary' | 'personName' | 'responsible' | 'nextContactAt'>>) =>
     apiClient<ApiCrmOpportunity>(`/crm/opportunities/${id}`, { method: 'PUT', body: data }),
 
   convertCrmLead: (id: number, data?: Partial<{ personName: string; status: string; summary: string }>) =>
     apiClient<{ lead: ApiCrmLead; opportunity: ApiCrmOpportunity }>(`/crm/leads/${id}/convert`, { method: 'POST', body: data ?? {} }),
+
+  addCrmLeadContactEvent: (id: number, data: { kind?: string; summary: string; nextContactAt?: string | null }) =>
+    apiClient<ApiCrmLead>(`/crm/leads/${id}/contact-events`, { method: 'POST', body: data }),
+
+  addCrmOpportunityContactEvent: (id: number, data: { kind?: string; summary: string; nextContactAt?: string | null }) =>
+    apiClient<ApiCrmOpportunity>(`/crm/opportunities/${id}/contact-events`, { method: 'POST', body: data }),
 
   updateTriageItem: (id: number, data: Partial<{
     status: ApiTriageItem['status'];

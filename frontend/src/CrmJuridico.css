@@ -110,7 +110,9 @@
 }
 
 .crm-search input,
-.crm-card select {
+.crm-card select,
+.crm-inline-field input,
+.crm-panel textarea {
   width: 100%;
   border: 0;
   background: transparent;
@@ -210,6 +212,55 @@
 
 .crm-panel h4 {
   margin: 0;
+}
+
+.crm-inline-field {
+  display: grid;
+  gap: 6px;
+}
+
+.crm-inline-field span {
+  color: var(--neutral-600, #5f6f82);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.crm-inline-field input,
+.crm-panel textarea {
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--neutral-200, #dbe2ea);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.crm-panel textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.crm-history {
+  display: grid;
+  gap: 10px;
+}
+
+.crm-history__item {
+  padding: 12px;
+  border: 1px solid var(--neutral-200, #dbe2ea);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.crm-history__item strong,
+.crm-history__item p,
+.crm-history__item small {
+  display: block;
+}
+
+.crm-history__item p,
+.crm-history__item small {
+  margin: 4px 0 0;
 }
 
 .crm-empty {

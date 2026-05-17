@@ -159,7 +159,11 @@ model CrmLead {
   personName     String
   source         String
   status         String   @default("novo")
+  responsible    String?
   summary        String
+  lastContactAt  DateTime?
+  nextContactAt  DateTime?
+  contactEvents  CrmContactEvent[]
   triageItems    TriageItem[]
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -173,10 +177,26 @@ model CrmOpportunity {
   personName     String
   source         String
   status         String   @default("acao_recomendada")
+  responsible    String?
   summary        String
+  lastContactAt  DateTime?
+  nextContactAt  DateTime?
+  contactEvents  CrmContactEvent[]
   triageItems    TriageItem[]
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+}
+
+model CrmContactEvent {
+  id               Int             @id @default(autoincrement())
+  crmLeadId        Int?
+  crmLead          CrmLead?        @relation(fields: [crmLeadId], references: [id])
+  crmOpportunityId Int?
+  crmOpportunity   CrmOpportunity? @relation(fields: [crmOpportunityId], references: [id])
+  kind             String          @default("contato")
+  summary          String
+  createdBy        String?
+  createdAt        DateTime        @default(now())
 }
 
 model TriageItem {
