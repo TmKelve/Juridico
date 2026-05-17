@@ -157,7 +157,7 @@ function getOpportunityEmptyState(column: (typeof OPPORTUNITY_STATUS)[number]) {
   return {
     icon: Inbox,
     title: 'Sem oportunidades neste estágio.',
-    description: 'Arraste cards para cá ou crie uma nova oportunidade.',
+    description: 'Mova uma oportunidade para cá ou crie uma nova entrada.',
   };
 }
 
@@ -1036,7 +1036,12 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                       <span className={`crm-next-contact crm-next-contact--${getNextContactState(item.nextContactAt)}`}>{getNextContactText(item.nextContactAt)}</span>
                     </div>
                     <div className="crm-card__actions">
-                      <select value={item.status} onChange={(event) => void updateLeadStatus(item, event.target.value)} onClick={(event) => event.stopPropagation()}>
+                      <select
+                        value={item.status}
+                        aria-label={`Alterar status de ${item.personName}`}
+                        onChange={(event) => void updateLeadStatus(item, event.target.value)}
+                        onClick={(event) => event.stopPropagation()}
+                      >
                         {LEAD_STATUS.map((status) => <option key={status} value={status}>{getLeadStatusLabel(status)}</option>)}
                       </select>
                       <button className="btn-primary" onClick={(event) => { event.stopPropagation(); void convertLead(item); }}>Converter</button>
@@ -1098,7 +1103,12 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                                     Abrir processo
                                   </button>
                                 ) : null}
-                                <select value={item.status} onChange={(event) => void updateOpportunityStatus(item, event.target.value)} onClick={(event) => event.stopPropagation()}>
+                                <select
+                                  value={item.status}
+                                  aria-label={`Alterar etapa de ${item.personName}`}
+                                  onChange={(event) => void updateOpportunityStatus(item, event.target.value)}
+                                  onClick={(event) => event.stopPropagation()}
+                                >
                                   {OPPORTUNITY_STATUS.map((status) => <option key={status} value={status}>{OPPORTUNITY_STAGE_LABELS[status]}</option>)}
                                 </select>
                               </div>

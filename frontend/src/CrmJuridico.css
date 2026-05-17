@@ -456,6 +456,14 @@
   flex-wrap: nowrap;
 }
 
+@media (min-width: 769px) {
+  .crm-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 6;
+  }
+}
+
 .crm-toolbar > .tabs-root {
   flex: 0 0 auto;
 }
@@ -1572,6 +1580,10 @@
     margin-left: 0;
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .crm-filterbar > div:last-child button[aria-label='Configurar colunas do CRM'] {
+    display: none;
   }
 
   .crm-filter-select {
