@@ -242,7 +242,10 @@ function AppShell({
 
       if (width < 1200) {
         setSidebarCollapsed(true)
+        return
       }
+
+      setSidebarCollapsed(false)
     }
 
     window.addEventListener('resize', onResize)
