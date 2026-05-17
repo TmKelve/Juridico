@@ -1606,7 +1606,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                       setShowOpportunityConversion(true);
                     }}
                   >
-                    {selectedOpportunity.convertedProcessId ? 'Abrir processo' : 'Converter em cliente + processo'}
+                    {selectedOpportunity.convertedProcessId ? 'Abrir processo' : 'Converter oportunidade'}
                   </button>
                 </div>
               </div>
