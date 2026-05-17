@@ -29,7 +29,7 @@ import {
   UserPlus,
   X,
 } from 'lucide-react';
-import { DrawerSection, ExecutiveCard, FilterBar, KanbanColumn, KpiCard, OpportunityCard, PageHeader, Timeline } from './components/product';
+import { DrawerSection, EmptyState, ExecutiveCard, FilterBar, KanbanColumn, KpiCard, OpportunityCard, PageHeader, Timeline } from './components/product';
 import { Button, Tabs, TabsContent, TabsList, TabsTrigger, Textarea } from './components/ui';
 import { api, type ApiCrmLead, type ApiCrmOpportunity } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
@@ -913,8 +913,8 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
           <div className="crm-toolbar">
             <Tabs value={tabValue} onValueChange={(value) => setTab(value as TabKey)}>
               <TabsList className="crm-tabs-list">
-                <TabsTrigger value="opportunities">Oportunidades</TabsTrigger>
-                <TabsTrigger value="leads">Leads</TabsTrigger>
+                <TabsTrigger value="opportunities">Oportunidades <span>{filteredOpportunities.length}</span></TabsTrigger>
+                <TabsTrigger value="leads">Leads <span>{filteredLeads.length}</span></TabsTrigger>
               </TabsList>
               <TabsContent value="opportunities" className="crm-tabs-content" />
               <TabsContent value="leads" className="crm-tabs-content" />
@@ -922,6 +922,8 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
             <FilterBar
               className="crm-filterbar"
               searchPlaceholder="Buscar por nome, cliente, CPF, origem ou resumo..."
+              searchValue={search}
+              searchAriaLabel="Buscar no CRM jurídico"
               onSearchChange={setSearch}
               actions={(
                 <>
@@ -992,10 +994,28 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
           {error && <div className="crm-feedback crm-feedback--error">{error}</div>}
 
           {loading ? (
-            <div className="crm-empty">Carregando CRM jurídico...</div>
+            <EmptyState
+              className="crm-empty"
+              icon={<RefreshCw size={22} />}
+              title="Carregando CRM jurídico"
+              description="Buscando leads, oportunidades e cadências comerciais."
+            />
           ) : tab === 'leads' ? (
             filteredLeads.length === 0 ? (
-              <div className="crm-empty">Nenhum lead encontrado.</div>
+              <EmptyState
+                className="crm-empty"
+                icon={<Inbox size={22} />}
+                title="Nenhum lead encontrado"
+                description="Ajuste os filtros ou aguarde novas entradas da triagem para qualificação."
+                actionLabel="Limpar filtros"
+                onAction={() => {
+                  setSearch('');
+                  setResponsibleFilter('');
+                  setStageFilter('');
+                  setNextContactFilter('');
+                  setCriticalOnly(false);
+                }}
+              />
             ) : (
               <div className="crm-list">
                 {filteredLeads.map((item) => (
@@ -1026,7 +1046,14 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
               </div>
             )
           ) : filteredOpportunities.length === 0 ? (
-            <div className="crm-empty">Nenhuma oportunidade encontrada.</div>
+            <EmptyState
+              className="crm-empty"
+              icon={<BriefcaseBusiness size={22} />}
+              title="Nenhuma oportunidade encontrada"
+              description="Revise a busca e os filtros ou cadastre uma oportunidade manual para iniciar a carteira."
+              actionLabel="Nova oportunidade"
+              onAction={() => setShowNewOpportunityDialog(true)}
+            />
           ) : (
             <div className="crm-board-scroll">
               <div className="crm-board">

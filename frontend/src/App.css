@@ -459,7 +459,8 @@
 }
 
 @media (max-width: 767px) {
-  .app-shell {
+  .app-shell,
+  .app-shell.sidebar-is-collapsed {
     grid-template-columns: 1fr;
   }
 
