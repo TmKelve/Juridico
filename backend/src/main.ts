@@ -14,8 +14,9 @@ import { lookupExternalProcess } from './process-lookup.provider';
 import { buildPublicationPayload } from './publications.contract';
 import { buildTaskPayload } from './tasks.contract';
 import { buildTemplatePayload } from './templates.contract';
+import { classifyTriageItem } from './triage-ai.provider';
 import { buildTriageDecisionPayload, buildTriageItemPayload } from './triage.contract';
-import { inferQueueType, inferSuggestedAction, resolveTriageTarget } from './triage.matcher';
+import { resolveTriageTarget } from './triage.matcher';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -252,6 +253,7 @@ async function ingestCnjPublications(triggeredBy: string) {
 
     const processes = candidates.map((process: any) => ({
       id: process.id,
+      title: process.title,
       processNumber: process.processNumber,
       client: process.client,
       clientId: process.clientId ?? process.clientRecord?.id ?? null,
@@ -325,15 +327,26 @@ async function ingestCnjPublications(triggeredBy: string) {
         clients,
       );
 
-      const queueType = inferQueueType('cnj', capturePayload.rawText);
-      const suggestedAction = inferSuggestedAction({
+      const history = target.processId
+        ? await prisma.publicationEvent.findMany({
+            where: { processId: target.processId },
+            orderBy: { eventAt: 'desc' },
+            take: 5,
+          })
+        : [];
+
+      const classification = await classifyTriageItem({
         sourceType: 'cnj',
-        queueType,
+        normalizedText: capturePayload.rawText,
+        processTitle: target.processId ? processes.find((process: any) => process.id === target.processId)?.title ?? null : null,
+        clientName: capturePayload.personName ?? null,
+        historicalEvents: history.map((event: any) => ({ title: event.title, summary: event.summary, riskLevel: event.riskLevel })),
         processId: target.processId,
         clientId: target.clientId,
         hasExistingClient: Boolean(target.clientId),
-        normalizedText: capturePayload.rawText,
       });
+      const queueType = classification.queueType;
+      const suggestedAction = classification.suggestedAction;
 
       if (queueType === 'critica') itemsFlaggedCritical += 1;
 
@@ -408,8 +421,10 @@ async function ingestCnjPublications(triggeredBy: string) {
           data: {
             eventId: event.id,
             queueType,
-            suggestedReason: capturePayload.summary,
+            suggestedReason: classification.suggestedReason,
             sourceLabel: 'CNJ',
+            aiConfidenceBand: classification.aiConfidenceBand,
+            aiScoreRaw: classification.aiScoreRaw,
             crmLeadId: crmLeadId ?? existingTriage.crmLeadId,
             crmOpportunityId: crmOpportunityId ?? existingTriage.crmOpportunityId,
           },
@@ -426,9 +441,9 @@ async function ingestCnjPublications(triggeredBy: string) {
             queueType,
             status: 'pendente',
             suggestedAction,
-            suggestedReason: capturePayload.summary,
-            aiConfidenceBand: queueType === 'critica' ? 'alta' : 'media',
-            aiScoreRaw: queueType === 'critica' ? 0.89 : 0.74,
+            suggestedReason: classification.suggestedReason,
+            aiConfidenceBand: classification.aiConfidenceBand,
+            aiScoreRaw: classification.aiScoreRaw,
             sourceLabel: 'CNJ',
           },
         });
@@ -571,6 +586,19 @@ async function ingestCpfPublications(triggeredBy: string) {
         },
       });
 
+      const classification = await classifyTriageItem({
+        sourceType: 'cpf',
+        normalizedText: capturePayload.rawText,
+        processTitle: null,
+        clientName: capturePayload.personName,
+        historicalEvents: [],
+        processId: null,
+        clientId: matchedClient?.id ?? null,
+        hasExistingClient: Boolean(matchedClient),
+      });
+
+      if (classification.queueType === 'critica') itemsFlaggedCritical += 1;
+
       const event = existingEvent ?? await prisma.publicationEvent.create({
         data: {
           captureId: capture.id,
@@ -580,7 +608,7 @@ async function ingestCpfPublications(triggeredBy: string) {
           title: capturePayload.title,
           summary: capturePayload.summary,
           fullText: capturePayload.rawText,
-          riskLevel: 'normal',
+          riskLevel: classification.queueType === 'critica' ? 'critico' : 'normal',
           requiresAction: true,
           timelinePosition: 1,
         },
@@ -619,7 +647,7 @@ async function ingestCpfPublications(triggeredBy: string) {
       const existingTriage = await prisma.triageItem.findFirst({
         where: {
           captureId: capture.id,
-          suggestedAction: matchedClient ? 'criar_oportunidade' : 'criar_lead',
+          suggestedAction: classification.suggestedAction,
           clientId: matchedClient?.id ?? null,
           status: { in: ['pendente', 'em_revisao_manual', 'adiado'] },
         },
@@ -630,8 +658,11 @@ async function ingestCpfPublications(triggeredBy: string) {
           where: { id: existingTriage.id },
           data: {
             eventId: event.id,
-            suggestedReason: capturePayload.summary,
+            queueType: classification.queueType,
+            suggestedReason: classification.suggestedReason,
             sourceLabel: 'CPF',
+            aiConfidenceBand: classification.aiConfidenceBand,
+            aiScoreRaw: classification.aiScoreRaw,
             crmLeadId: crmLeadId ?? existingTriage.crmLeadId,
             crmOpportunityId: crmOpportunityId ?? existingTriage.crmOpportunityId,
           },
@@ -644,12 +675,12 @@ async function ingestCpfPublications(triggeredBy: string) {
             clientId: matchedClient?.id ?? null,
             crmLeadId,
             crmOpportunityId,
-            queueType: 'normal',
+            queueType: classification.queueType,
             status: 'pendente',
-            suggestedAction: matchedClient ? 'criar_oportunidade' : 'criar_lead',
-            suggestedReason: capturePayload.summary,
-            aiConfidenceBand: 'media',
-            aiScoreRaw: 0.76,
+            suggestedAction: classification.suggestedAction,
+            suggestedReason: classification.suggestedReason,
+            aiConfidenceBand: classification.aiConfidenceBand,
+            aiScoreRaw: classification.aiScoreRaw,
             sourceLabel: 'CPF',
           },
         });
@@ -730,6 +761,7 @@ async function ingestDiarioPublications(triggeredBy: string) {
 
     const processes = candidates.map((process: any) => ({
       id: process.id,
+      title: process.title,
       processNumber: process.processNumber,
       client: process.client,
       clientId: process.clientId ?? process.clientRecord?.id ?? null,
@@ -803,15 +835,26 @@ async function ingestDiarioPublications(triggeredBy: string) {
         clients,
       );
 
-      const queueType = inferQueueType('diario_oficial', capturePayload.rawText);
-      const suggestedAction = inferSuggestedAction({
+      const history = target.processId
+        ? await prisma.publicationEvent.findMany({
+            where: { processId: target.processId },
+            orderBy: { eventAt: 'desc' },
+            take: 5,
+          })
+        : [];
+
+      const classification = await classifyTriageItem({
         sourceType: 'diario_oficial',
-        queueType,
+        normalizedText: capturePayload.rawText,
+        processTitle: target.processId ? processes.find((process: any) => process.id === target.processId)?.title ?? null : null,
+        clientName: capturePayload.personName ?? null,
+        historicalEvents: history.map((event: any) => ({ title: event.title, summary: event.summary, riskLevel: event.riskLevel })),
         processId: target.processId,
         clientId: target.clientId,
         hasExistingClient: Boolean(target.clientId),
-        normalizedText: capturePayload.rawText,
       });
+      const queueType = classification.queueType;
+      const suggestedAction = classification.suggestedAction;
 
       if (queueType === 'critica') itemsFlaggedCritical += 1;
 
@@ -855,8 +898,10 @@ async function ingestDiarioPublications(triggeredBy: string) {
           data: {
             eventId: event.id,
             queueType,
-            suggestedReason: capturePayload.summary,
+            suggestedReason: classification.suggestedReason,
             sourceLabel: 'Diário Oficial',
+            aiConfidenceBand: classification.aiConfidenceBand,
+            aiScoreRaw: classification.aiScoreRaw,
           },
         });
       } else {
@@ -869,9 +914,9 @@ async function ingestDiarioPublications(triggeredBy: string) {
             queueType,
             status: 'pendente',
             suggestedAction,
-            suggestedReason: capturePayload.summary,
-            aiConfidenceBand: queueType === 'critica' ? 'alta' : 'media',
-            aiScoreRaw: queueType === 'critica' ? 0.87 : 0.7,
+            suggestedReason: classification.suggestedReason,
+            aiConfidenceBand: classification.aiConfidenceBand,
+            aiScoreRaw: classification.aiScoreRaw,
             sourceLabel: 'Diário Oficial',
           },
         });
@@ -952,6 +997,7 @@ async function ingestOabPublications(triggeredBy: string) {
 
     const processes = candidates.map((process: any) => ({
       id: process.id,
+      title: process.title,
       processNumber: process.processNumber,
       client: process.client,
       clientId: process.clientId ?? null,
@@ -1028,15 +1074,26 @@ async function ingestOabPublications(triggeredBy: string) {
         clients,
       );
 
-      const queueType = inferQueueType('oab', capturePayload.rawText);
-      const suggestedAction = inferSuggestedAction({
+      const history = target.processId
+        ? await prisma.publicationEvent.findMany({
+            where: { processId: target.processId },
+            orderBy: { eventAt: 'desc' },
+            take: 5,
+          })
+        : [];
+
+      const classification = await classifyTriageItem({
         sourceType: 'oab',
-        queueType,
+        normalizedText: capturePayload.rawText,
+        processTitle: target.processId ? processes.find((process: any) => process.id === target.processId)?.title ?? null : null,
+        clientName: capturePayload.personName ?? null,
+        historicalEvents: history.map((event: any) => ({ title: event.title, summary: event.summary, riskLevel: event.riskLevel })),
         processId: target.processId,
         clientId: target.clientId,
         hasExistingClient: Boolean(target.clientId),
-        normalizedText: capturePayload.rawText,
       });
+      const queueType = classification.queueType;
+      const suggestedAction = classification.suggestedAction;
 
       if (queueType === 'critica') itemsFlaggedCritical += 1;
 
@@ -1080,8 +1137,10 @@ async function ingestOabPublications(triggeredBy: string) {
           data: {
             eventId: event.id,
             queueType,
-            suggestedReason: capturePayload.summary,
+            suggestedReason: classification.suggestedReason,
             sourceLabel: 'OAB',
+            aiConfidenceBand: classification.aiConfidenceBand,
+            aiScoreRaw: classification.aiScoreRaw,
           },
         });
       } else {
@@ -1094,9 +1153,9 @@ async function ingestOabPublications(triggeredBy: string) {
             queueType,
             status: 'pendente',
             suggestedAction,
-            suggestedReason: capturePayload.summary,
-            aiConfidenceBand: queueType === 'critica' ? 'alta' : 'media',
-            aiScoreRaw: queueType === 'critica' ? 0.83 : 0.69,
+            suggestedReason: classification.suggestedReason,
+            aiConfidenceBand: classification.aiConfidenceBand,
+            aiScoreRaw: classification.aiScoreRaw,
             sourceLabel: 'OAB',
           },
         });
