@@ -1,4 +1,4 @@
-import { AlertCircle, BarChart2, CheckCircle2, Clock, DollarSign, Scale, Users } from 'lucide-react';
+import { AlertCircle, AlertTriangle, BarChart2, CalendarDays, CheckCircle2, Clock, DollarSign, Plus, Scale, Target, Users } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useContextFeed } from '../hooks/useContextFeed';
@@ -43,7 +43,7 @@ export function DashboardContainer({ user }: DashboardContainerProps) {
       { id: 'kpi-awaiting', title: 'Processos Aguardando Ação', value: aguardandoAcao, microtext: 'Processos pausados ou bloqueados', icon: Scale, color: 'error' },
       { id: 'kpi-return', title: 'Clientes em Retorno', value: clientesEmRetorno, microtext: 'Clientes com retorno previsto hoje', icon: Users, color: 'primary' },
       ...(profile === 'ADM' || profile === 'FIN'
-        ? [{ id: 'kpi-finance', title: 'Financeiro do Dia', value: financeiroDoDia, microtext: 'Receita prevista para o dia', icon: DollarSign, color: 'success' as const }]
+        ? [{ id: 'kpi-finance', title: 'Financeiro Dia', value: financeiroDoDia, microtext: 'Receita prevista para o dia', icon: DollarSign, color: 'success' as const }]
         : []),
       ...(profile === 'ADM' || profile === 'ADV'
         ? [{
@@ -76,7 +76,7 @@ export function DashboardContainer({ user }: DashboardContainerProps) {
       ATD: 'Atendimento do Dia',
     };
     const subtitleByProfile: Record<string, string> = {
-      ADV: 'Priorize prazos, avance pendências e reduza gargalos da sua carteira.',
+      ADV: 'Priorize prazos críticos, avance tarefas-chave e monitore gargalos da operação.',
       ADM: 'Enxergue carga, bloqueios e urgências antes que virem atraso operacional.',
       FIN: 'Monitore execução, retornos e pontos que travam cobrança ou andamento.',
       ATD: 'Acompanhe retornos, agenda e fila de processos com ação pendente.',
@@ -88,13 +88,39 @@ export function DashboardContainer({ user }: DashboardContainerProps) {
       dateLabel: longDate.charAt(0).toUpperCase() + longDate.slice(1),
       summary: `Você tem ${agendaToday} compromisso(s) no dia, ${todayCount} item(ns) para atuar hoje e ${overdueCount} atraso(s) exigindo correção.`,
       insights: [
-        { text: `${todayCount} item(ns) exigem atuação hoje`, tone: todayCount > 0 ? 'warning' : 'neutral' },
+        { text: `${todayCount} itens exigem atuação hoje`, tone: todayCount > 0 ? 'warning' : 'neutral' },
         { text: `${overdueCount} atraso(s) pedem correção imediata`, tone: overdueCount > 0 ? 'error' : 'success' },
-        { text: `${pausedCount} processo(s) estão sem avanço`, tone: pausedCount > 0 ? 'warning' : 'neutral' },
-        { text: `${agendaToday} compromisso(s) no dia`, tone: 'info' },
+        { text: `${pausedCount} processo(s) estão avançando`, tone: pausedCount > 0 ? 'warning' : 'success' },
+        { text: `${agendaToday} compromissos no dia`, tone: 'info' },
       ],
     };
   }, [agenda.length, items, profile]);
+
+  const nextBestAction = useMemo(() => {
+    const overdueItem = items.find((item) => item.type === 'atrasados');
+    if (overdueItem) {
+      return {
+        title: `Resolver atraso do ${overdueItem.client}`,
+        description: `Existe ${items.filter((i) => i.type === 'atrasados').length} item vencido que pode impactar a fila operacional. Priorize a validação interna e destrave o processo antes das demais tarefas.`,
+        cta: 'Abrir prioridade',
+        secondary: 'Ver fila completa',
+        tone: 'warning' as const,
+        item: overdueItem,
+      };
+    }
+    const todayItem = items.find((item) => item.type === 'hoje');
+    if (todayItem) {
+      return {
+        title: `Avançar ${todayItem.title}`,
+        description: `${items.filter((i) => i.type === 'hoje').length} item(ns) aguardam execução hoje. Priorize a manifestação pendente e mantenha a cadência da carteira.`,
+        cta: 'Abrir prioridade',
+        secondary: 'Ver fila completa',
+        tone: 'info' as const,
+        item: todayItem,
+      };
+    }
+    return null;
+  }, [items]);
 
   const phaseSeries = useMemo<ChartSeries[]>(() => {
     const phaseTotals = items.reduce((acc: Record<string, number>, item) => {
@@ -180,20 +206,48 @@ export function DashboardContainer({ user }: DashboardContainerProps) {
         header={(
           <section className="dashboard-hero" aria-label="Resumo do dia">
             <div className="dashboard-hero-copy">
-              <div className="dashboard-hero-eyebrow">Painel de responsabilidades</div>
-              <div className="dashboard-hero-date">{hero.dateLabel}</div>
+              <div className="dashboard-hero-eyebrow">Dashboard</div>
+              <h2>{hero.title}</h2>
               <p>{hero.subtitle}</p>
-              <p className="dashboard-hero-summary">{hero.summary}</p>
+              <span className="dashboard-hero-date-badge">{hero.dateLabel}</span>
             </div>
 
-            <div className="dashboard-hero-insights" aria-label="Insights do dia">
-              {hero.insights.map((insight) => (
-                <span key={insight.text} className={`dashboard-hero-chip dashboard-hero-chip--${insight.tone}`}>{insight.text}</span>
-              ))}
+            <div className="dashboard-hero-right">
+              <div className="dashboard-hero-actions">
+                <button className="btn-primary btn-compact" onClick={() => onShortcutClick('nova_tarefa')}>
+                  <Plus size={14} aria-hidden="true" />
+                  Nova Tarefa
+                </button>
+                <button className="btn-secondary btn-compact" onClick={() => onShortcutClick('ver_agenda')}>
+                  <CalendarDays size={14} aria-hidden="true" />
+                  Ver Agenda
+                </button>
+              </div>
             </div>
           </section>
         )}
         kpi={<KpiStrip kpis={kpis} onKpiClick={onKpiClick} />}
+        nextAction={nextBestAction ? (
+          <section className={`next-best-action next-best-action--${nextBestAction.tone}`} aria-label="Próxima melhor ação">
+            <div className="next-best-action__icon-wrap">
+              <AlertTriangle size={18} aria-hidden="true" />
+            </div>
+            <div className="next-best-action__content">
+              <span className="next-best-action__eyebrow">Próxima melhor ação</span>
+              <strong className="next-best-action__title">{nextBestAction.title}</strong>
+              <p className="next-best-action__description">{nextBestAction.description}</p>
+            </div>
+            <div className="next-best-action__actions">
+              <button className="btn-primary btn-compact" onClick={() => handleOpenItem(nextBestAction.item)}>
+                <Target size={14} aria-hidden="true" />
+                {nextBestAction.cta}
+              </button>
+              <button className="btn-ghost btn-compact" onClick={() => setQueueFilter('todos')}>
+                {nextBestAction.secondary}
+              </button>
+            </div>
+          </section>
+        ) : null}
         operational={(
           <OperationalQueueContainer
             items={filteredItems}

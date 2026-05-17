@@ -13,14 +13,12 @@ interface OperationalQueueContainerProps {
 
 export function OperationalQueueContainer(props: OperationalQueueContainerProps) {
   return (
-    <section className="operational-core-main" aria-label="Fila operacional">
-      <SectionCard
-        title="Prioridades do Dia"
-        meta={`${props.items.length} itens ativos`}
-        className="operational-section-card"
-      >
-        <ResponsibilityQueueTable {...props} />
-      </SectionCard>
-    </section>
+    <SectionCard
+      title="Prioridades do Dia"
+      meta={`${props.items.length} itens ativos`}
+      className="operational-section-card"
+    >
+      <ResponsibilityQueueTable {...props} />
+    </SectionCard>
   );
 }
