@@ -314,6 +314,33 @@ export function Triagem({ user }: TriagemProps) {
     return { criticalPending, normalPending, manualReview, handledToday, crmGenerated };
   }, [items]);
 
+  const quality = useMemo(() => {
+    const handled = items.filter((item) => item.status === 'confirmado' || item.status === 'descartado' || item.status === 'em_revisao_manual');
+    const confirmed = handled.filter((item) => item.status === 'confirmado').length;
+    const discarded = handled.filter((item) => item.status === 'descartado').length;
+    const manual = items.filter((item) => item.status === 'em_revisao_manual').length;
+    const falsePositive = items.filter((item) => item.discardReason === 'falso positivo da IA').length;
+    const confirmationRate = handled.length ? Math.round((confirmed / handled.length) * 100) : 0;
+
+    const sourceRows = Object.entries(
+      items.reduce<Record<string, { total: number; confirmed: number; discarded: number; falsePositive: number }>>((acc, item) => {
+        const key = item.capture.sourceType || 'unknown';
+        if (!acc[key]) acc[key] = { total: 0, confirmed: 0, discarded: 0, falsePositive: 0 };
+        acc[key].total += 1;
+        if (item.status === 'confirmado') acc[key].confirmed += 1;
+        if (item.status === 'descartado') acc[key].discarded += 1;
+        if (item.discardReason === 'falso positivo da IA') acc[key].falsePositive += 1;
+        return acc;
+      }, {}),
+    ).map(([source, row]) => ({
+      source,
+      ...row,
+      confirmationRate: row.total ? Math.round((row.confirmed / row.total) * 100) : 0,
+    }));
+
+    return { handled, confirmed, discarded, manual, falsePositive, confirmationRate, sourceRows };
+  }, [items]);
+
   const activeCount = filteredItems.length;
   const latestJobs = jobs.slice(0, 4);
 
@@ -418,6 +445,69 @@ export function Triagem({ user }: TriagemProps) {
                 {job.errorLog ? <p className="triage-job__error">{job.errorLog}</p> : null}
               </article>
             ))
+          )}
+        </div>
+      </section>
+
+      <section className="triage-quality">
+        <div className="triage-quality__header">
+          <div>
+            <span className="triage-eyebrow">Qualidade da IA</span>
+            <h3>Confirmação, descarte e ruído por fonte</h3>
+          </div>
+        </div>
+
+        <div className="triage-quality__cards">
+          <article className="triage-quality-card">
+            <span>Taxa de confirmação</span>
+            <strong>{quality.confirmationRate}%</strong>
+            <small>{quality.confirmed} confirmados em {quality.handled.length} itens tratados/revisados</small>
+          </article>
+          <article className="triage-quality-card">
+            <span>Descartados</span>
+            <strong>{quality.discarded}</strong>
+            <small>Itens encerrados sem ação operacional</small>
+          </article>
+          <article className="triage-quality-card">
+            <span>Revisão manual</span>
+            <strong>{quality.manual}</strong>
+            <small>Demandam leitura humana adicional</small>
+          </article>
+          <article className="triage-quality-card">
+            <span>Falso positivo</span>
+            <strong>{quality.falsePositive}</strong>
+            <small>Descartes marcados como erro da IA</small>
+          </article>
+        </div>
+
+        <div className="triage-quality__table">
+          {quality.sourceRows.length === 0 ? (
+            <div className="triage-quality__empty">Sem dados suficientes para medir qualidade por fonte.</div>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Fonte</th>
+                  <th>Total</th>
+                  <th>Confirmados</th>
+                  <th>Descartados</th>
+                  <th>Falso positivo</th>
+                  <th>Conversão</th>
+                </tr>
+              </thead>
+              <tbody>
+                {quality.sourceRows.map((row) => (
+                  <tr key={row.source}>
+                    <td>{SOURCE_LABEL[row.source] || row.source}</td>
+                    <td>{row.total}</td>
+                    <td>{row.confirmed}</td>
+                    <td>{row.discarded}</td>
+                    <td>{row.falsePositive}</td>
+                    <td>{row.confirmationRate}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
       </section>

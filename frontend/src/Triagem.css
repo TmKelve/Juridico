@@ -6,6 +6,7 @@
 .triage-hero,
 .triage-workspace,
 .triage-ops,
+.triage-quality,
 .triage-kpi,
 .triage-card,
 .triage-panel,
@@ -79,6 +80,74 @@
 .triage-jobs {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.triage-quality {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+}
+
+.triage-quality__header h3 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.triage-quality__cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.triage-quality-card {
+  border: 1px solid var(--neutral-200, #dbe2ea);
+  border-radius: 14px;
+  padding: 14px;
+  display: grid;
+  gap: 6px;
+  background: #fff;
+}
+
+.triage-quality-card span,
+.triage-quality-card small {
+  color: var(--neutral-600, #5f6f82);
+}
+
+.triage-quality-card strong {
+  font-size: 28px;
+}
+
+.triage-quality__table {
+  overflow: auto;
+  border: 1px solid var(--neutral-200, #dbe2ea);
+  border-radius: 14px;
+}
+
+.triage-quality__table table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+}
+
+.triage-quality__table th,
+.triage-quality__table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--neutral-200, #dbe2ea);
+  text-align: left;
+  font-size: 13px;
+}
+
+.triage-quality__table th {
+  color: var(--neutral-600, #5f6f82);
+  background: #f8fafc;
+}
+
+.triage-quality__empty {
+  min-height: 96px;
+  display: grid;
+  place-items: center;
+  color: var(--neutral-600, #5f6f82);
+  background: #fff;
 }
 
 .triage-job {
@@ -494,6 +563,10 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .triage-quality__cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .triage-workspace {
     grid-template-columns: 1fr;
   }
@@ -522,6 +595,10 @@
   }
 
   .triage-jobs {
+    grid-template-columns: 1fr;
+  }
+
+  .triage-quality__cards {
     grid-template-columns: 1fr;
   }
 
