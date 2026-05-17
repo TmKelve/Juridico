@@ -992,70 +992,72 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
           ) : filteredOpportunities.length === 0 ? (
             <div className="crm-empty">Nenhuma oportunidade encontrada.</div>
           ) : (
-            <div className="crm-board">
-              {opportunitiesByStage.map((column) => (
-                <KanbanColumn key={column.status} className="crm-column" title={column.label} count={column.items.length}>
-                  <div className="crm-column__body">
-                    {column.items.length === 0 ? (
-                      (() => {
-                        const emptyState = getOpportunityEmptyState(column.status);
-                        const EmptyIcon = emptyState.icon;
-                        return (
-                          <div className="crm-column__empty">
-                            <EmptyIcon size={20} />
-                            <strong>{emptyState.title}</strong>
-                            <span>{emptyState.description}</span>
-                          </div>
-                        );
-                      })()
-                    ) : (
-                      column.items.map((item) => (
-                        <OpportunityCard
-                          key={item.id}
-                          className={`crm-card crm-card--opportunity ${selectedOpportunity?.id === item.id ? 'is-selected' : ''}`}
-                          title={item.personName}
-                          account={`${formatSourceLabel(item.source)} · ${item.responsible || 'Sem responsável'}`}
-                          value={getSummaryPreview(item.summary)}
-                          status="info"
-                          statusLabel={OPPORTUNITY_STAGE_LABELS[item.status as keyof typeof OPPORTUNITY_STAGE_LABELS] ?? item.status}
-                          priority={getNextContactState(item.nextContactAt) === 'overdue' ? 'urgent' : getNextContactState(item.nextContactAt) === 'today' ? 'high' : 'medium'}
-                          onClick={() => setSelectedOpportunity(item)}
-                          footer={(
-                            <div className="crm-card__footer">
-                              <span className={`crm-next-contact crm-next-contact--${getNextContactState(item.nextContactAt)}`}>{getNextContactText(item.nextContactAt)}</span>
-                              {item.convertedProcessId ? (
-                                <button
-                                  className="btn-ghost"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    navigate(`/processos/${item.convertedProcessId}`);
-                                  }}
-                                >
-                                  Abrir processo
-                                </button>
-                              ) : null}
-                              <select value={item.status} onChange={(event) => void updateOpportunityStatus(item, event.target.value)} onClick={(event) => event.stopPropagation()}>
-                                {OPPORTUNITY_STATUS.map((status) => <option key={status} value={status}>{OPPORTUNITY_STAGE_LABELS[status]}</option>)}
-                              </select>
+            <div className="crm-board-scroll">
+              <div className="crm-board">
+                {opportunitiesByStage.map((column) => (
+                  <KanbanColumn key={column.status} className="crm-column" title={column.label} count={column.items.length}>
+                    <div className="crm-column__body">
+                      {column.items.length === 0 ? (
+                        (() => {
+                          const emptyState = getOpportunityEmptyState(column.status);
+                          const EmptyIcon = emptyState.icon;
+                          return (
+                            <div className="crm-column__empty">
+                              <EmptyIcon size={20} />
+                              <strong>{emptyState.title}</strong>
+                              <span>{emptyState.description}</span>
                             </div>
-                          )}
-                        />
-                      ))
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    className="crm-column__add"
-                    onClick={() => {
-                      setShowNewOpportunityDialog(true);
-                      setNewOpportunityForm((prev) => ({ ...prev, source: 'manual' }));
-                    }}
-                  >
-                    <Plus size={14} />
-                    Adicionar oportunidade
-                  </button>
-                </KanbanColumn>
-              ))}
+                          );
+                        })()
+                      ) : (
+                        column.items.map((item) => (
+                          <OpportunityCard
+                            key={item.id}
+                            className={`crm-card crm-card--opportunity ${selectedOpportunity?.id === item.id ? 'is-selected' : ''}`}
+                            title={item.personName}
+                            account={`${formatSourceLabel(item.source)} · ${item.responsible || 'Sem responsável'}`}
+                            value={getSummaryPreview(item.summary)}
+                            status="info"
+                            statusLabel={OPPORTUNITY_STAGE_LABELS[item.status as keyof typeof OPPORTUNITY_STAGE_LABELS] ?? item.status}
+                            priority={getNextContactState(item.nextContactAt) === 'overdue' ? 'urgent' : getNextContactState(item.nextContactAt) === 'today' ? 'high' : 'medium'}
+                            onClick={() => setSelectedOpportunity(item)}
+                            footer={(
+                              <div className="crm-card__footer">
+                                <span className={`crm-next-contact crm-next-contact--${getNextContactState(item.nextContactAt)}`}>{getNextContactText(item.nextContactAt)}</span>
+                                {item.convertedProcessId ? (
+                                  <button
+                                    className="btn-ghost"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      navigate(`/processos/${item.convertedProcessId}`);
+                                    }}
+                                  >
+                                    Abrir processo
+                                  </button>
+                                ) : null}
+                                <select value={item.status} onChange={(event) => void updateOpportunityStatus(item, event.target.value)} onClick={(event) => event.stopPropagation()}>
+                                  {OPPORTUNITY_STATUS.map((status) => <option key={status} value={status}>{OPPORTUNITY_STAGE_LABELS[status]}</option>)}
+                                </select>
+                              </div>
+                            )}
+                          />
+                        ))
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className="crm-column__add"
+                      onClick={() => {
+                        setShowNewOpportunityDialog(true);
+                        setNewOpportunityForm((prev) => ({ ...prev, source: 'manual' }));
+                      }}
+                    >
+                      <Plus size={14} />
+                      Adicionar oportunidade
+                    </button>
+                  </KanbanColumn>
+                ))}
+              </div>
             </div>
           )}
         </div>
