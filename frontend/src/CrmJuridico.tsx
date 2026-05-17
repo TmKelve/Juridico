@@ -292,6 +292,58 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     overdueFollowUps: [...leads, ...opportunities].filter((item) => getNextContactState(item.nextContactAt) === 'overdue').length,
   }), [leads, opportunities]);
 
+  const ownerMetrics = useMemo(() => {
+    const buckets = new Map<string, {
+      responsible: string;
+      leads: number;
+      opportunities: number;
+      overdueFollowUps: number;
+      dueToday: number;
+    }>();
+
+    const touch = (responsible: string) => {
+      const key = responsible || 'Não definido';
+      const current = buckets.get(key);
+      if (current) return current;
+      const next = {
+        responsible: key,
+        leads: 0,
+        opportunities: 0,
+        overdueFollowUps: 0,
+        dueToday: 0,
+      };
+      buckets.set(key, next);
+      return next;
+    };
+
+    leads
+      .filter((item) => !['convertido', 'perdido'].includes(item.status))
+      .forEach((item) => {
+        const bucket = touch(item.responsible);
+        bucket.leads += 1;
+        const contactState = getNextContactState(item.nextContactAt);
+        if (contactState === 'overdue') bucket.overdueFollowUps += 1;
+        if (contactState === 'today') bucket.dueToday += 1;
+      });
+
+    opportunities
+      .filter((item) => !['ganha', 'perdida'].includes(item.status))
+      .forEach((item) => {
+        const bucket = touch(item.responsible);
+        bucket.opportunities += 1;
+        const contactState = getNextContactState(item.nextContactAt);
+        if (contactState === 'overdue') bucket.overdueFollowUps += 1;
+        if (contactState === 'today') bucket.dueToday += 1;
+      });
+
+    return Array.from(buckets.values()).sort((a, b) => {
+      if (b.overdueFollowUps !== a.overdueFollowUps) return b.overdueFollowUps - a.overdueFollowUps;
+      if (b.opportunities !== a.opportunities) return b.opportunities - a.opportunities;
+      if (b.leads !== a.leads) return b.leads - a.leads;
+      return a.responsible.localeCompare(b.responsible);
+    });
+  }, [leads, opportunities]);
+
   const opportunitiesByStage = useMemo(() => (
     OPPORTUNITY_STATUS.map((status) => ({
       status,
@@ -355,6 +407,57 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
         <article className="crm-kpi"><span>Oportunidades ativas</span><strong>{kpis.activeOpportunities}</strong></article>
         <article className="crm-kpi"><span>Ganhos</span><strong>{kpis.wonOpportunities}</strong></article>
         <article className="crm-kpi crm-kpi--warning"><span>Follow-up vencido</span><strong>{kpis.overdueFollowUps}</strong></article>
+      </section>
+
+      <section className="crm-owner-metrics">
+        <div className="crm-section-header">
+          <div>
+            <span className="crm-eyebrow">Gestão da carteira</span>
+            <h3>Indicadores por responsável</h3>
+          </div>
+          {responsibleFilter ? (
+            <button className="btn-secondary" onClick={() => setResponsibleFilter('')}>
+              Limpar responsável
+            </button>
+          ) : null}
+        </div>
+        {ownerMetrics.length === 0 ? (
+          <div className="crm-empty crm-empty--compact">Nenhum responsável com carteira ativa no momento.</div>
+        ) : (
+          <div className="crm-owner-grid">
+            {ownerMetrics.map((item) => (
+              <button
+                key={item.responsible}
+                type="button"
+                className={`crm-owner-card ${responsibleFilter === item.responsible ? 'is-active' : ''}`}
+                onClick={() => setResponsibleFilter((prev) => prev === item.responsible ? '' : item.responsible)}
+              >
+                <div className="crm-owner-card__header">
+                  <strong>{item.responsible}</strong>
+                  <span>{item.overdueFollowUps > 0 ? `${item.overdueFollowUps} vencido(s)` : 'Sem follow-up vencido'}</span>
+                </div>
+                <div className="crm-owner-card__metrics">
+                  <div>
+                    <span>Leads</span>
+                    <strong>{item.leads}</strong>
+                  </div>
+                  <div>
+                    <span>Oportunidades</span>
+                    <strong>{item.opportunities}</strong>
+                  </div>
+                  <div>
+                    <span>Vencidos</span>
+                    <strong>{item.overdueFollowUps}</strong>
+                  </div>
+                  <div>
+                    <span>Hoje</span>
+                    <strong>{item.dueToday}</strong>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="crm-workspace">
