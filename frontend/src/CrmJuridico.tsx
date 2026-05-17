@@ -219,6 +219,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
   const [contactKind, setContactKind] = useState('contato');
   const [nextContactDraft, setNextContactDraft] = useState('');
   const [showOpportunityConversion, setShowOpportunityConversion] = useState(false);
+  const [showConvertConfirmDialog, setShowConvertConfirmDialog] = useState(false);
   const [showNewOpportunityDialog, setShowNewOpportunityDialog] = useState(false);
   const [conversionForm, setConversionForm] = useState({
     clientName: '',
@@ -351,6 +352,28 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     setSuccess('Oportunidade atualizada.');
   }
 
+  function validateCommercialDraft(item: ApiCrmOpportunity, action: 'save' | 'history') {
+    const nextResponsible = item.responsible?.trim() ?? '';
+    const nextContact = nextContactDraft?.trim() || item.nextContactAt || '';
+
+    if (item.status !== 'acao_recomendada' && !nextResponsible) {
+      setError('Defina um responsável para avançar ou manter a oportunidade fora de "Ação recomendada".');
+      return false;
+    }
+
+    if (item.status === 'em_contato' && !nextContact) {
+      setError('Informe o próximo contato para oportunidades em "Em contato".');
+      return false;
+    }
+
+    if (action === 'history' && !contactNote.trim()) {
+      setError('Resumo do contato é obrigatório para registrar histórico.');
+      return false;
+    }
+
+    return true;
+  }
+
   async function addLeadContactEvent(item: ApiCrmLead) {
     const summary = contactNote.trim();
     if (!summary) {
@@ -414,6 +437,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
       processStatus: 'Ativo',
     });
     setShowOpportunityConversion(false);
+    setShowConvertConfirmDialog(false);
   }, [selectedOpportunity?.id]);
 
   const filteredLeads = useMemo(() => {
@@ -537,10 +561,6 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
       setError('O estágio em contato exige próximo contato antes da conversão.');
       return;
     }
-    if (!window.confirm('Confirmar conversão da oportunidade em cliente + processo? Esta ação registra histórico e vínculo operacional.')) {
-      return;
-    }
-
     const response = await api.convertCrmOpportunity(item.id, {
       clientId: item.clientId,
       clientName: conversionForm.clientName,
@@ -558,6 +578,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     setOpportunities((prev) => prev.map((entry) => entry.id === item.id ? response.data!.opportunity : entry));
     setSelectedOpportunity(response.data.opportunity);
     setShowOpportunityConversion(false);
+    setShowConvertConfirmDialog(false);
     setSuccess(`Oportunidade convertida em cliente e processo #${response.data.process.id}.`);
   }
 
@@ -1362,11 +1383,23 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                       />
                     </label>
                     <div className="crm-form-actions">
-                      <button className="btn-primary" onClick={() => void updateOpportunityOwner(selectedOpportunity, selectedOpportunity.responsible)}>
+                      <button
+                        className="btn-primary"
+                        onClick={() => {
+                          if (!validateCommercialDraft(selectedOpportunity, 'save')) return;
+                          void updateOpportunityOwner(selectedOpportunity, selectedOpportunity.responsible);
+                        }}
+                      >
                         <CalendarClock size={14} />
                         Salvar gestão comercial
                       </button>
-                      <button className="btn-secondary" onClick={() => void addOpportunityContactEvent(selectedOpportunity)}>
+                      <button
+                        className="btn-secondary"
+                        onClick={() => {
+                          if (!validateCommercialDraft(selectedOpportunity, 'history')) return;
+                          void addOpportunityContactEvent(selectedOpportunity);
+                        }}
+                      >
                         Registrar histórico
                       </button>
                     </div>
@@ -1481,7 +1514,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                             className="btn-primary"
                             disabled={!selectedOpportunityReadyToConvert}
                             title={!selectedOpportunityReadyToConvert ? 'Defina responsável e próximo contato quando estiver em contato.' : undefined}
-                            onClick={() => void convertOpportunity(selectedOpportunity)}
+                            onClick={() => setShowConvertConfirmDialog(true)}
                           >
                             Confirmar conversão
                           </button>
@@ -1529,6 +1562,64 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
           ) : <div className="crm-empty">Selecione uma oportunidade para ver o detalhe.</div>}
         </aside>
       </section>
+
+      {showConvertConfirmDialog && selectedOpportunity ? (
+        <div className="crm-dialog" role="dialog" aria-modal="true" aria-label="Confirmar conversão da oportunidade">
+          <div className="crm-dialog__backdrop" onClick={() => setShowConvertConfirmDialog(false)} />
+          <div className="crm-dialog__panel">
+            <div className="crm-dialog__header">
+              <div>
+                <span className="crm-eyebrow">Conversão operacional</span>
+                <h3>Converter em cliente + processo</h3>
+                <p>Revise os dados antes de confirmar. Essa ação cria vínculo comercial-operacional auditável.</p>
+              </div>
+              <button className="crm-icon-button" onClick={() => setShowConvertConfirmDialog(false)} aria-label="Fechar confirmação">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="crm-dialog__body">
+              <label className="crm-inline-field">
+                <span>Cliente</span>
+                <input value={conversionForm.clientName} readOnly />
+              </label>
+              <label className="crm-inline-field">
+                <span>Título do processo</span>
+                <input value={conversionForm.processTitle} readOnly />
+              </label>
+              <label className="crm-inline-field">
+                <span>Responsável</span>
+                <input value={selectedOpportunity.responsible || 'Não definido'} readOnly />
+              </label>
+              <label className="crm-inline-field">
+                <span>Próximo contato</span>
+                <input value={nextContactDraft || selectedOpportunity.nextContactAt || 'Não definido'} readOnly />
+              </label>
+              <label className="crm-inline-field crm-inline-field--full">
+                <span>Impacto da conversão</span>
+                <textarea
+                  value="Cria cliente (ou vincula existente), cria processo operacional e registra histórico de conversão no CRM."
+                  rows={3}
+                  readOnly
+                />
+              </label>
+            </div>
+            <div className="crm-dialog__footer">
+              <div className="crm-conversion__hint">
+                <ArrowRight size={14} />
+                <span>Após converter, a oportunidade permanece rastreável no CRM com referência do processo.</span>
+              </div>
+              <div className="crm-drawer__actions">
+                <button className="btn-primary" onClick={() => void convertOpportunity(selectedOpportunity)}>
+                  Confirmar conversão
+                </button>
+                <button className="btn-secondary" onClick={() => setShowConvertConfirmDialog(false)}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {showNewOpportunityDialog ? (
         <div className="crm-dialog" role="dialog" aria-modal="true" aria-label="Nova oportunidade">

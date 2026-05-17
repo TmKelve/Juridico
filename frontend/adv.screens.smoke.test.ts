@@ -110,4 +110,28 @@ test.describe('ADV - Smoke das telas operacionais', () => {
     await expect(page.getByRole('heading', { level: 2, name: /Processo #/ })).toBeVisible();
     await expect(page.locator('.process-detail-page')).toBeVisible();
   });
+
+  test('deve validar fluxo comercial e abrir confirmação de conversão no CRM', async ({ page }) => {
+    await loginAsAdvogado(page);
+
+    await page.goto(`${baseURL}/crm-juridico`);
+    await expect(page).toHaveURL(/\/crm-juridico$/);
+    await expect(page.locator('.crm-page')).toBeVisible();
+    await expect(page.locator('.crm-workspace')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Comercial' }).click();
+    await expect(page.locator('.crm-commercial-form')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Registrar histórico' }).click();
+    await expect(page.locator('.crm-feedback--error')).toContainText('Resumo do contato é obrigatório');
+
+    await page.getByRole('button', { name: 'Processo' }).click();
+    await expect(page.locator('.crm-process-actions')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Preparar conversão' }).click();
+    await expect(page.getByRole('button', { name: 'Confirmar conversão' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Confirmar conversão' }).click();
+    await expect(page.getByRole('dialog', { name: 'Confirmar conversão da oportunidade' })).toBeVisible();
+  });
 });
