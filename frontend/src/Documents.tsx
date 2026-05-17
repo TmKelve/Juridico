@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -78,6 +78,7 @@ function formatDate(iso: string) {
 
 export function Documents({ user }: DocumentsProps) {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -109,6 +110,21 @@ export function Documents({ user }: DocumentsProps) {
   useEffect(() => {
     setPage(1);
   }, [filters, sortBy, sortDirection]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const query = params.get('q')?.trim() ?? '';
+    const client = params.get('client')?.trim() ?? '';
+    const processId = params.get('processId')?.trim() ?? '';
+    if (!query && !client && !processId) return;
+
+    setFilters((prev) => ({
+      ...prev,
+      query: query || prev.query,
+      client: client || prev.client,
+      process: processId || prev.process,
+    }));
+  }, [location.search]);
 
   async function loadDocuments() {
     setLoading(true);

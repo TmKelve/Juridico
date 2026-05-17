@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -252,6 +252,7 @@ function enrichProcess(process: Process, index: number): EnrichedProcess {
 
 export function Processes({ user }: ProcessesProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [processes, setProcesses] = useState<Process[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -311,6 +312,16 @@ export function Processes({ user }: ProcessesProps) {
     if (!savedCompactMode) return;
     setIsFiltersCompact(savedCompactMode === '1');
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const query = params.get('q')?.trim() ?? '';
+    const cpf = params.get('cpf')?.trim() ?? '';
+    const processNumber = params.get('processNumber')?.trim() ?? '';
+    const mergedQuery = [query, cpf, processNumber].filter(Boolean).join(' ').trim();
+    if (!mergedQuery) return;
+    setFilters((prev) => ({ ...prev, query: mergedQuery }));
+  }, [location.search]);
 
   useEffect(() => {
     setCurrentPage(1);

@@ -813,6 +813,21 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     selectedOpportunity?.responsible?.trim()
       && (selectedOpportunity.status !== 'em_contato' || selectedOpportunity.nextContactAt || nextContactDraft),
   );
+
+  function buildProcessesContextUrl(item: ApiCrmOpportunity | ApiCrmLead) {
+    const params = new URLSearchParams();
+    if (item.personName) params.set('q', item.personName);
+    if (item.cpf) params.set('cpf', item.cpf);
+    return `/processos${params.size ? `?${params.toString()}` : ''}`;
+  }
+
+  function buildDocumentsContextUrl(item: ApiCrmOpportunity | ApiCrmLead) {
+    const params = new URLSearchParams();
+    if (item.personName) params.set('client', item.personName);
+    if (item.cpf) params.set('q', item.cpf);
+    return `/documentos${params.size ? `?${params.toString()}` : ''}`;
+  }
+
   const tabValue = tab === 'opportunities' ? 'opportunities' : 'leads';
 
   return (
@@ -1239,7 +1254,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                       <div className="crm-empty__icon"><FileText size={18} /></div>
                       <strong>Nenhum documento anexado</strong>
                       <p>Adicione documentos para apoiar a qualificação do lead.</p>
-                      <button className="btn-secondary" onClick={() => navigate('/documentos')}>
+                      <button className="btn-secondary" onClick={() => navigate(buildDocumentsContextUrl(selectedLead))}>
                         <FolderOpen size={14} />
                         Adicionar documento
                       </button>
@@ -1420,7 +1435,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                           navigate(`/processos/${selectedOpportunity.convertedProcessId}`);
                           return;
                         }
-                        navigate('/documentos');
+                        navigate(buildDocumentsContextUrl(selectedOpportunity));
                       }}
                     >
                       <FolderOpen size={14} />
@@ -1461,7 +1476,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                   ) : null}
                   {!selectedOpportunity.convertedProcessId ? (
                     <div className="crm-process-actions">
-                      <button className="btn-secondary" onClick={() => navigate('/processos')}>
+                      <button className="btn-secondary" onClick={() => navigate(buildProcessesContextUrl(selectedOpportunity))}>
                         <FolderOpen size={14} />
                         Vincular processo existente
                       </button>
