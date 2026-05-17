@@ -2,13 +2,24 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
+  AlertTriangle,
   CalendarClock,
+  CheckCircle2,
+  ChevronRight,
+  Columns3,
+  FileText,
   FolderOpen,
+  Inbox,
+  Plus,
   RefreshCw,
   Search,
   ShieldAlert,
+  SlidersHorizontal,
   Target,
+  Trophy,
   TrendingUp,
+  Users,
+  X,
 } from 'lucide-react';
 import { api, type ApiCrmLead, type ApiCrmOpportunity } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
@@ -19,7 +30,7 @@ interface CrmJuridicoProps {
 }
 
 type TabKey = 'leads' | 'opportunities';
-type DrawerTabKey = 'overview' | 'history' | 'commercial' | 'process';
+type DrawerTabKey = 'overview' | 'history' | 'commercial' | 'documents' | 'process';
 type NextActionTone = 'neutral' | 'warning' | 'success';
 
 const LEAD_STATUS = ['novo', 'qualificado', 'contatado', 'convertido', 'perdido'] as const;
@@ -28,6 +39,7 @@ const DRAWER_TABS: Array<{ key: DrawerTabKey; label: string }> = [
   { key: 'overview', label: 'Visão geral' },
   { key: 'history', label: 'Histórico' },
   { key: 'commercial', label: 'Comercial' },
+  { key: 'documents', label: 'Documentos' },
   { key: 'process', label: 'Processo' },
 ];
 const OPPORTUNITY_STAGE_LABELS: Record<(typeof OPPORTUNITY_STATUS)[number], string> = {
@@ -97,6 +109,30 @@ function getLeadStatusLabel(status: string) {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
+function getOpportunityEmptyState(column: (typeof OPPORTUNITY_STATUS)[number]) {
+  if (column === 'ganha') {
+    return {
+      icon: Trophy,
+      title: 'Nenhuma oportunidade ganha ainda.',
+      description: 'As conversões fechadas aparecerão aqui.',
+    };
+  }
+
+  if (column === 'perdida') {
+    return {
+      icon: X,
+      title: 'Nenhuma oportunidade perdida.',
+      description: 'Motivos de perda serão registrados para análise.',
+    };
+  }
+
+  return {
+    icon: Inbox,
+    title: 'Sem oportunidades neste estágio.',
+    description: 'Arraste cards para cá ou crie uma nova oportunidade.',
+  };
+}
+
 export function CrmJuridico({ user }: CrmJuridicoProps) {
   const navigate = useNavigate();
   const [tab, setTab] = useState<TabKey>('opportunities');
@@ -118,12 +154,22 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
   const [contactKind, setContactKind] = useState('contato');
   const [nextContactDraft, setNextContactDraft] = useState('');
   const [showOpportunityConversion, setShowOpportunityConversion] = useState(false);
+  const [showNewOpportunityDialog, setShowNewOpportunityDialog] = useState(false);
   const [conversionForm, setConversionForm] = useState({
     clientName: '',
     processTitle: '',
     processNumber: '',
     processPhase: 'Inicial',
     processStatus: 'Ativo',
+  });
+  const [newOpportunityForm, setNewOpportunityForm] = useState({
+    personName: '',
+    clientName: '',
+    cpf: '',
+    source: 'publicacao_automatizada',
+    summary: '',
+    responsible: '',
+    nextContactAt: '',
   });
 
   useEffect(() => {
@@ -346,6 +392,49 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     overdueFollowUps: [...leads, ...opportunities].filter((item) => getNextContactState(item.nextContactAt) === 'overdue').length,
   }), [leads, opportunities]);
 
+  const kpiCards = useMemo(() => ([
+    {
+      key: 'new-leads',
+      label: 'Leads novos',
+      value: kpis.newLeads,
+      subtext: kpis.newLeads === 0 ? 'Sem novos leads hoje' : 'Leads entrando na fila',
+      tone: 'blue',
+      icon: Users,
+    },
+    {
+      key: 'converted-leads',
+      label: 'Leads convertidos',
+      value: kpis.convertedLeads,
+      subtext: kpis.convertedLeads === 0 ? 'Nenhuma conversão no período' : 'Leads qualificados convertidos',
+      tone: 'green',
+      icon: CheckCircle2,
+    },
+    {
+      key: 'active-opportunities',
+      label: 'Oportunidades ativas',
+      value: kpis.activeOpportunities,
+      subtext: `${kpis.activeOpportunities} em ação recomendada`,
+      tone: 'indigo',
+      icon: Columns3,
+    },
+    {
+      key: 'won-opportunities',
+      label: 'Ganhos',
+      value: kpis.wonOpportunities,
+      subtext: kpis.wonOpportunities === 0 ? 'Nenhum ganho registrado' : 'Casos convertidos em ganho',
+      tone: 'green',
+      icon: Trophy,
+    },
+    {
+      key: 'overdue-follow-ups',
+      label: 'Follow-up vencido',
+      value: kpis.overdueFollowUps,
+      subtext: kpis.overdueFollowUps === 0 ? 'Operação em dia' : 'Ativar recuperação imediata',
+      tone: kpis.overdueFollowUps > 0 ? 'amber' : 'slate',
+      icon: AlertTriangle,
+    },
+  ]), [kpis]);
+
   const opportunitiesByStage = useMemo(() => (
     OPPORTUNITY_STATUS.map((status) => ({
       status,
@@ -372,6 +461,47 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     setSelectedOpportunity(response.data.opportunity);
     setShowOpportunityConversion(false);
     setSuccess(`Oportunidade convertida em cliente e processo #${response.data.process.id}.`);
+  }
+
+  async function createOpportunity() {
+    if (!newOpportunityForm.personName.trim()) {
+      setError('Informe o nome do contato.');
+      return;
+    }
+    if (!newOpportunityForm.summary.trim()) {
+      setError('Informe o resumo da oportunidade.');
+      return;
+    }
+
+    const response = await api.createCrmOpportunity({
+      personName: newOpportunityForm.personName.trim(),
+      clientName: newOpportunityForm.clientName.trim() || undefined,
+      cpf: newOpportunityForm.cpf.trim() || undefined,
+      source: newOpportunityForm.source,
+      summary: newOpportunityForm.summary.trim(),
+      responsible: newOpportunityForm.responsible.trim() || undefined,
+      nextContactAt: newOpportunityForm.nextContactAt || null,
+    });
+
+    if (response.status !== 201 || !response.data) {
+      setError(response.error || 'Não foi possível criar a oportunidade.');
+      return;
+    }
+
+    setOpportunities((prev) => [response.data, ...prev]);
+    setSelectedOpportunity(response.data);
+    setTab('opportunities');
+    setShowNewOpportunityDialog(false);
+    setSuccess('Nova oportunidade criada.');
+    setNewOpportunityForm({
+      personName: '',
+      clientName: '',
+      cpf: '',
+      source: 'publicacao_automatizada',
+      summary: '',
+      responsible: '',
+      nextContactAt: '',
+    });
   }
 
   const activeFilters = [
@@ -546,18 +676,32 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
           <h2>CRM Jurídico</h2>
           <p>Consolide leads, oportunidades derivadas da triagem e próximos passos comerciais sem perder o contexto jurídico.</p>
         </div>
-        <button className="btn-secondary" onClick={() => void loadData()}>
+        <div className="crm-hero__actions">
+          <button className="btn-secondary" onClick={() => void loadData()}>
           <RefreshCw size={14} />
-          Atualizar
-        </button>
+            Atualizar dados
+          </button>
+          <button className="btn-primary" onClick={() => setShowNewOpportunityDialog(true)}>
+            <Plus size={14} />
+            Nova oportunidade
+          </button>
+        </div>
       </section>
 
       <section className="crm-kpis">
-        <article className="crm-kpi"><span>Leads novos</span><strong>{kpis.newLeads}</strong></article>
-        <article className="crm-kpi"><span>Leads convertidos</span><strong>{kpis.convertedLeads}</strong></article>
-        <article className="crm-kpi"><span>Oportunidades ativas</span><strong>{kpis.activeOpportunities}</strong></article>
-        <article className="crm-kpi"><span>Ganhos</span><strong>{kpis.wonOpportunities}</strong></article>
-        <article className="crm-kpi crm-kpi--warning"><span>Follow-up vencido</span><strong>{kpis.overdueFollowUps}</strong></article>
+        {kpiCards.map((card) => {
+          const Icon = card.icon;
+          return (
+            <article key={card.key} className={`crm-kpi crm-kpi--${card.tone}`}>
+              <div className="crm-kpi__icon"><Icon size={16} /></div>
+              <div className="crm-kpi__body">
+                <span>{card.label}</span>
+                <strong>{card.value}</strong>
+                <small>{card.subtext}</small>
+              </div>
+            </article>
+          );
+        })}
       </section>
 
       <section className="crm-workspace">
@@ -568,6 +712,21 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                 <span className="crm-eyebrow">{item.eyebrow}</span>
                 <strong>{item.title}</strong>
                 <p>{item.body}</p>
+                <button
+                  type="button"
+                  className="crm-inline-link"
+                  onClick={() => {
+                    setTab('opportunities');
+                    if (item.key === 'alerts') {
+                      setNextContactFilter('vencido');
+                    } else if (item.key === 'next-actions') {
+                      setStageFilter('acao_recomendada');
+                    }
+                  }}
+                >
+                  {item.key === 'alerts' ? 'Ver alertas' : item.key === 'next-actions' ? 'Ver cadências' : 'Ver prioridades'}
+                  <ChevronRight size={14} />
+                </button>
               </article>
             ))}
           </section>
@@ -586,6 +745,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
               {responsibleOptions.map((option) => <option key={option} value={option}>{option}</option>)}
             </select>
             <button className={`btn-secondary ${showMoreFilters ? 'is-active' : ''}`} onClick={() => setShowMoreFilters((prev) => !prev)}>
+              <SlidersHorizontal size={14} />
               Mais filtros
             </button>
           </div>
@@ -687,13 +847,28 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                   </header>
                   <div className="crm-column__body">
                     {column.items.length === 0 ? (
-                      <div className="crm-column__empty">Sem oportunidades neste estágio.</div>
+                      (() => {
+                        const emptyState = getOpportunityEmptyState(column.status);
+                        const EmptyIcon = emptyState.icon;
+                        return (
+                          <div className="crm-column__empty">
+                            <EmptyIcon size={20} />
+                            <strong>{emptyState.title}</strong>
+                            <span>{emptyState.description}</span>
+                          </div>
+                        );
+                      })()
                     ) : (
                       column.items.map((item) => (
                         <article key={item.id} className={`crm-card crm-card--opportunity ${selectedOpportunity?.id === item.id ? 'is-selected' : ''}`} onClick={() => setSelectedOpportunity(item)}>
                           <div className="crm-card__header">
                             <strong>{item.personName}</strong>
                             <span className={`crm-status crm-status--${item.status}`}>{OPPORTUNITY_STAGE_LABELS[item.status as keyof typeof OPPORTUNITY_STAGE_LABELS] ?? item.status}</span>
+                          </div>
+                          <div className="crm-card__badges">
+                            <span className="crm-chip crm-chip--blue">Ação recomendada</span>
+                            {item.responsible ? null : <span className="crm-chip crm-chip--warning">Sem responsável</span>}
+                            {item.hasCriticalTriage ? <span className="crm-chip crm-chip--neutral">Triagem</span> : null}
                           </div>
                           <p>{item.client || 'Sem cliente vinculado'} · {item.source}</p>
                           <small>{item.cpf || 'CPF não informado'}</small>
@@ -718,6 +893,9 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                                 Abrir processo
                               </button>
                             ) : null}
+                            <button className="btn-secondary" onClick={(event) => { event.stopPropagation(); setSelectedOpportunity(item); setDrawerTab('overview'); }}>
+                              Ver detalhes
+                            </button>
                             <select value={item.status} onChange={(event) => void updateOpportunityStatus(item, event.target.value)} onClick={(event) => event.stopPropagation()}>
                               {OPPORTUNITY_STATUS.map((status) => <option key={status} value={status}>{OPPORTUNITY_STAGE_LABELS[status]}</option>)}
                             </select>
@@ -743,7 +921,14 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                       <h3>{selectedLead.personName}</h3>
                       <p>{selectedLead.client || 'Sem cliente vinculado'} · {selectedLead.source}</p>
                     </div>
-                    <span className={`crm-status crm-status--${selectedLead.status}`}>{getLeadStatusLabel(selectedLead.status)}</span>
+                    <button className="crm-icon-button" onClick={() => setSelectedLead(null)} aria-label="Fechar detalhe do lead">
+                      <X size={16} />
+                    </button>
+                  </div>
+                  <div className="crm-drawer__badge-row">
+                    <span className="crm-chip crm-chip--blue">{getLeadStatusLabel(selectedLead.status)}</span>
+                    {selectedLead.hasCriticalTriage ? <span className="crm-chip crm-chip--neutral">Triagem</span> : null}
+                    {selectedLead.responsible ? null : <span className="crm-chip crm-chip--warning">Sem responsável</span>}
                   </div>
                 </div>
 
@@ -872,6 +1057,21 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                     </div>
                   </section>
                 ) : null}
+
+                {drawerTab === 'documents' ? (
+                  <section className="crm-panel">
+                    <h4>Documentos</h4>
+                    <div className="crm-empty crm-empty--compact">
+                      <div className="crm-empty__icon"><FileText size={18} /></div>
+                      <strong>Nenhum documento anexado</strong>
+                      <p>Adicione documentos para apoiar a qualificação do lead.</p>
+                      <button className="btn-secondary" onClick={() => navigate('/documentos')}>
+                        <FolderOpen size={14} />
+                        Abrir documentos
+                      </button>
+                    </div>
+                  </section>
+                ) : null}
               </>
             ) : <div className="crm-empty">Selecione um lead para ver o detalhe.</div>
           ) : selectedOpportunity ? (
@@ -883,7 +1083,14 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                     <h3>{selectedOpportunity.personName}</h3>
                     <p>{selectedOpportunity.client || 'Sem cliente vinculado'} · {selectedOpportunity.source}</p>
                   </div>
-                  <span className={`crm-status crm-status--${selectedOpportunity.status}`}>{OPPORTUNITY_STAGE_LABELS[selectedOpportunity.status as keyof typeof OPPORTUNITY_STAGE_LABELS]}</span>
+                  <button className="crm-icon-button" onClick={() => setSelectedOpportunity(null)} aria-label="Fechar detalhe da oportunidade">
+                    <X size={16} />
+                  </button>
+                </div>
+                <div className="crm-drawer__badge-row">
+                  <span className={`crm-chip crm-chip--blue`}>{OPPORTUNITY_STAGE_LABELS[selectedOpportunity.status as keyof typeof OPPORTUNITY_STAGE_LABELS]}</span>
+                  {selectedOpportunity.hasCriticalTriage ? <span className="crm-chip crm-chip--neutral">Triagem</span> : null}
+                  {selectedOpportunity.responsible ? null : <span className="crm-chip crm-chip--warning">Sem responsável</span>}
                 </div>
               </div>
 
@@ -922,10 +1129,10 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
               {drawerTab === 'overview' ? (
                 <>
                   <div className="crm-drawer__meta">
-                    <div><span>Status</span><strong>{OPPORTUNITY_STAGE_LABELS[selectedOpportunity.status as keyof typeof OPPORTUNITY_STAGE_LABELS]}</strong></div>
-                    <div><span>Origem</span><strong>{selectedOpportunity.source}</strong></div>
+                    <div><span>Status</span><strong>Ação recomendada</strong></div>
+                    <div><span>Origem</span><strong>Publicação automatizada</strong></div>
                     <div><span>Cliente</span><strong>{selectedOpportunity.client || '—'}</strong></div>
-                    <div><span>Responsável</span><strong>{selectedOpportunity.responsible || 'Não definido'}</strong></div>
+                    <div><span>Responsável</span><strong className={selectedOpportunity.responsible ? '' : 'crm-value--warning'}>{selectedOpportunity.responsible || 'Não definido'}</strong></div>
                     <div><span>Último contato</span><strong>{selectedOpportunity.lastContactAt ? formatDateTime(selectedOpportunity.lastContactAt) : '—'}</strong></div>
                     <div><span>Próximo contato</span><strong>{selectedOpportunity.nextContactAt ? formatDateTime(selectedOpportunity.nextContactAt) : '—'}</strong></div>
                     <div><span>Atualizada em</span><strong>{formatDateTime(selectedOpportunity.updatedAt)}</strong></div>
@@ -934,6 +1141,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                   <section className="crm-panel">
                     <h4>Resumo</h4>
                     <p>{selectedOpportunity.summary}</p>
+                    <small>Oportunidade criada automaticamente para análise comercial e possível conversão operacional.</small>
                   </section>
                   <section className="crm-panel">
                     <h4>Contexto de triagem</h4>
@@ -961,10 +1169,10 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                 </section>
               ) : null}
 
-              {drawerTab === 'commercial' ? (
-                <>
-                  <section className="crm-panel">
-                    <h4>Gestão comercial</h4>
+                {drawerTab === 'commercial' ? (
+                  <>
+                    <section className="crm-panel">
+                      <h4>Gestão comercial</h4>
                     <label className="crm-inline-field">
                       <span>Responsável</span>
                       <input
@@ -997,8 +1205,23 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                       </select>
                     </label>
                     <button className="btn-secondary" onClick={() => void addOpportunityContactEvent(selectedOpportunity)}>Adicionar histórico</button>
-                  </section>
-                </>
+                    </section>
+                  </>
+                ) : null}
+
+              {drawerTab === 'documents' ? (
+                <section className="crm-panel">
+                  <h4>Documentos</h4>
+                  <div className="crm-empty crm-empty--compact">
+                    <div className="crm-empty__icon"><FileText size={18} /></div>
+                    <strong>Nenhum documento anexado</strong>
+                    <p>Adicione documentos para apoiar a qualificação da oportunidade.</p>
+                    <button className="btn-secondary" onClick={() => navigate('/documentos')}>
+                      <FolderOpen size={14} />
+                      Abrir documentos
+                    </button>
+                  </div>
+                </section>
               ) : null}
 
               {drawerTab === 'process' ? (
@@ -1074,6 +1297,64 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
           ) : <div className="crm-empty">Selecione uma oportunidade para ver o detalhe.</div>}
         </aside>
       </section>
+
+      {showNewOpportunityDialog ? (
+        <div className="crm-dialog" role="dialog" aria-modal="true" aria-label="Nova oportunidade">
+          <div className="crm-dialog__backdrop" onClick={() => setShowNewOpportunityDialog(false)} />
+          <div className="crm-dialog__panel">
+            <div className="crm-dialog__header">
+              <div>
+                <span className="crm-eyebrow">Nova oportunidade</span>
+                <h3>Criar oportunidade manual</h3>
+                <p>Cadastre um caso novo para entrar no pipeline comercial do CRM.</p>
+              </div>
+              <button className="crm-icon-button" onClick={() => setShowNewOpportunityDialog(false)} aria-label="Fechar diálogo">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="crm-dialog__body">
+              <label className="crm-inline-field">
+                <span>Nome</span>
+                <input value={newOpportunityForm.personName} onChange={(event) => setNewOpportunityForm((prev) => ({ ...prev, personName: event.target.value }))} placeholder="Tom Kelve Santos de Medeiros" />
+              </label>
+              <label className="crm-inline-field">
+                <span>Cliente</span>
+                <input value={newOpportunityForm.clientName} onChange={(event) => setNewOpportunityForm((prev) => ({ ...prev, clientName: event.target.value }))} placeholder="Opcional" />
+              </label>
+              <label className="crm-inline-field">
+                <span>CPF</span>
+                <input value={newOpportunityForm.cpf} onChange={(event) => setNewOpportunityForm((prev) => ({ ...prev, cpf: event.target.value }))} placeholder="Opcional" />
+              </label>
+              <label className="crm-inline-field">
+                <span>Responsável</span>
+                <input value={newOpportunityForm.responsible} onChange={(event) => setNewOpportunityForm((prev) => ({ ...prev, responsible: event.target.value }))} placeholder="advogado@juridico.com" />
+              </label>
+              <label className="crm-inline-field">
+                <span>Próximo contato</span>
+                <input type="datetime-local" value={newOpportunityForm.nextContactAt} onChange={(event) => setNewOpportunityForm((prev) => ({ ...prev, nextContactAt: event.target.value }))} />
+              </label>
+              <label className="crm-inline-field">
+                <span>Resumo</span>
+                <textarea value={newOpportunityForm.summary} onChange={(event) => setNewOpportunityForm((prev) => ({ ...prev, summary: event.target.value }))} rows={4} placeholder="Contexto da oportunidade, origem, necessidade e próximos passos..." />
+              </label>
+            </div>
+            <div className="crm-dialog__footer">
+              <div className="crm-conversion__hint">
+                <ArrowRight size={14} />
+                <span>A oportunidade entra no pipeline com ação recomendada.</span>
+              </div>
+              <div className="crm-drawer__actions">
+                <button className="btn-primary" onClick={() => void createOpportunity()}>
+                  Criar oportunidade
+                </button>
+                <button className="btn-secondary" onClick={() => setShowNewOpportunityDialog(false)}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -2979,6 +2979,75 @@ app.get('/crm/opportunities', async (req, res) => {
   res.json(opportunities.map((item: any) => buildCrmOpportunityPayload(item)));
 });
 
+app.post('/crm/opportunities', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+  if (!canAccessCrm(decoded)) return res.status(403).send({ message: 'Acesso negado' });
+
+  const personName = typeof req.body?.personName === 'string' ? req.body.personName.trim() : '';
+  const summary = typeof req.body?.summary === 'string' ? req.body.summary.trim() : '';
+  const source = typeof req.body?.source === 'string' && req.body.source.trim() ? req.body.source.trim() : 'manual';
+  const status = typeof req.body?.status === 'string' && req.body.status.trim() ? req.body.status.trim() : 'acao_recomendada';
+  const responsible = typeof req.body?.responsible === 'string' ? req.body.responsible.trim() || null : null;
+  const cpf = typeof req.body?.cpf === 'string' ? req.body.cpf.trim() || null : null;
+  const clientName = typeof req.body?.clientName === 'string' ? req.body.clientName.trim() : '';
+  const nextContactAt = typeof req.body?.nextContactAt === 'string' && req.body.nextContactAt.trim()
+    ? new Date(req.body.nextContactAt)
+    : req.body?.nextContactAt === null
+      ? null
+      : null;
+
+  if (!personName) return res.status(400).send({ message: 'Nome do contato é obrigatório' });
+  if (!summary) return res.status(400).send({ message: 'Resumo da oportunidade é obrigatório' });
+
+  let clientId: number | null = null;
+  if (typeof req.body?.clientId === 'number') {
+    const client = await clientStore.findUnique({ where: { id: req.body.clientId } });
+    clientId = client?.id ?? null;
+  }
+
+  if (!clientId && cpf) {
+    const linkedByCpf = await clientStore.findFirst({ where: { cpfCnpj: cpf } });
+    clientId = linkedByCpf?.id ?? null;
+  }
+
+  if (!clientId && clientName) {
+    const linkedByName = await clientStore.upsert({
+      where: { name: clientName },
+      update: {
+        cpfCnpj: cpf ?? undefined,
+        responsible: responsible ?? undefined,
+        status: 'prospecto',
+      },
+      create: {
+        name: clientName,
+        type: 'PJ',
+        cpfCnpj: cpf,
+        status: 'prospecto',
+        responsible,
+        notes: 'Cliente criado a partir do CRM jurídico.',
+      },
+    });
+    clientId = linkedByName.id;
+  }
+
+  const created = await prisma.crmOpportunity.create({
+    data: {
+      clientId,
+      cpf,
+      personName,
+      source,
+      status,
+      responsible,
+      summary,
+      nextContactAt,
+    },
+    include: { clientRecord: true, triageItems: true, contactEvents: { orderBy: { createdAt: 'desc' } } },
+  });
+
+  res.status(201).json(buildCrmOpportunityPayload(created));
+});
+
 app.put('/crm/leads/:id', async (req, res) => {
   const decoded = getUserFromReq(req);
   if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });

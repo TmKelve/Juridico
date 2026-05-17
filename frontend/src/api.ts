@@ -869,6 +869,19 @@ export const api = {
   getCrmOpportunities: () =>
     apiClient<ApiCrmOpportunity[]>('/crm/opportunities'),
 
+  createCrmOpportunity: (data: {
+    clientId?: number | null;
+    clientName?: string;
+    personName: string;
+    cpf?: string;
+    source?: string;
+    status?: string;
+    responsible?: string;
+    summary: string;
+    nextContactAt?: string | null;
+  }) =>
+    apiClient<ApiCrmOpportunity>('/crm/opportunities', { method: 'POST', body: data }),
+
   updateCrmLead: (id: number, data: Partial<Pick<ApiCrmLead, 'status' | 'summary' | 'personName' | 'responsible' | 'nextContactAt'>>) =>
     apiClient<ApiCrmLead>(`/crm/leads/${id}`, { method: 'PUT', body: data }),
 
