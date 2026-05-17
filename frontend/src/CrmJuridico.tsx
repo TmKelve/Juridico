@@ -33,6 +33,16 @@ function formatDateTimeLocal(iso: string | null) {
   return local.toISOString().slice(0, 16);
 }
 
+function matchesNextContactFilter(nextContactAt: string | null, filter: string) {
+  if (!filter) return true;
+  if (filter === 'sem_contato') return !nextContactAt;
+  if (!nextContactAt) return false;
+  const contactDate = new Date(nextContactAt);
+  if (filter === 'hoje') return contactDate.toDateString() === new Date().toDateString();
+  if (filter === 'futuro') return contactDate > new Date();
+  return true;
+}
+
 export function CrmJuridico({ user }: CrmJuridicoProps) {
   const [tab, setTab] = useState<TabKey>('opportunities');
   const [leads, setLeads] = useState<ApiCrmLead[]>([]);
@@ -41,6 +51,10 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [search, setSearch] = useState('');
+  const [responsibleFilter, setResponsibleFilter] = useState('');
+  const [stageFilter, setStageFilter] = useState('');
+  const [nextContactFilter, setNextContactFilter] = useState('');
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [selectedLead, setSelectedLead] = useState<ApiCrmLead | null>(null);
   const [selectedOpportunity, setSelectedOpportunity] = useState<ApiCrmOpportunity | null>(null);
   const [contactNote, setContactNote] = useState('');
@@ -215,13 +229,33 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
 
   const filteredLeads = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return leads.filter((item) => !q || [item.personName, item.client, item.cpf, item.summary, item.source].join(' ').toLowerCase().includes(q));
-  }, [leads, search]);
+    return leads.filter((item) => {
+      const matchesSearch = !q || [item.personName, item.client, item.cpf, item.summary, item.source].join(' ').toLowerCase().includes(q);
+      const matchesResponsible = !responsibleFilter || item.responsible === responsibleFilter;
+      const matchesStage = !stageFilter || item.status === stageFilter;
+      const matchesNextContact = matchesNextContactFilter(item.nextContactAt, nextContactFilter);
+      return matchesSearch && matchesResponsible && matchesStage && matchesNextContact;
+    });
+  }, [leads, search, responsibleFilter, stageFilter, nextContactFilter]);
 
   const filteredOpportunities = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return opportunities.filter((item) => !q || [item.personName, item.client, item.cpf, item.summary, item.source].join(' ').toLowerCase().includes(q));
-  }, [opportunities, search]);
+    return opportunities.filter((item) => {
+      const matchesSearch = !q || [item.personName, item.client, item.cpf, item.summary, item.source].join(' ').toLowerCase().includes(q);
+      const matchesResponsible = !responsibleFilter || item.responsible === responsibleFilter;
+      const matchesStage = !stageFilter || item.status === stageFilter;
+      const matchesNextContact = matchesNextContactFilter(item.nextContactAt, nextContactFilter);
+      return matchesSearch && matchesResponsible && matchesStage && matchesNextContact;
+    });
+  }, [opportunities, search, responsibleFilter, stageFilter, nextContactFilter]);
+
+  const responsibleOptions = useMemo(() => {
+    const values = new Set<string>();
+    [...leads, ...opportunities].forEach((item) => {
+      if (item.responsible) values.add(item.responsible);
+    });
+    return Array.from(values).sort((a, b) => a.localeCompare(b));
+  }, [leads, opportunities]);
 
   const kpis = useMemo(() => ({
     newLeads: leads.filter((item) => item.status === 'novo').length,
@@ -258,6 +292,21 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     setSuccess(`Oportunidade convertida em cliente e processo #${response.data.process.id}.`);
   }
 
+  const activeFilters = [
+    responsibleFilter ? { key: 'responsible', label: `Responsável: ${responsibleFilter}` } : null,
+    stageFilter ? { key: 'stage', label: `Etapa: ${tab === 'opportunities' ? (OPPORTUNITY_STAGE_LABELS[stageFilter as keyof typeof OPPORTUNITY_STAGE_LABELS] ?? stageFilter) : stageFilter}` } : null,
+    nextContactFilter ? {
+      key: 'nextContact',
+      label: `Próximo contato: ${nextContactFilter === 'hoje' ? 'Hoje' : nextContactFilter === 'futuro' ? 'Futuro' : 'Sem contato'}`
+    } : null,
+  ].filter(Boolean) as Array<{ key: string; label: string }>;
+
+  function clearFilter(key: string) {
+    if (key === 'responsible') setResponsibleFilter('');
+    if (key === 'stage') setStageFilter('');
+    if (key === 'nextContact') setNextContactFilter('');
+  }
+
   return (
     <div className="crm-page">
       <section className="crm-hero">
@@ -290,7 +339,49 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
               <Search size={14} />
               <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nome, cliente, CPF, origem ou resumo..." />
             </label>
+            <select className="crm-filter-select" value={responsibleFilter} onChange={(event) => setResponsibleFilter(event.target.value)}>
+              <option value="">Todos responsáveis</option>
+              {responsibleOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+            <button className={`btn-secondary ${showMoreFilters ? 'is-active' : ''}`} onClick={() => setShowMoreFilters((prev) => !prev)}>
+              Mais filtros
+            </button>
           </div>
+
+          {showMoreFilters ? (
+            <div className="crm-filters-advanced">
+              <label className="crm-inline-field">
+                <span>{tab === 'opportunities' ? 'Etapa' : 'Status'}</span>
+                <select className="crm-filter-select" value={stageFilter} onChange={(event) => setStageFilter(event.target.value)}>
+                  <option value="">Todos</option>
+                  {(tab === 'opportunities' ? OPPORTUNITY_STATUS : LEAD_STATUS).map((status) => (
+                    <option key={status} value={status}>
+                      {tab === 'opportunities' ? OPPORTUNITY_STAGE_LABELS[status as keyof typeof OPPORTUNITY_STAGE_LABELS] : status}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="crm-inline-field">
+                <span>Próximo contato</span>
+                <select className="crm-filter-select" value={nextContactFilter} onChange={(event) => setNextContactFilter(event.target.value)}>
+                  <option value="">Todos</option>
+                  <option value="hoje">Hoje</option>
+                  <option value="futuro">Futuro</option>
+                  <option value="sem_contato">Sem contato</option>
+                </select>
+              </label>
+            </div>
+          ) : null}
+
+          {activeFilters.length > 0 ? (
+            <div className="crm-filter-chips">
+              {activeFilters.map((filter) => (
+                <button key={filter.key} className="crm-filter-chip" onClick={() => clearFilter(filter.key)}>
+                  {filter.label} ×
+                </button>
+              ))}
+            </div>
+          ) : null}
 
           {success && <div className="crm-feedback crm-feedback--success">{success}</div>}
           {error && <div className="crm-feedback crm-feedback--error">{error}</div>}

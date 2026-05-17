@@ -82,6 +82,13 @@
   flex-wrap: wrap;
 }
 
+.crm-filters-advanced,
+.crm-filter-chips {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .crm-tabs button {
   min-height: 42px;
   padding: 0 14px;
@@ -109,10 +116,32 @@
   background: #fff;
 }
 
+.crm-filter-select {
+  min-height: 44px;
+  min-width: 180px;
+  padding: 0 12px;
+  border: 1px solid var(--neutral-200, #dbe2ea);
+  border-radius: 12px;
+  background: #fff;
+  font: inherit;
+}
+
+.crm-filter-chip {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--brand-200, #bfd2e6);
+  border-radius: 999px;
+  background: #f8fbff;
+  color: var(--brand-700, #274c77);
+  font: inherit;
+  font-weight: 600;
+}
+
 .crm-search input,
 .crm-card select,
 .crm-inline-field input,
-.crm-panel textarea {
+.crm-panel textarea,
+.crm-inline-field select {
   width: 100%;
   border: 0;
   background: transparent;
@@ -275,7 +304,8 @@
 }
 
 .crm-inline-field input,
-.crm-panel textarea {
+.crm-panel textarea,
+.crm-inline-field select {
   min-height: 44px;
   padding: 10px 12px;
   border: 1px solid var(--neutral-200, #dbe2ea);
@@ -342,5 +372,8 @@
   .crm-conversion__grid { grid-template-columns: 1fr; }
   .crm-hero,
   .crm-card__header,
-  .crm-card__meta { display: grid; }
+  .crm-card__meta,
+  .crm-toolbar,
+  .crm-filters-advanced,
+  .crm-filter-chips { display: grid; }
 }
