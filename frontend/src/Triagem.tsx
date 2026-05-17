@@ -66,6 +66,10 @@ function kpiTone(value: number, danger = false) {
   return 'neutral';
 }
 
+function formatDateInput(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
 export function Triagem({ user }: TriagemProps) {
   const navigate = useNavigate();
   const [items, setItems] = useState<ApiTriageItem[]>([]);
@@ -79,6 +83,18 @@ export function Triagem({ user }: TriagemProps) {
   const [drawerLoading, setDrawerLoading] = useState(false);
   const [discardReason, setDiscardReason] = useState<string>('duplicada');
   const [decisionNote, setDecisionNote] = useState('');
+  const [assistDraft, setAssistDraft] = useState({
+    deadlineTitle: '',
+    dueDate: '',
+    deadlinePriority: 'alta',
+    taskTitle: '',
+    taskDueDate: '',
+    taskPriority: 'alta',
+    taskOwner: '',
+    taskDescription: '',
+    crmPersonName: '',
+    crmSummary: '',
+  });
 
   useEffect(() => {
     trackPageView('triagem', { role: user.role });
@@ -121,6 +137,7 @@ export function Triagem({ user }: TriagemProps) {
       setSelected(response.data);
       setDiscardReason('duplicada');
       setDecisionNote('');
+      setAssistDraft(buildAssistDraft(response.data, user.email));
     } catch (err) {
       setError((err as Error).message || 'Erro ao carregar detalhe da triagem.');
     } finally {
@@ -132,7 +149,27 @@ export function Triagem({ user }: TriagemProps) {
     const response = await api.getTriageItem(id);
     if (response.status === 200 && response.data) {
       setSelected(response.data);
+      setAssistDraft(buildAssistDraft(response.data, user.email));
     }
+  }
+
+  function buildAssistDraft(item: ApiTriageItem, email: string) {
+    const owner = email.split('@')[0] || email;
+    const isCritical = item.queueType === 'critica';
+    return {
+      deadlineTitle: item.event?.title || `Prazo derivado da triagem #${item.id}`,
+      dueDate: formatDateInput(new Date(Date.now() + 2 * 864e5)),
+      deadlinePriority: isCritical ? 'alta' : 'media',
+      taskTitle: item.suggestedAction === 'criar_prazo'
+        ? `Tratar ${item.event?.title?.toLowerCase() || 'publicação crítica'}`
+        : item.event?.title || `Ação derivada da triagem #${item.id}`,
+      taskDueDate: formatDateInput(new Date(Date.now() + 864e5)),
+      taskPriority: isCritical ? 'alta' : 'media',
+      taskOwner: owner,
+      taskDescription: item.suggestedReason,
+      crmPersonName: item.client || item.capture.personName || '',
+      crmSummary: item.suggestedReason,
+    };
   }
 
   async function decide(item: ApiTriageItem, decisionType: 'confirmado' | 'descartado' | 'revisao_manual' | 'adiado') {
@@ -142,6 +179,16 @@ export function Triagem({ user }: TriagemProps) {
       decisionReason?: string;
       decisionNote?: string;
       postponeUntil?: string;
+      deadlineTitle?: string;
+      dueDate?: string;
+      deadlinePriority?: 'baixa' | 'media' | 'alta';
+      taskTitle?: string;
+      taskDueDate?: string;
+      taskPriority?: 'baixa' | 'media' | 'alta' | 'critica';
+      taskOwner?: string;
+      taskDescription?: string;
+      crmPersonName?: string;
+      crmSummary?: string;
     } = { decisionType };
 
     if (decisionType === 'descartado') {
@@ -159,6 +206,19 @@ export function Triagem({ user }: TriagemProps) {
       body.decisionReason = 'Adiado para novo ciclo de triagem';
       body.decisionNote = decisionNote;
       body.postponeUntil = suggested.toISOString();
+    }
+
+    if (decisionType === 'confirmado') {
+      body.deadlineTitle = assistDraft.deadlineTitle;
+      body.dueDate = assistDraft.dueDate;
+      body.deadlinePriority = assistDraft.deadlinePriority as 'baixa' | 'media' | 'alta';
+      body.taskTitle = assistDraft.taskTitle;
+      body.taskDueDate = assistDraft.taskDueDate;
+      body.taskPriority = assistDraft.taskPriority as 'baixa' | 'media' | 'alta' | 'critica';
+      body.taskOwner = assistDraft.taskOwner;
+      body.taskDescription = assistDraft.taskDescription;
+      body.crmPersonName = assistDraft.crmPersonName;
+      body.crmSummary = assistDraft.crmSummary;
     }
 
     const response = await api.decideTriageItem(item.id, body);
@@ -496,6 +556,90 @@ export function Triagem({ user }: TriagemProps) {
                   value={decisionNote}
                   onChange={(event) => setDecisionNote(event.target.value)}
                 />
+              </section>
+
+              <section className="triage-panel">
+                <h4>Confirmação assistida</h4>
+                {selected.suggestedAction === 'criar_prazo' && (
+                  <div className="triage-panel__grid">
+                    <div>
+                      <span>Título do prazo</span>
+                      <input value={assistDraft.deadlineTitle} onChange={(event) => setAssistDraft((prev) => ({ ...prev, deadlineTitle: event.target.value }))} />
+                    </div>
+                    <div>
+                      <span>Vencimento</span>
+                      <input type="date" value={assistDraft.dueDate} onChange={(event) => setAssistDraft((prev) => ({ ...prev, dueDate: event.target.value }))} />
+                    </div>
+                    <div>
+                      <span>Prioridade do prazo</span>
+                      <select value={assistDraft.deadlinePriority} onChange={(event) => setAssistDraft((prev) => ({ ...prev, deadlinePriority: event.target.value }))}>
+                        <option value="baixa">Baixa</option>
+                        <option value="media">Média</option>
+                        <option value="alta">Alta</option>
+                      </select>
+                    </div>
+                    <div>
+                      <span>Tarefa derivada</span>
+                      <input value={assistDraft.taskTitle} onChange={(event) => setAssistDraft((prev) => ({ ...prev, taskTitle: event.target.value }))} />
+                    </div>
+                    <div>
+                      <span>Vencimento da tarefa</span>
+                      <input type="date" value={assistDraft.taskDueDate} onChange={(event) => setAssistDraft((prev) => ({ ...prev, taskDueDate: event.target.value }))} />
+                    </div>
+                    <div>
+                      <span>Responsável</span>
+                      <input value={assistDraft.taskOwner} onChange={(event) => setAssistDraft((prev) => ({ ...prev, taskOwner: event.target.value }))} />
+                    </div>
+                  </div>
+                )}
+
+                {selected.suggestedAction === 'criar_tarefa' && (
+                  <div className="triage-panel__grid">
+                    <div>
+                      <span>Título da tarefa</span>
+                      <input value={assistDraft.taskTitle} onChange={(event) => setAssistDraft((prev) => ({ ...prev, taskTitle: event.target.value }))} />
+                    </div>
+                    <div>
+                      <span>Vencimento</span>
+                      <input type="date" value={assistDraft.taskDueDate} onChange={(event) => setAssistDraft((prev) => ({ ...prev, taskDueDate: event.target.value }))} />
+                    </div>
+                    <div>
+                      <span>Prioridade</span>
+                      <select value={assistDraft.taskPriority} onChange={(event) => setAssistDraft((prev) => ({ ...prev, taskPriority: event.target.value }))}>
+                        <option value="baixa">Baixa</option>
+                        <option value="media">Média</option>
+                        <option value="alta">Alta</option>
+                        <option value="critica">Crítica</option>
+                      </select>
+                    </div>
+                    <div>
+                      <span>Responsável</span>
+                      <input value={assistDraft.taskOwner} onChange={(event) => setAssistDraft((prev) => ({ ...prev, taskOwner: event.target.value }))} />
+                    </div>
+                  </div>
+                )}
+
+                {(selected.suggestedAction === 'criar_oportunidade' || selected.suggestedAction === 'criar_lead') && (
+                  <div className="triage-panel__grid">
+                    <div>
+                      <span>Contato</span>
+                      <input value={assistDraft.crmPersonName} onChange={(event) => setAssistDraft((prev) => ({ ...prev, crmPersonName: event.target.value }))} />
+                    </div>
+                    <div>
+                      <span>Resumo para CRM</span>
+                      <textarea rows={3} value={assistDraft.crmSummary} onChange={(event) => setAssistDraft((prev) => ({ ...prev, crmSummary: event.target.value }))} />
+                    </div>
+                  </div>
+                )}
+
+                {selected.suggestedAction !== 'criar_oportunidade' && selected.suggestedAction !== 'criar_lead' && (
+                  <textarea
+                    rows={3}
+                    placeholder="Descrição operacional que acompanhará a ação."
+                    value={assistDraft.taskDescription}
+                    onChange={(event) => setAssistDraft((prev) => ({ ...prev, taskDescription: event.target.value }))}
+                  />
+                )}
               </section>
 
               <div className="triage-drawer__actions">

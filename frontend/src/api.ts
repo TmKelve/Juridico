@@ -804,6 +804,16 @@ export const api = {
     decisionNote?: string;
     postponeUntil?: string;
     assignedQueue?: string;
+    deadlineTitle?: string;
+    dueDate?: string;
+    deadlinePriority?: ApiDeadline['priority'];
+    taskTitle?: string;
+    taskDueDate?: string;
+    taskPriority?: ApiTask['priority'];
+    taskOwner?: string;
+    taskDescription?: string;
+    crmPersonName?: string;
+    crmSummary?: string;
   }) =>
     apiClient<{ item: ApiTriageItem; decision: ApiTriageDecision }>(`/triage/${id}/decision`, { method: 'POST', body: data }),
 };

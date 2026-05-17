@@ -4412,7 +4412,23 @@ app.post('/triage/:id/decision', async (req, res) => {
   if ('error' in access && access.error) return res.status(access.error.status).send({ message: access.error.message });
 
   const triageItem = access.triageItem;
-  const { decisionType, decisionReason, decisionNote, postponeUntil, assignedQueue } = req.body ?? {};
+  const {
+    decisionType,
+    decisionReason,
+    decisionNote,
+    postponeUntil,
+    assignedQueue,
+    deadlineTitle,
+    dueDate,
+    deadlinePriority,
+    taskTitle,
+    taskDueDate,
+    taskPriority,
+    taskOwner,
+    taskDescription,
+    crmPersonName,
+    crmSummary,
+  } = req.body ?? {};
 
   if (!decisionType || typeof decisionType !== 'string') {
     return res.status(400).send({ message: 'decisionType é obrigatório' });
@@ -4429,17 +4445,28 @@ app.post('/triage/:id/decision', async (req, res) => {
 
   if (decisionType === 'confirmado') {
     if (triageItem.suggestedAction === 'criar_prazo' && triageItem.processId) {
+      const resolvedDeadlineDueDate = typeof dueDate === 'string' && dueDate.trim()
+        ? new Date(`${dueDate.trim()}T12:00:00`)
+        : addDays(new Date(), 2);
+      const resolvedTaskDueDate = typeof taskDueDate === 'string' && taskDueDate.trim()
+        ? new Date(`${taskDueDate.trim()}T12:00:00`)
+        : addDays(new Date(), 1);
+      const resolvedTaskOwner = typeof taskOwner === 'string' && taskOwner.trim()
+        ? taskOwner.trim()
+        : getResponsibleLabel(decoded.email) || decoded.email;
       const deadline = await prisma.prazo.create({
         data: {
           processId: triageItem.processId,
-          title: triageItem.event?.title || `Prazo derivado da triagem #${triageItem.id}`,
-          dueDate: addDays(new Date(), 2),
+          title: typeof deadlineTitle === 'string' && deadlineTitle.trim()
+            ? deadlineTitle.trim()
+            : triageItem.event?.title || `Prazo derivado da triagem #${triageItem.id}`,
+          dueDate: resolvedDeadlineDueDate,
           status: 'critico',
-          priority: 'alta',
+          priority: typeof deadlinePriority === 'string' && deadlinePriority.trim() ? deadlinePriority.trim() : 'alta',
           origin: 'publicacao',
           responsible: getResponsibleLabel(decoded.email) || decoded.email,
           legalArea: triageItem.process?.phase || null,
-          notes: triageItem.suggestedReason,
+          notes: typeof taskDescription === 'string' && taskDescription.trim() ? taskDescription.trim() : triageItem.suggestedReason,
           createdBy: getResponsibleLabel(decoded.email) || decoded.email,
         },
       });
@@ -4447,16 +4474,20 @@ app.post('/triage/:id/decision', async (req, res) => {
 
       const task = await prisma.task.create({
         data: {
-          title: `Tratar ${triageItem.event?.title?.toLowerCase() || 'publicação crítica'}`,
-          description: triageItem.suggestedReason,
+          title: typeof taskTitle === 'string' && taskTitle.trim()
+            ? taskTitle.trim()
+            : `Tratar ${triageItem.event?.title?.toLowerCase() || 'publicação crítica'}`,
+          description: typeof taskDescription === 'string' && taskDescription.trim()
+            ? taskDescription.trim()
+            : triageItem.suggestedReason,
           processId: triageItem.processId,
           clientId: triageItem.clientId,
           clientName: triageItem.clientRecord?.name || triageItem.process?.client || null,
           origin: 'publicacao',
-          dueDate: addDays(new Date(), 1),
+          dueDate: resolvedTaskDueDate,
           status: 'pendente',
-          priority: 'alta',
-          owner: getResponsibleLabel(decoded.email) || decoded.email,
+          priority: typeof taskPriority === 'string' && taskPriority.trim() ? taskPriority.trim() : 'alta',
+          owner: resolvedTaskOwner,
           createdBy: getResponsibleLabel(decoded.email) || decoded.email,
           notes: triageItem.capture.normalizedText,
           linkedToDeadline: true,
@@ -4466,18 +4497,28 @@ app.post('/triage/:id/decision', async (req, res) => {
       });
       generatedTaskId = task.id;
     } else if (triageItem.suggestedAction === 'criar_tarefa' && triageItem.processId) {
+      const resolvedTaskDueDate = typeof taskDueDate === 'string' && taskDueDate.trim()
+        ? new Date(`${taskDueDate.trim()}T12:00:00`)
+        : addDays(new Date(), 1);
+      const resolvedTaskOwner = typeof taskOwner === 'string' && taskOwner.trim()
+        ? taskOwner.trim()
+        : getResponsibleLabel(decoded.email) || decoded.email;
       const task = await prisma.task.create({
         data: {
-          title: triageItem.event?.title || `Ação derivada da triagem #${triageItem.id}`,
-          description: triageItem.suggestedReason,
+          title: typeof taskTitle === 'string' && taskTitle.trim()
+            ? taskTitle.trim()
+            : triageItem.event?.title || `Ação derivada da triagem #${triageItem.id}`,
+          description: typeof taskDescription === 'string' && taskDescription.trim()
+            ? taskDescription.trim()
+            : triageItem.suggestedReason,
           processId: triageItem.processId,
           clientId: triageItem.clientId,
           clientName: triageItem.clientRecord?.name || triageItem.process?.client || null,
           origin: 'publicacao',
-          dueDate: addDays(new Date(), 1),
+          dueDate: resolvedTaskDueDate,
           status: 'pendente',
-          priority: triageItem.queueType === 'critica' ? 'alta' : 'media',
-          owner: getResponsibleLabel(decoded.email) || decoded.email,
+          priority: typeof taskPriority === 'string' && taskPriority.trim() ? taskPriority.trim() : (triageItem.queueType === 'critica' ? 'alta' : 'media'),
+          owner: resolvedTaskOwner,
           createdBy: getResponsibleLabel(decoded.email) || decoded.email,
           notes: triageItem.capture.normalizedText,
           linkedToPublication: true,
@@ -4493,10 +4534,12 @@ app.post('/triage/:id/decision', async (req, res) => {
           data: {
             clientId: triageItem.clientId,
             cpf: triageItem.capture.cpf || null,
-            personName: triageItem.clientRecord?.name || triageItem.capture.personName || 'Cliente identificado',
+            personName: typeof crmPersonName === 'string' && crmPersonName.trim()
+              ? crmPersonName.trim()
+              : triageItem.clientRecord?.name || triageItem.capture.personName || 'Cliente identificado',
             source: 'publicacao_automatizada',
             status: 'acao_recomendada',
-            summary: triageItem.suggestedReason,
+            summary: typeof crmSummary === 'string' && crmSummary.trim() ? crmSummary.trim() : triageItem.suggestedReason,
           },
         });
         generatedOpportunityId = opportunity.id;
@@ -4509,10 +4552,12 @@ app.post('/triage/:id/decision', async (req, res) => {
           data: {
             clientId: triageItem.clientId,
             cpf: triageItem.capture.cpf || null,
-            personName: triageItem.capture.personName || 'Lead identificado',
+            personName: typeof crmPersonName === 'string' && crmPersonName.trim()
+              ? crmPersonName.trim()
+              : triageItem.capture.personName || 'Lead identificado',
             source: 'publicacao_automatizada',
             status: 'novo',
-            summary: triageItem.suggestedReason,
+            summary: typeof crmSummary === 'string' && crmSummary.trim() ? crmSummary.trim() : triageItem.suggestedReason,
           },
         });
         generatedLeadId = lead.id;
