@@ -6,6 +6,7 @@ import { initMonitoring, trackAuthEvent, trackPageView, trackEvent } from './mon
 import { Atendimentos } from './Atendimentos'
 import { Agenda } from './Agenda'
 import { Clients } from './Clients'
+import { CrmJuridico } from './CrmJuridico'
 import { Deadlines } from './Deadlines'
 import { Documents } from './Documents'
 import { PieceTemplates } from './PieceTemplates'
@@ -115,6 +116,14 @@ function getPageMeta(pathname: string, role: string) {
       title: 'Triagem',
       subtitle: 'Centralize capturas automatizadas, confirme ações sugeridas e preserve auditoria da automação jurídica.',
       badge: 'Automação',
+    }
+  }
+
+  if (pathname === '/crm-juridico') {
+    return {
+      title: 'CRM Jurídico',
+      subtitle: 'Acompanhe leads, oportunidades derivadas da triagem e conduza o relacionamento comercial com contexto jurídico.',
+      badge: 'Relacionamento',
     }
   }
 
@@ -280,6 +289,7 @@ function AppShell({
             <Route path="/tarefas" element={<Tasks user={user} />} />
             <Route path="/atendimentos" element={<Atendimentos user={user} />} />
             <Route path="/clientes" element={<Clients user={user} />} />
+            <Route path="/crm-juridico" element={<CrmJuridico user={user} />} />
             <Route path="/publicacoes-intimacoes" element={<Publications user={user} />} />
             <Route path="/triagem" element={<Triagem user={user} />} />
             <Route

@@ -34,7 +34,7 @@ const mainNavItems: NavItem[] = [
   { kind: 'link',   label: 'Clientes',      icon: Briefcase,   to: '/clientes'     },
   { kind: 'link',   label: 'Agenda',        icon: CalendarDays, to: '/agenda' },
   { kind: 'button', label: 'Financeiro',    icon: Landmark,    onClick: () => trackEvent('menu_financeiro_click') },
-  { kind: 'button', label: 'CRM Jurídico',  icon: PieChart,    onClick: () => trackEvent('menu_crm_click') },
+  { kind: 'link',   label: 'CRM Jurídico',  icon: PieChart,    to: '/crm-juridico' },
 ]
 
 interface SidebarNavProps {

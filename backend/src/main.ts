@@ -8,6 +8,7 @@ import { collectCnjPublications } from './cnj-publications.provider';
 import { collectCpfPublications } from './cpf-publications.provider';
 import { collectDiarioPublications } from './diario-publications.provider';
 import { collectOabPublications } from './oab-publications.provider';
+import { buildCrmLeadPayload, buildCrmOpportunityPayload } from './crm.contract';
 import { buildDeadlinePayload } from './deadlines.contract';
 import { buildDocumentPayload } from './documents.contract';
 import { lookupExternalProcess } from './process-lookup.provider';
@@ -167,6 +168,10 @@ function clearAuthCookie(res: express.Response) {
     sameSite: isProduction ? 'none' : 'strict',
     path: '/',
   });
+}
+
+function canAccessCrm(user: UserToken) {
+  return ['ADM', 'ADV', 'ATD'].includes(user.role);
 }
 
 function getResponsibleLabel(email?: string | null) {
@@ -2938,6 +2943,120 @@ app.put('/documents/:id', async (req, res) => {
   });
 
   res.json(buildDocumentPayload(updated));
+});
+
+app.get('/crm/leads', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+  if (!canAccessCrm(decoded)) return res.status(403).send({ message: 'Acesso negado' });
+
+  const leads = await prisma.crmLead.findMany({
+    include: {
+      clientRecord: true,
+      triageItems: true,
+    },
+    orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+  });
+
+  res.json(leads.map((item: any) => buildCrmLeadPayload(item)));
+});
+
+app.get('/crm/opportunities', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+  if (!canAccessCrm(decoded)) return res.status(403).send({ message: 'Acesso negado' });
+
+  const opportunities = await prisma.crmOpportunity.findMany({
+    include: {
+      clientRecord: true,
+      triageItems: true,
+    },
+    orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+  });
+
+  res.json(opportunities.map((item: any) => buildCrmOpportunityPayload(item)));
+});
+
+app.put('/crm/leads/:id', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+  if (!canAccessCrm(decoded)) return res.status(403).send({ message: 'Acesso negado' });
+
+  const current = await prisma.crmLead.findUnique({
+    where: { id: Number(req.params.id) },
+    include: { clientRecord: true, triageItems: true },
+  });
+  if (!current) return res.status(404).send({ message: 'Lead não encontrado' });
+
+  const updated = await prisma.crmLead.update({
+    where: { id: current.id },
+    data: {
+      status: typeof req.body?.status === 'string' && req.body.status.trim() ? req.body.status.trim() : current.status,
+      summary: typeof req.body?.summary === 'string' && req.body.summary.trim() ? req.body.summary.trim() : current.summary,
+      personName: typeof req.body?.personName === 'string' && req.body.personName.trim() ? req.body.personName.trim() : current.personName,
+    },
+    include: { clientRecord: true, triageItems: true },
+  });
+
+  res.json(buildCrmLeadPayload(updated));
+});
+
+app.put('/crm/opportunities/:id', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+  if (!canAccessCrm(decoded)) return res.status(403).send({ message: 'Acesso negado' });
+
+  const current = await prisma.crmOpportunity.findUnique({
+    where: { id: Number(req.params.id) },
+    include: { clientRecord: true, triageItems: true },
+  });
+  if (!current) return res.status(404).send({ message: 'Oportunidade não encontrada' });
+
+  const updated = await prisma.crmOpportunity.update({
+    where: { id: current.id },
+    data: {
+      status: typeof req.body?.status === 'string' && req.body.status.trim() ? req.body.status.trim() : current.status,
+      summary: typeof req.body?.summary === 'string' && req.body.summary.trim() ? req.body.summary.trim() : current.summary,
+      personName: typeof req.body?.personName === 'string' && req.body.personName.trim() ? req.body.personName.trim() : current.personName,
+    },
+    include: { clientRecord: true, triageItems: true },
+  });
+
+  res.json(buildCrmOpportunityPayload(updated));
+});
+
+app.post('/crm/leads/:id/convert', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+  if (!['ADM', 'ATD', 'ADV'].includes(decoded.role)) return res.status(403).send({ message: 'Acesso negado' });
+
+  const lead = await prisma.crmLead.findUnique({
+    where: { id: Number(req.params.id) },
+    include: { clientRecord: true, triageItems: true },
+  });
+  if (!lead) return res.status(404).send({ message: 'Lead não encontrado' });
+
+  const opportunity = await prisma.crmOpportunity.create({
+    data: {
+      clientId: lead.clientId,
+      cpf: lead.cpf,
+      personName: typeof req.body?.personName === 'string' && req.body.personName.trim() ? req.body.personName.trim() : lead.personName,
+      source: lead.source,
+      status: typeof req.body?.status === 'string' && req.body.status.trim() ? req.body.status.trim() : 'acao_recomendada',
+      summary: typeof req.body?.summary === 'string' && req.body.summary.trim() ? req.body.summary.trim() : lead.summary,
+    },
+    include: { clientRecord: true, triageItems: true },
+  });
+
+  await prisma.crmLead.update({
+    where: { id: lead.id },
+    data: { status: 'convertido' },
+  });
+
+  res.status(201).json({
+    lead: buildCrmLeadPayload({ ...lead, status: 'convertido' }),
+    opportunity: buildCrmOpportunityPayload(opportunity),
+  });
 });
 
 app.get('/publications', async (req, res) => {

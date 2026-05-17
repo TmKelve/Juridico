@@ -320,6 +320,36 @@ export interface ApiTriageJob {
   errorLog: string | null;
 }
 
+export interface ApiCrmLead {
+  id: number;
+  cpf: string;
+  personName: string;
+  source: string;
+  status: string;
+  summary: string;
+  clientId: number | null;
+  client: string;
+  triageCount: number;
+  hasCriticalTriage: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiCrmOpportunity {
+  id: number;
+  cpf: string;
+  personName: string;
+  source: string;
+  status: string;
+  summary: string;
+  clientId: number | null;
+  client: string;
+  triageCount: number;
+  hasCriticalTriage: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface LoginResponse {
   user: ApiUser;
 }
@@ -811,6 +841,21 @@ export const api = {
 
   runTriageJob: (source: 'cnj' | 'cpf' | 'diario' | 'oab') =>
     apiClient(`/triage/jobs/run-${source}`, { method: 'POST' }),
+
+  getCrmLeads: () =>
+    apiClient<ApiCrmLead[]>('/crm/leads'),
+
+  getCrmOpportunities: () =>
+    apiClient<ApiCrmOpportunity[]>('/crm/opportunities'),
+
+  updateCrmLead: (id: number, data: Partial<Pick<ApiCrmLead, 'status' | 'summary' | 'personName'>>) =>
+    apiClient<ApiCrmLead>(`/crm/leads/${id}`, { method: 'PUT', body: data }),
+
+  updateCrmOpportunity: (id: number, data: Partial<Pick<ApiCrmOpportunity, 'status' | 'summary' | 'personName'>>) =>
+    apiClient<ApiCrmOpportunity>(`/crm/opportunities/${id}`, { method: 'PUT', body: data }),
+
+  convertCrmLead: (id: number, data?: Partial<{ personName: string; status: string; summary: string }>) =>
+    apiClient<{ lead: ApiCrmLead; opportunity: ApiCrmOpportunity }>(`/crm/leads/${id}/convert`, { method: 'POST', body: data ?? {} }),
 
   updateTriageItem: (id: number, data: Partial<{
     status: ApiTriageItem['status'];
