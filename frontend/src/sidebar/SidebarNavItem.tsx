@@ -28,8 +28,9 @@ export function SidebarNavLink({ label, icon: Icon, to, end, onClick }: SidebarN
       aria-current={isActive ? 'page' : undefined}
       onClick={onClick}
     >
+      <span className="sidebar-nav-accent" aria-hidden="true" />
       <span className="sidebar-nav-icon" aria-hidden="true">
-        <Icon size={16} strokeWidth={1.75} />
+        <Icon size={18} strokeWidth={1.9} />
       </span>
       <span className="sidebar-nav-label">{label}</span>
     </NavLink>
@@ -43,8 +44,9 @@ export function SidebarNavButton({ label, icon: Icon, onClick, variant }: Sideba
       className={`sidebar-nav-item shell-nav-item${variant === 'danger' ? ' is-danger' : ''}`}
       onClick={onClick}
     >
+      <span className="sidebar-nav-accent" aria-hidden="true" />
       <span className="sidebar-nav-icon" aria-hidden="true">
-        <Icon size={16} strokeWidth={1.75} />
+        <Icon size={18} strokeWidth={1.9} />
       </span>
       <span className="sidebar-nav-label">{label}</span>
     </button>

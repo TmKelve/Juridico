@@ -40,13 +40,18 @@ export function Sidebar({
       <aside className={cls} aria-label="Navegação principal">
         <div className="sidebar-body">
           <SidebarBrand isCollapsed={isCollapsed} />
-          <SidebarNav role={user.role} onFetchUsers={onFetchUsers} />
+          <SidebarNav
+            role={user.role}
+            isCollapsed={isCollapsed}
+            onFetchUsers={onFetchUsers}
+          />
         </div>
 
         <SidebarFooter
           name={user.email.split('@')[0]}
           role={roleLabel}
           email={user.email}
+          isCollapsed={isCollapsed}
           onLogout={onLogout}
         />
       </aside>
