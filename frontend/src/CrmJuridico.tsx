@@ -1,19 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  AlertTriangle,
   ArrowRight,
   CalendarClock,
-  CheckCircle2,
-  Clock3,
-  FileText,
-  Phone,
+  FolderOpen,
   RefreshCw,
   Search,
   ShieldAlert,
-  Sparkles,
+  Target,
   TrendingUp,
-  UserRound,
 } from 'lucide-react';
 import { api, type ApiCrmLead, type ApiCrmOpportunity } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
@@ -25,10 +20,16 @@ interface CrmJuridicoProps {
 
 type TabKey = 'leads' | 'opportunities';
 type DrawerTabKey = 'overview' | 'history' | 'commercial' | 'process';
-type QuickViewKey = 'all' | 'mine' | 'action' | 'overdue' | 'today' | 'critical' | 'unassigned';
+type NextActionTone = 'neutral' | 'warning' | 'success';
 
 const LEAD_STATUS = ['novo', 'qualificado', 'contatado', 'convertido', 'perdido'] as const;
 const OPPORTUNITY_STATUS = ['acao_recomendada', 'em_contato', 'proposta_enviada', 'negociacao', 'ganha', 'perdida'] as const;
+const DRAWER_TABS: Array<{ key: DrawerTabKey; label: string }> = [
+  { key: 'overview', label: 'Visão geral' },
+  { key: 'history', label: 'Histórico' },
+  { key: 'commercial', label: 'Comercial' },
+  { key: 'process', label: 'Processo' },
+];
 const OPPORTUNITY_STAGE_LABELS: Record<(typeof OPPORTUNITY_STATUS)[number], string> = {
   acao_recomendada: 'Ação recomendada',
   em_contato: 'Em contato',
@@ -79,28 +80,27 @@ function getNextContactState(nextContactAt: string | null) {
   return 'future';
 }
 
-function normalizeText(value: string | null | undefined) {
-  return (value || '').trim().toLowerCase();
+function getNextContactText(nextContactAt: string | null) {
+  const state = getNextContactState(nextContactAt);
+  if (!nextContactAt) return 'Sem próximo contato';
+  if (state === 'overdue') return `Follow-up vencido em ${formatDateTime(nextContactAt)}`;
+  if (state === 'today') return `Follow-up previsto para hoje, ${formatDateTime(nextContactAt)}`;
+  return `Próximo contato ${formatDateTime(nextContactAt)}`;
 }
 
-function matchesResponsibleFilter(value: string | null | undefined, userEmail: string) {
-  const normalizedValue = normalizeText(value);
-  const normalizedEmail = normalizeText(userEmail);
-  const normalizedName = normalizedEmail.split('@')[0];
-  return normalizedValue === normalizedEmail || normalizedValue === normalizedName;
+function getSummaryPreview(summary: string) {
+  if (summary.length <= 120) return summary;
+  return `${summary.slice(0, 117)}...`;
 }
 
-function isOpportunityActionRecommended(status: string) {
-  return status === 'acao_recomendada' || status === 'em_contato';
-}
-
-function isLeadActionRecommended(status: string) {
-  return status === 'novo' || status === 'qualificado';
+function getLeadStatusLabel(status: string) {
+  return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
 export function CrmJuridico({ user }: CrmJuridicoProps) {
   const navigate = useNavigate();
   const [tab, setTab] = useState<TabKey>('opportunities');
+  const [drawerTab, setDrawerTab] = useState<DrawerTabKey>('overview');
   const [leads, setLeads] = useState<ApiCrmLead[]>([]);
   const [opportunities, setOpportunities] = useState<ApiCrmOpportunity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -110,9 +110,8 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
   const [responsibleFilter, setResponsibleFilter] = useState('');
   const [stageFilter, setStageFilter] = useState('');
   const [nextContactFilter, setNextContactFilter] = useState('');
+  const [criticalOnly, setCriticalOnly] = useState(false);
   const [showMoreFilters, setShowMoreFilters] = useState(false);
-  const [drawerTab, setDrawerTab] = useState<DrawerTabKey>('overview');
-  const [quickView, setQuickView] = useState<QuickViewKey>('all');
   const [selectedLead, setSelectedLead] = useState<ApiCrmLead | null>(null);
   const [selectedOpportunity, setSelectedOpportunity] = useState<ApiCrmOpportunity | null>(null);
   const [contactNote, setContactNote] = useState('');
@@ -137,6 +136,10 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     const timer = setTimeout(() => setSuccess(''), 3000);
     return () => clearTimeout(timer);
   }, [success]);
+
+  useEffect(() => {
+    setDrawerTab('overview');
+  }, [tab, selectedLead?.id, selectedOpportunity?.id]);
 
   async function loadData() {
     setLoading(true);
@@ -277,7 +280,6 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     setContactNote('');
     setContactKind('contato');
     setNextContactDraft(formatDateTimeLocal(selected?.nextContactAt ?? null));
-    setDrawerTab('overview');
   }, [tab, selectedLead?.id, selectedOpportunity?.id]);
 
   useEffect(() => {
@@ -299,25 +301,10 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
       const matchesResponsible = !responsibleFilter || item.responsible === responsibleFilter;
       const matchesStage = !stageFilter || item.status === stageFilter;
       const matchesNextContact = matchesNextContactFilter(item.nextContactAt, nextContactFilter);
-      const matchesView =
-        quickView === 'all'
-          ? true
-          : quickView === 'mine'
-            ? matchesResponsibleFilter(item.responsible, user.email)
-            : quickView === 'action'
-              ? isLeadActionRecommended(item.status)
-              : quickView === 'overdue'
-                ? getNextContactState(item.nextContactAt) === 'overdue'
-                : quickView === 'today'
-                  ? getNextContactState(item.nextContactAt) === 'today'
-                  : quickView === 'critical'
-                    ? item.hasCriticalTriage
-                    : quickView === 'unassigned'
-                      ? !item.responsible
-                      : true;
-      return matchesSearch && matchesResponsible && matchesStage && matchesNextContact && matchesView;
+      const matchesCritical = !criticalOnly || item.hasCriticalTriage;
+      return matchesSearch && matchesResponsible && matchesStage && matchesNextContact && matchesCritical;
     });
-  }, [leads, search, responsibleFilter, stageFilter, nextContactFilter, quickView, user.email]);
+  }, [criticalOnly, leads, nextContactFilter, responsibleFilter, search, stageFilter]);
 
   const filteredOpportunities = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -326,25 +313,22 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
       const matchesResponsible = !responsibleFilter || item.responsible === responsibleFilter;
       const matchesStage = !stageFilter || item.status === stageFilter;
       const matchesNextContact = matchesNextContactFilter(item.nextContactAt, nextContactFilter);
-      const matchesView =
-        quickView === 'all'
-          ? true
-          : quickView === 'mine'
-            ? matchesResponsibleFilter(item.responsible, user.email)
-            : quickView === 'action'
-              ? isOpportunityActionRecommended(item.status)
-              : quickView === 'overdue'
-                ? getNextContactState(item.nextContactAt) === 'overdue'
-                : quickView === 'today'
-                  ? getNextContactState(item.nextContactAt) === 'today'
-                  : quickView === 'critical'
-                    ? item.hasCriticalTriage
-                    : quickView === 'unassigned'
-                      ? !item.responsible
-                      : true;
-      return matchesSearch && matchesResponsible && matchesStage && matchesNextContact && matchesView;
+      const matchesCritical = !criticalOnly || item.hasCriticalTriage;
+      return matchesSearch && matchesResponsible && matchesStage && matchesNextContact && matchesCritical;
     });
-  }, [opportunities, search, responsibleFilter, stageFilter, nextContactFilter, quickView, user.email]);
+  }, [criticalOnly, nextContactFilter, opportunities, responsibleFilter, search, stageFilter]);
+
+  useEffect(() => {
+    if (tab === 'leads') {
+      if (filteredLeads.length > 0 && !filteredLeads.some((item) => item.id === selectedLead?.id)) {
+        setSelectedLead(filteredLeads[0]);
+      }
+      return;
+    }
+    if (filteredOpportunities.length > 0 && !filteredOpportunities.some((item) => item.id === selectedOpportunity?.id)) {
+      setSelectedOpportunity(filteredOpportunities[0]);
+    }
+  }, [filteredLeads, filteredOpportunities, selectedLead?.id, selectedOpportunity?.id, tab]);
 
   const responsibleOptions = useMemo(() => {
     const values = new Set<string>();
@@ -361,72 +345,6 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     wonOpportunities: opportunities.filter((item) => item.status === 'ganha').length,
     overdueFollowUps: [...leads, ...opportunities].filter((item) => getNextContactState(item.nextContactAt) === 'overdue').length,
   }), [leads, opportunities]);
-
-  const quickViewStats = useMemo(() => {
-    const allItems = [...leads, ...opportunities];
-    return {
-      all: allItems.length,
-      mine: allItems.filter((item) => matchesResponsibleFilter(item.responsible, user.email)).length,
-      action: leads.filter((item) => isLeadActionRecommended(item.status)).length
-        + opportunities.filter((item) => isOpportunityActionRecommended(item.status)).length,
-      overdue: allItems.filter((item) => getNextContactState(item.nextContactAt) === 'overdue').length,
-      today: allItems.filter((item) => getNextContactState(item.nextContactAt) === 'today').length,
-      critical: allItems.filter((item) => item.hasCriticalTriage).length,
-      unassigned: allItems.filter((item) => !item.responsible).length,
-    };
-  }, [leads, opportunities, user.email]);
-
-  const ownerMetrics = useMemo(() => {
-    const buckets = new Map<string, {
-      responsible: string;
-      leads: number;
-      opportunities: number;
-      overdueFollowUps: number;
-      dueToday: number;
-    }>();
-
-    const touch = (responsible: string) => {
-      const key = responsible || 'Não definido';
-      const current = buckets.get(key);
-      if (current) return current;
-      const next = {
-        responsible: key,
-        leads: 0,
-        opportunities: 0,
-        overdueFollowUps: 0,
-        dueToday: 0,
-      };
-      buckets.set(key, next);
-      return next;
-    };
-
-    leads
-      .filter((item) => !['convertido', 'perdido'].includes(item.status))
-      .forEach((item) => {
-        const bucket = touch(item.responsible);
-        bucket.leads += 1;
-        const contactState = getNextContactState(item.nextContactAt);
-        if (contactState === 'overdue') bucket.overdueFollowUps += 1;
-        if (contactState === 'today') bucket.dueToday += 1;
-      });
-
-    opportunities
-      .filter((item) => !['ganha', 'perdida'].includes(item.status))
-      .forEach((item) => {
-        const bucket = touch(item.responsible);
-        bucket.opportunities += 1;
-        const contactState = getNextContactState(item.nextContactAt);
-        if (contactState === 'overdue') bucket.overdueFollowUps += 1;
-        if (contactState === 'today') bucket.dueToday += 1;
-      });
-
-    return Array.from(buckets.values()).sort((a, b) => {
-      if (b.overdueFollowUps !== a.overdueFollowUps) return b.overdueFollowUps - a.overdueFollowUps;
-      if (b.opportunities !== a.opportunities) return b.opportunities - a.opportunities;
-      if (b.leads !== a.leads) return b.leads - a.leads;
-      return a.responsible.localeCompare(b.responsible);
-    });
-  }, [leads, opportunities]);
 
   const opportunitiesByStage = useMemo(() => (
     OPPORTUNITY_STATUS.map((status) => ({
@@ -461,44 +379,164 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     stageFilter ? { key: 'stage', label: `Etapa: ${tab === 'opportunities' ? (OPPORTUNITY_STAGE_LABELS[stageFilter as keyof typeof OPPORTUNITY_STAGE_LABELS] ?? stageFilter) : stageFilter}` } : null,
     nextContactFilter ? {
       key: 'nextContact',
-      label: `Próximo contato: ${nextContactFilter === 'hoje' ? 'Hoje' : nextContactFilter === 'futuro' ? 'Futuro' : nextContactFilter === 'vencido' ? 'Vencido' : 'Sem contato'}`
+      label: `Próximo contato: ${nextContactFilter === 'hoje' ? 'Hoje' : nextContactFilter === 'futuro' ? 'Futuro' : nextContactFilter === 'vencido' ? 'Vencido' : 'Sem contato'}`,
     } : null,
+    criticalOnly ? { key: 'critical', label: 'Somente triagem crítica' } : null,
   ].filter(Boolean) as Array<{ key: string; label: string }>;
 
+  const executiveStrip = useMemo(() => {
+    if (tab === 'leads') {
+      return [
+        {
+          key: 'priorities',
+          eyebrow: 'Prioridades',
+          title: `${filteredLeads.filter((item) => item.status === 'novo' || item.status === 'qualificado').length} entradas para qualificar`,
+          body: `${filteredLeads.filter((item) => item.hasCriticalTriage).length} lead(s) com triagem crítica e ${filteredLeads.filter((item) => !item.responsible).length} sem responsável.`,
+          tone: 'neutral',
+        },
+        {
+          key: 'alerts',
+          eyebrow: 'Alertas',
+          title: `${filteredLeads.filter((item) => getNextContactState(item.nextContactAt) === 'overdue').length} follow-up(s) vencidos`,
+          body: `${filteredLeads.filter((item) => !item.nextContactAt).length} lead(s) sem próxima cadência definida.`,
+          tone: 'warning',
+        },
+        {
+          key: 'next-actions',
+          eyebrow: 'Próximas ações',
+          title: `${filteredLeads.filter((item) => ['qualificado', 'contatado'].includes(item.status)).length} lead(s) prontos para avançar`,
+          body: 'Priorize qualificação, registre objeções e converta os casos aderentes para o funil de oportunidade.',
+          tone: 'success',
+        },
+      ];
+    }
+
+    return [
+      {
+        key: 'priorities',
+        eyebrow: 'Prioridades',
+        title: `${filteredOpportunities.filter((item) => item.status === 'negociacao' || item.status === 'proposta_enviada').length} oportunidade(s) em fase de fechamento`,
+        body: `${filteredOpportunities.filter((item) => item.hasCriticalTriage).length} com triagem crítica e ${filteredOpportunities.filter((item) => !item.responsible).length} sem responsável.`,
+        tone: 'neutral',
+      },
+      {
+        key: 'alerts',
+        eyebrow: 'Alertas',
+        title: `${filteredOpportunities.filter((item) => getNextContactState(item.nextContactAt) === 'overdue').length} follow-up(s) vencidos`,
+        body: `${filteredOpportunities.filter((item) => getNextContactState(item.nextContactAt) === 'today').length} contato(s) previstos para hoje exigem ação antes do fim do dia.`,
+        tone: 'warning',
+      },
+      {
+        key: 'next-actions',
+        eyebrow: 'Próximas ações',
+        title: `${filteredOpportunities.filter((item) => !item.convertedProcessId && ['negociacao', 'ganha'].includes(item.status)).length} caso(s) prontos para conversão operacional`,
+        body: `${filteredOpportunities.filter((item) => !item.nextContactAt).length} oportunidade(s) ainda sem cadência futura definida.`,
+        tone: 'success',
+      },
+    ];
+  }, [filteredLeads, filteredOpportunities, tab]);
+
   function clearFilter(key: string) {
-  if (key === 'responsible') setResponsibleFilter('');
+    if (key === 'responsible') setResponsibleFilter('');
     if (key === 'stage') setStageFilter('');
     if (key === 'nextContact') setNextContactFilter('');
+    if (key === 'critical') setCriticalOnly(false);
   }
 
-  const drawerTabs: Array<{ key: DrawerTabKey; label: string }> = [
-    { key: 'overview', label: 'Visão geral' },
-    { key: 'history', label: 'Histórico' },
-    { key: 'commercial', label: 'Comercial' },
-    { key: 'process', label: 'Processo' },
-  ];
+  const selectedLeadNextAction = selectedLead ? (() => {
+    if (['qualificado', 'contatado'].includes(selectedLead.status)) {
+      return {
+        eyebrow: 'Próxima melhor ação',
+        title: 'Converter este lead em oportunidade',
+        description: 'O lead já passou da qualificação inicial. Faça a conversão para mover a negociação para o pipeline principal.',
+        cta: 'Converter agora',
+        tone: 'success' as NextActionTone,
+        onClick: () => void convertLead(selectedLead),
+      };
+    }
+    if (!selectedLead.responsible) {
+      return {
+        eyebrow: 'Próxima melhor ação',
+        title: 'Definir responsável e cadência',
+        description: 'Sem dono claro, o lead perde velocidade. Atribua a carteira e registre o próximo contato.',
+        cta: 'Abrir gestão comercial',
+        tone: 'warning' as NextActionTone,
+        onClick: () => setDrawerTab('commercial'),
+      };
+    }
+    if (getNextContactState(selectedLead.nextContactAt) === 'overdue' || !selectedLead.contactEvents.length) {
+      return {
+        eyebrow: 'Próxima melhor ação',
+        title: 'Registrar avanço comercial',
+        description: 'Atualize o histórico, documente objeções e reposicione a próxima interação para manter o lead aquecido.',
+        cta: 'Registrar contato',
+        tone: 'warning' as NextActionTone,
+        onClick: () => setDrawerTab('commercial'),
+      };
+    }
+    return {
+      eyebrow: 'Próxima melhor ação',
+      title: 'Reforçar contexto antes da próxima abordagem',
+      description: 'Revise a triagem e valide o próximo passo com base no motivo do contato e no estágio de interesse atual.',
+      cta: 'Ver visão geral',
+      tone: 'neutral' as NextActionTone,
+      onClick: () => setDrawerTab('overview'),
+    };
+  })() : null;
 
-  const leadNextAction = selectedLead
-    ? (selectedLead.nextContactAt
-      ? (getNextContactState(selectedLead.nextContactAt) === 'overdue'
-        ? 'Registrar contato urgente'
-        : getNextContactState(selectedLead.nextContactAt) === 'today'
-          ? 'Confirmar próximo contato de hoje'
-          : 'Agendar follow-up')
-      : 'Registrar contato inicial')
-    : '';
-
-  const opportunityNextAction = selectedOpportunity
-    ? (selectedOpportunity.nextContactAt
-      ? (getNextContactState(selectedOpportunity.nextContactAt) === 'overdue'
-        ? 'Registrar contato urgente'
-        : getNextContactState(selectedOpportunity.nextContactAt) === 'today'
-          ? 'Confirmar follow-up de hoje'
-          : 'Agendar follow-up')
-      : isOpportunityActionRecommended(selectedOpportunity.status)
-        ? 'Registrar contato inicial'
-        : 'Converter ou avançar estágio')
-    : '';
+  const selectedOpportunityNextAction = selectedOpportunity ? (() => {
+    if (selectedOpportunity.convertedProcessId) {
+      return {
+        eyebrow: 'Próxima melhor ação',
+        title: 'Abrir o processo derivado',
+        description: 'A oportunidade já foi operacionalizada. Siga para o processo para acompanhar prazos, documentos e execução jurídica.',
+        cta: 'Abrir processo',
+        tone: 'success' as NextActionTone,
+        onClick: () => navigate(`/processos/${selectedOpportunity.convertedProcessId}`),
+      };
+    }
+    if (['negociacao', 'ganha'].includes(selectedOpportunity.status)) {
+      return {
+        eyebrow: 'Próxima melhor ação',
+        title: 'Converter em cliente e processo',
+        description: 'O caso já tem maturidade comercial. Prepare a abertura operacional com cliente, título e fase inicial do processo.',
+        cta: 'Preparar conversão',
+        tone: 'success' as NextActionTone,
+        onClick: () => {
+          setDrawerTab('process');
+          setShowOpportunityConversion(true);
+        },
+      };
+    }
+    if (getNextContactState(selectedOpportunity.nextContactAt) === 'overdue') {
+      return {
+        eyebrow: 'Próxima melhor ação',
+        title: 'Recuperar follow-up vencido',
+        description: 'A oportunidade está sem avanço dentro do prazo esperado. Registre contato e redefina a próxima cadência imediatamente.',
+        cta: 'Atualizar comercial',
+        tone: 'warning' as NextActionTone,
+        onClick: () => setDrawerTab('commercial'),
+      };
+    }
+    if (!selectedOpportunity.responsible || !selectedOpportunity.nextContactAt) {
+      return {
+        eyebrow: 'Próxima melhor ação',
+        title: 'Definir dono e próximo passo',
+        description: 'Sem responsável ou próximo contato, a negociação perde previsibilidade. Estruture a carteira antes de avançar estágio.',
+        cta: 'Abrir gestão comercial',
+        tone: 'warning' as NextActionTone,
+        onClick: () => setDrawerTab('commercial'),
+      };
+    }
+    return {
+      eyebrow: 'Próxima melhor ação',
+      title: 'Sustentar o avanço do pipeline',
+      description: 'Valide objeções, ajuste a narrativa comercial e mantenha a oportunidade com cadência clara até a etapa seguinte.',
+      cta: 'Ver resumo',
+      tone: 'neutral' as NextActionTone,
+      onClick: () => setDrawerTab('overview'),
+    };
+  })() : null;
 
   return (
     <div className="crm-page">
@@ -522,113 +560,18 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
         <article className="crm-kpi crm-kpi--warning"><span>Follow-up vencido</span><strong>{kpis.overdueFollowUps}</strong></article>
       </section>
 
-      <section className="crm-owner-metrics">
-        <div className="crm-section-header">
-          <div>
-            <span className="crm-eyebrow">Gestão da carteira</span>
-            <h3>Indicadores por responsável</h3>
-          </div>
-          {responsibleFilter ? (
-            <button className="btn-secondary" onClick={() => setResponsibleFilter('')}>
-              Limpar responsável
-            </button>
-          ) : null}
-        </div>
-        {ownerMetrics.length === 0 ? (
-          <div className="crm-empty crm-empty--compact">Nenhum responsável com carteira ativa no momento.</div>
-        ) : (
-          <div className="crm-owner-grid">
-            {ownerMetrics.map((item) => (
-              <button
-                key={item.responsible}
-                type="button"
-                className={`crm-owner-card ${responsibleFilter === item.responsible ? 'is-active' : ''}`}
-                onClick={() => setResponsibleFilter((prev) => prev === item.responsible ? '' : item.responsible)}
-              >
-                <div className="crm-owner-card__header">
-                  <strong>{item.responsible}</strong>
-                  <span>{item.overdueFollowUps > 0 ? `${item.overdueFollowUps} vencido(s)` : 'Sem follow-up vencido'}</span>
-                </div>
-                <div className="crm-owner-card__metrics">
-                  <div>
-                    <span>Leads</span>
-                    <strong>{item.leads}</strong>
-                  </div>
-                  <div>
-                    <span>Oportunidades</span>
-                    <strong>{item.opportunities}</strong>
-                  </div>
-                  <div>
-                    <span>Vencidos</span>
-                    <strong>{item.overdueFollowUps}</strong>
-                  </div>
-                  <div>
-                    <span>Hoje</span>
-                    <strong>{item.dueToday}</strong>
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="crm-executive-strip" aria-label="Resumo executivo do CRM">
-        <article className="crm-executive-card">
-          <div className="crm-executive-card__header">
-            <span className="crm-executive-card__eyebrow">Prioridades do dia</span>
-            <CheckCircle2 size={16} />
-          </div>
-          <strong>{kpis.overdueFollowUps + quickViewStats.today + quickViewStats.action}</strong>
-          <p>{quickViewStats.action} itens em ação recomendada e {quickViewStats.today} com contato hoje.</p>
-        </article>
-        <article className="crm-executive-card crm-executive-card--warning">
-          <div className="crm-executive-card__header">
-            <span className="crm-executive-card__eyebrow">Riscos e alertas</span>
-            <AlertTriangle size={16} />
-          </div>
-          <strong>{kpis.overdueFollowUps + quickViewStats.critical}</strong>
-          <p>{quickViewStats.critical} sinal(is) críticos na triagem e follow-ups vencidos em aberto.</p>
-        </article>
-        <article className="crm-executive-card crm-executive-card--accent">
-          <div className="crm-executive-card__header">
-            <span className="crm-executive-card__eyebrow">Próximas ações</span>
-            <Sparkles size={16} />
-          </div>
-          <strong>{quickViewStats.mine}</strong>
-          <p>{quickViewStats.unassigned} itens sem responsável e {quickViewStats.mine} sob sua carteira.</p>
-        </article>
-      </section>
-
-      <section className="crm-view-rail" aria-label="Views rápidas">
-        {([
-          { key: 'all', label: 'Todos', count: quickViewStats.all },
-          { key: 'mine', label: 'Meus', count: quickViewStats.mine },
-          { key: 'action', label: 'Ação recomendada', count: quickViewStats.action },
-          { key: 'overdue', label: 'Vencidos', count: quickViewStats.overdue },
-          { key: 'today', label: 'Hoje', count: quickViewStats.today },
-          { key: 'critical', label: 'Críticos', count: quickViewStats.critical },
-          { key: 'unassigned', label: 'Sem responsável', count: quickViewStats.unassigned },
-        ] as Array<{ key: QuickViewKey; label: string; count: number }>).map((view) => (
-          <button
-            key={view.key}
-            type="button"
-            className={`crm-view-chip ${quickView === view.key ? 'is-active' : ''}`}
-            onClick={() => setQuickView(view.key)}
-          >
-            <span>{view.label}</span>
-            <strong>{view.count}</strong>
-          </button>
-        ))}
-        {quickView !== 'all' ? (
-          <button type="button" className="crm-view-chip crm-view-chip--ghost" onClick={() => setQuickView('all')}>
-            Limpar visão
-          </button>
-        ) : null}
-      </section>
-
       <section className="crm-workspace">
         <div className="crm-main">
+          <section className="crm-executive-strip">
+            {executiveStrip.map((item) => (
+              <article key={item.key} className={`crm-executive-card crm-executive-card--${item.tone}`}>
+                <span className="crm-eyebrow">{item.eyebrow}</span>
+                <strong>{item.title}</strong>
+                <p>{item.body}</p>
+              </article>
+            ))}
+          </section>
+
           <div className="crm-toolbar">
             <div className="crm-tabs">
               <button className={tab === 'opportunities' ? 'is-active' : ''} onClick={() => setTab('opportunities')}>Oportunidades</button>
@@ -670,6 +613,16 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                   <option value="sem_contato">Sem contato</option>
                 </select>
               </label>
+              <label className="crm-inline-field">
+                <span>Triagem</span>
+                <button
+                  type="button"
+                  className={`btn-secondary ${criticalOnly ? 'is-active' : ''}`}
+                  onClick={() => setCriticalOnly((prev) => !prev)}
+                >
+                  Somente triagem crítica
+                </button>
+              </label>
             </div>
           ) : null}
 
@@ -697,21 +650,22 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                   <article key={item.id} className={`crm-card ${selectedLead?.id === item.id ? 'is-selected' : ''}`} onClick={() => setSelectedLead(item)}>
                     <div className="crm-card__header">
                       <strong>{item.personName}</strong>
-                      <span className={`crm-status crm-status--${item.status}`}>{item.status}</span>
+                      <span className={`crm-status crm-status--${item.status}`}>{getLeadStatusLabel(item.status)}</span>
                     </div>
                     <p>{item.client || 'Sem cliente vinculado'} · {item.source}</p>
                     <small>{item.cpf || 'CPF não informado'}</small>
-                    <div className="crm-card__subline">
-                      <span><UserRound size={12} /> {item.responsible || 'Sem responsável'}</span>
-                      <span><Clock3 size={12} /> {item.nextContactAt ? formatDateTime(item.nextContactAt) : 'Sem follow-up'}</span>
-                    </div>
+                    <div className="crm-card__summary">{getSummaryPreview(item.summary)}</div>
                     <div className="crm-card__meta">
                       <span>{item.triageCount} triagem(ns)</span>
+                      {item.responsible ? <span>{item.responsible}</span> : <span className="crm-card__warning">Sem responsável</span>}
                       {item.hasCriticalTriage ? <span className="crm-flag"><ShieldAlert size={12} /> crítica</span> : null}
+                    </div>
+                    <div className="crm-card__meta">
+                      <span className={`crm-next-contact crm-next-contact--${getNextContactState(item.nextContactAt)}`}>{getNextContactText(item.nextContactAt)}</span>
                     </div>
                     <div className="crm-card__actions">
                       <select value={item.status} onChange={(event) => void updateLeadStatus(item, event.target.value)} onClick={(event) => event.stopPropagation()}>
-                        {LEAD_STATUS.map((status) => <option key={status} value={status}>{status}</option>)}
+                        {LEAD_STATUS.map((status) => <option key={status} value={status}>{getLeadStatusLabel(status)}</option>)}
                       </select>
                       <button className="btn-primary" onClick={(event) => { event.stopPropagation(); void convertLead(item); }}>Converter</button>
                     </div>
@@ -736,24 +690,21 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                       <div className="crm-column__empty">Sem oportunidades neste estágio.</div>
                     ) : (
                       column.items.map((item) => (
-                        <article key={item.id} className={`crm-card ${selectedOpportunity?.id === item.id ? 'is-selected' : ''}`} onClick={() => setSelectedOpportunity(item)}>
+                        <article key={item.id} className={`crm-card crm-card--opportunity ${selectedOpportunity?.id === item.id ? 'is-selected' : ''}`} onClick={() => setSelectedOpportunity(item)}>
                           <div className="crm-card__header">
                             <strong>{item.personName}</strong>
                             <span className={`crm-status crm-status--${item.status}`}>{OPPORTUNITY_STAGE_LABELS[item.status as keyof typeof OPPORTUNITY_STAGE_LABELS] ?? item.status}</span>
                           </div>
                           <p>{item.client || 'Sem cliente vinculado'} · {item.source}</p>
                           <small>{item.cpf || 'CPF não informado'}</small>
-                          <div className="crm-card__subline">
-                            <span><UserRound size={12} /> {item.responsible || 'Sem responsável'}</span>
-                            <span><Clock3 size={12} /> {item.nextContactAt ? formatDateTime(item.nextContactAt) : 'Sem follow-up'}</span>
-                          </div>
+                          <div className="crm-card__summary">{getSummaryPreview(item.summary)}</div>
                           <div className="crm-card__meta">
                             <span>{item.triageCount} triagem(ns)</span>
-                            {item.responsible ? <span>{item.responsible}</span> : null}
+                            {item.responsible ? <span>{item.responsible}</span> : <span className="crm-card__warning">Sem responsável</span>}
                             {item.hasCriticalTriage ? <span className="crm-flag"><ShieldAlert size={12} /> crítica</span> : null}
                           </div>
                           <div className="crm-card__meta">
-                            <span className={`crm-next-contact crm-next-contact--${getNextContactState(item.nextContactAt)}`}>{item.nextContactAt ? `Próximo contato ${formatDateTime(item.nextContactAt)}` : 'Sem próximo contato'}</span>
+                            <span className={`crm-next-contact crm-next-contact--${getNextContactState(item.nextContactAt)}`}>{getNextContactText(item.nextContactAt)}</span>
                           </div>
                           <div className="crm-card__actions">
                             {item.convertedProcessId ? (
@@ -784,95 +735,68 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
         <aside className="crm-drawer">
           {tab === 'leads' ? (
             selectedLead ? (
-              <div className="crm-drawer-shell">
-                <div className="crm-drawer__header">
-                  <div>
-                    <span className="crm-eyebrow">Detalhe do lead</span>
-                    <h3>{selectedLead.personName}</h3>
-                    <p>{selectedLead.client || 'Sem cliente vinculado'} · {selectedLead.source}</p>
-                  </div>
-                  <div className="crm-drawer__badges">
-                    <span className={`crm-status crm-status--${selectedLead.status}`}>{selectedLead.status}</span>
-                    {selectedLead.hasCriticalTriage ? <span className="crm-status crm-status--perdido">Triagem crítica</span> : null}
-                  </div>
-                </div>
-
-                <div className="crm-drawer__next-action">
-                  <span>Próxima ação recomendada</span>
-                  <strong>{leadNextAction}</strong>
-                  <p>{selectedLead.nextContactAt ? `Próximo contato em ${formatDateTime(selectedLead.nextContactAt)}` : 'Lead sem próxima data definida. Capture a primeira interação.'}</p>
-                  <div className="crm-drawer__actions">
-                    <button className="btn-primary" onClick={() => setDrawerTab('commercial')}>
-                      <Phone size={14} />
-                      Registrar contato
-                    </button>
-                    <button className="btn-secondary" onClick={() => void convertLead(selectedLead)}>
-                      <TrendingUp size={14} />
-                      Converter em oportunidade
-                    </button>
+              <>
+                <div className="crm-drawer__intro">
+                  <span className="crm-eyebrow">Detalhe do lead</span>
+                  <div className="crm-drawer__title-row">
+                    <div>
+                      <h3>{selectedLead.personName}</h3>
+                      <p>{selectedLead.client || 'Sem cliente vinculado'} · {selectedLead.source}</p>
+                    </div>
+                    <span className={`crm-status crm-status--${selectedLead.status}`}>{getLeadStatusLabel(selectedLead.status)}</span>
                   </div>
                 </div>
 
-                <div className="crm-drawer__tabs">
-                  {drawerTabs.map((item) => (
-                    <button key={item.key} type="button" className={drawerTab === item.key ? 'is-active' : ''} onClick={() => setDrawerTab(item.key)}>
+                {selectedLeadNextAction ? (
+                  <section className={`crm-next-best-action crm-next-best-action--${selectedLeadNextAction.tone}`}>
+                    <span className="crm-eyebrow">{selectedLeadNextAction.eyebrow}</span>
+                    <strong>{selectedLeadNextAction.title}</strong>
+                    <p>{selectedLeadNextAction.description}</p>
+                    <button className="btn-primary" onClick={selectedLeadNextAction.onClick}>
+                      <Target size={14} />
+                      {selectedLeadNextAction.cta}
+                    </button>
+                  </section>
+                ) : null}
+
+                <nav className="crm-drawer-tabs" aria-label="Detalhe do lead">
+                  {DRAWER_TABS.map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      className={drawerTab === item.key ? 'is-active' : ''}
+                      onClick={() => setDrawerTab(item.key)}
+                    >
                       {item.label}
                     </button>
                   ))}
-                </div>
+                </nav>
 
                 {drawerTab === 'overview' ? (
                   <>
+                    <div className="crm-drawer__meta">
+                      <div><span>Status</span><strong>{getLeadStatusLabel(selectedLead.status)}</strong></div>
+                      <div><span>Origem</span><strong>{selectedLead.source}</strong></div>
+                      <div><span>Cliente</span><strong>{selectedLead.client || '—'}</strong></div>
+                      <div><span>Responsável</span><strong>{selectedLead.responsible || 'Não definido'}</strong></div>
+                      <div><span>Criado em</span><strong>{formatDateTime(selectedLead.createdAt)}</strong></div>
+                      <div><span>Último contato</span><strong>{selectedLead.lastContactAt ? formatDateTime(selectedLead.lastContactAt) : '—'}</strong></div>
+                      <div><span>Próximo contato</span><strong>{selectedLead.nextContactAt ? formatDateTime(selectedLead.nextContactAt) : '—'}</strong></div>
+                      <div><span>CPF</span><strong>{selectedLead.cpf || '—'}</strong></div>
+                    </div>
                     <section className="crm-panel">
                       <h4>Resumo</h4>
                       <p>{selectedLead.summary}</p>
                     </section>
                     <section className="crm-panel">
-                      <h4>Dados principais</h4>
-                      <div className="crm-drawer__meta crm-drawer__meta--compact">
-                        <div><span>Status</span><strong>{selectedLead.status}</strong></div>
-                        <div><span>Responsável</span><strong>{selectedLead.responsible || 'Não definido'}</strong></div>
-                        <div><span>Criado em</span><strong>{formatDateTime(selectedLead.createdAt)}</strong></div>
-                        <div><span>Próximo contato</span><strong>{selectedLead.nextContactAt ? formatDateTime(selectedLead.nextContactAt) : '—'}</strong></div>
-                      </div>
-                    </section>
-                    <section className="crm-panel">
                       <h4>Contexto de triagem</h4>
                       <p>{selectedLead.triageCount} item(ns) associado(s){selectedLead.hasCriticalTriage ? ' com sinal crítico recente.' : '.'}</p>
-                    </section>
-                    <section className="crm-panel crm-panel--timeline">
-                      <h4>Evolução</h4>
-                      <div className="crm-timeline">
-                        <article className="crm-timeline__item">
-                          <span><UserRound size={14} /></span>
-                          <div>
-                            <strong>Lead criado</strong>
-                            <p>{formatDateTime(selectedLead.createdAt)}</p>
-                          </div>
-                        </article>
-                        {selectedLead.contactEvents.length > 0 ? (
-                          <article className="crm-timeline__item">
-                            <span><FileText size={14} /></span>
-                            <div>
-                              <strong>{selectedLead.contactEvents.length} contato(s) registrados</strong>
-                              <p>Última interação: {formatDateTime(selectedLead.contactEvents[selectedLead.contactEvents.length - 1].createdAt)}</p>
-                            </div>
-                          </article>
-                        ) : null}
-                        <article className="crm-timeline__item">
-                          <span><Clock3 size={14} /></span>
-                          <div>
-                            <strong>Próxima ação</strong>
-                            <p>{leadNextAction}</p>
-                          </div>
-                        </article>
-                      </div>
                     </section>
                   </>
                 ) : null}
 
                 {drawerTab === 'history' ? (
-                  <section className="crm-panel crm-panel--timeline">
+                  <section className="crm-panel">
                     <h4>Histórico</h4>
                     {selectedLead.contactEvents.length === 0 ? (
                       <p>Nenhum contato registrado.</p>
@@ -911,7 +835,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                         Salvar responsável
                       </button>
                     </section>
-                    <section className="crm-panel crm-panel--tight">
+                    <section className="crm-panel">
                       <h4>Registrar contato</h4>
                       <textarea
                         value={contactNote}
@@ -925,141 +849,101 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                           {Object.entries(CONTACT_KIND_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
                         </select>
                       </label>
-                      <button className="btn-primary" onClick={() => void addLeadContactEvent(selectedLead)}>
-                        <Phone size={14} />
-                        Adicionar histórico
-                      </button>
+                      <button className="btn-secondary" onClick={() => void addLeadContactEvent(selectedLead)}>Adicionar histórico</button>
                     </section>
                   </>
                 ) : null}
 
                 {drawerTab === 'process' ? (
                   <section className="crm-panel">
-                    <h4>Conversão</h4>
-                    <p>Transforme este lead em oportunidade operacional quando houver interesse validado.</p>
-                    <div className="crm-conversion-summary">
-                      <div>
-                        <span>Cliente sugerido</span>
-                        <strong>{selectedLead.client || selectedLead.personName}</strong>
-                      </div>
-                      <div>
-                        <span>Status atual</span>
-                        <strong>{selectedLead.status}</strong>
-                      </div>
-                      <div>
-                        <span>Triagem vinculada</span>
-                        <strong>{selectedLead.triageCount}</strong>
-                      </div>
-                    </div>
-                    <div className="crm-drawer__actions">
+                    <h4>Conversão operacional</h4>
+                    <p>Quando o interesse estiver validado e o caso tiver aderência comercial, converta o lead em oportunidade para seguir no pipeline principal.</p>
+                    <div className="crm-process-actions">
                       <button className="btn-primary" onClick={() => void convertLead(selectedLead)}>
                         <TrendingUp size={14} />
                         Converter em oportunidade
                       </button>
+                      {selectedLead.clientId ? (
+                        <button className="btn-secondary" onClick={() => navigate(`/clientes?clientId=${selectedLead.clientId}`)}>
+                          <FolderOpen size={14} />
+                          Abrir cliente
+                        </button>
+                      ) : null}
                     </div>
                   </section>
                 ) : null}
-              </div>
+              </>
             ) : <div className="crm-empty">Selecione um lead para ver o detalhe.</div>
           ) : selectedOpportunity ? (
-            <div className="crm-drawer-shell">
-              <div className="crm-drawer__header">
-                <div>
-                  <span className="crm-eyebrow">Detalhe da oportunidade</span>
-                  <h3>{selectedOpportunity.personName}</h3>
-                  <p>{selectedOpportunity.client || 'Sem cliente vinculado'} · {selectedOpportunity.source}</p>
-                </div>
-                <div className="crm-drawer__badges">
-                  <span className={`crm-status crm-status--${selectedOpportunity.status}`}>{OPPORTUNITY_STAGE_LABELS[selectedOpportunity.status as keyof typeof OPPORTUNITY_STAGE_LABELS] ?? selectedOpportunity.status}</span>
-                  {selectedOpportunity.hasCriticalTriage ? <span className="crm-status crm-status--perdido">Triagem crítica</span> : null}
-                </div>
-              </div>
-
-              <div className="crm-drawer__next-action">
-                <span>Próxima ação recomendada</span>
-                <strong>{opportunityNextAction}</strong>
-                <p>{selectedOpportunity.nextContactAt ? `Próximo contato em ${formatDateTime(selectedOpportunity.nextContactAt)}` : 'Defina uma próxima ação para manter o follow-up.'}</p>
-                <div className="crm-drawer__actions">
-                  <button className="btn-primary" onClick={() => setDrawerTab('commercial')}>
-                    <Phone size={14} />
-                    Registrar contato
-                  </button>
-                  <button className="btn-secondary" onClick={() => setDrawerTab('process')}>
-                    <ArrowRight size={14} />
-                    Ver conversão
-                  </button>
+            <>
+              <div className="crm-drawer__intro">
+                <span className="crm-eyebrow">Detalhe da oportunidade</span>
+                <div className="crm-drawer__title-row">
+                  <div>
+                    <h3>{selectedOpportunity.personName}</h3>
+                    <p>{selectedOpportunity.client || 'Sem cliente vinculado'} · {selectedOpportunity.source}</p>
+                  </div>
+                  <span className={`crm-status crm-status--${selectedOpportunity.status}`}>{OPPORTUNITY_STAGE_LABELS[selectedOpportunity.status as keyof typeof OPPORTUNITY_STAGE_LABELS]}</span>
                 </div>
               </div>
 
-              <div className="crm-drawer__tabs">
-                {drawerTabs.map((item) => (
-                  <button key={item.key} type="button" className={drawerTab === item.key ? 'is-active' : ''} onClick={() => setDrawerTab(item.key)}>
+              {selectedOpportunityNextAction ? (
+                <section className={`crm-next-best-action crm-next-best-action--${selectedOpportunityNextAction.tone}`}>
+                  <span className="crm-eyebrow">{selectedOpportunityNextAction.eyebrow}</span>
+                  <strong>{selectedOpportunityNextAction.title}</strong>
+                  <p>{selectedOpportunityNextAction.description}</p>
+                  <button className="btn-primary" onClick={selectedOpportunityNextAction.onClick}>
+                    <Target size={14} />
+                    {selectedOpportunityNextAction.cta}
+                  </button>
+                </section>
+              ) : null}
+
+              {getNextContactState(selectedOpportunity.nextContactAt) === 'overdue' ? (
+                <div className="crm-alert crm-alert--danger">Follow-up vencido. Essa oportunidade exige ação imediata.</div>
+              ) : null}
+              {getNextContactState(selectedOpportunity.nextContactAt) === 'today' ? (
+                <div className="crm-alert crm-alert--warning">Follow-up previsto para hoje.</div>
+              ) : null}
+
+              <nav className="crm-drawer-tabs" aria-label="Detalhe da oportunidade">
+                {DRAWER_TABS.map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    className={drawerTab === item.key ? 'is-active' : ''}
+                    onClick={() => setDrawerTab(item.key)}
+                  >
                     {item.label}
                   </button>
                 ))}
-              </div>
+              </nav>
 
               {drawerTab === 'overview' ? (
                 <>
+                  <div className="crm-drawer__meta">
+                    <div><span>Status</span><strong>{OPPORTUNITY_STAGE_LABELS[selectedOpportunity.status as keyof typeof OPPORTUNITY_STAGE_LABELS]}</strong></div>
+                    <div><span>Origem</span><strong>{selectedOpportunity.source}</strong></div>
+                    <div><span>Cliente</span><strong>{selectedOpportunity.client || '—'}</strong></div>
+                    <div><span>Responsável</span><strong>{selectedOpportunity.responsible || 'Não definido'}</strong></div>
+                    <div><span>Último contato</span><strong>{selectedOpportunity.lastContactAt ? formatDateTime(selectedOpportunity.lastContactAt) : '—'}</strong></div>
+                    <div><span>Próximo contato</span><strong>{selectedOpportunity.nextContactAt ? formatDateTime(selectedOpportunity.nextContactAt) : '—'}</strong></div>
+                    <div><span>Atualizada em</span><strong>{formatDateTime(selectedOpportunity.updatedAt)}</strong></div>
+                    <div><span>CPF</span><strong>{selectedOpportunity.cpf || '—'}</strong></div>
+                  </div>
                   <section className="crm-panel">
                     <h4>Resumo</h4>
                     <p>{selectedOpportunity.summary}</p>
                   </section>
                   <section className="crm-panel">
-                    <h4>Dados principais</h4>
-                    <div className="crm-drawer__meta crm-drawer__meta--compact">
-                      <div><span>Status comercial</span><strong>{selectedOpportunity.status}</strong></div>
-                      <div><span>Responsável</span><strong>{selectedOpportunity.responsible || 'Não definido'}</strong></div>
-                      <div><span>Atualizada em</span><strong>{formatDateTime(selectedOpportunity.updatedAt)}</strong></div>
-                      <div><span>Próximo contato</span><strong>{selectedOpportunity.nextContactAt ? formatDateTime(selectedOpportunity.nextContactAt) : '—'}</strong></div>
-                    </div>
-                  </section>
-                  <section className="crm-panel">
                     <h4>Contexto de triagem</h4>
                     <p>{selectedOpportunity.triageCount} item(ns) associado(s){selectedOpportunity.hasCriticalTriage ? ' com triagem crítica ativa.' : '.'}</p>
-                  </section>
-                  <section className="crm-panel crm-panel--timeline">
-                    <h4>Evolução</h4>
-                    <div className="crm-timeline">
-                      <article className="crm-timeline__item">
-                        <span><UserRound size={14} /></span>
-                        <div>
-                          <strong>Oportunidade criada</strong>
-                          <p>{formatDateTime(selectedOpportunity.createdAt)}</p>
-                        </div>
-                      </article>
-                      {selectedOpportunity.contactEvents.length > 0 ? (
-                        <article className="crm-timeline__item">
-                          <span><FileText size={14} /></span>
-                          <div>
-                            <strong>{selectedOpportunity.contactEvents.length} contato(s) registrados</strong>
-                            <p>Última interação: {formatDateTime(selectedOpportunity.contactEvents[selectedOpportunity.contactEvents.length - 1].createdAt)}</p>
-                          </div>
-                        </article>
-                      ) : null}
-                      {selectedOpportunity.convertedProcessId ? (
-                        <article className="crm-timeline__item">
-                          <span><CheckCircle2 size={14} /></span>
-                          <div>
-                            <strong>Processo gerado</strong>
-                            <p>Vinculado ao processo #{selectedOpportunity.convertedProcessId}</p>
-                          </div>
-                        </article>
-                      ) : null}
-                      <article className="crm-timeline__item">
-                        <span><Clock3 size={14} /></span>
-                        <div>
-                          <strong>Próxima ação</strong>
-                          <p>{opportunityNextAction}</p>
-                        </div>
-                      </article>
-                    </div>
                   </section>
                 </>
               ) : null}
 
               {drawerTab === 'history' ? (
-                <section className="crm-panel crm-panel--timeline">
+                <section className="crm-panel">
                   <h4>Histórico</h4>
                   {selectedOpportunity.contactEvents.length === 0 ? (
                     <p>Nenhum contato registrado.</p>
@@ -1098,7 +982,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                       Salvar responsável
                     </button>
                   </section>
-                  <section className="crm-panel crm-panel--tight">
+                  <section className="crm-panel">
                     <h4>Registrar contato</h4>
                     <textarea
                       value={contactNote}
@@ -1112,10 +996,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                         {Object.entries(CONTACT_KIND_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
                       </select>
                     </label>
-                    <button className="btn-primary" onClick={() => void addOpportunityContactEvent(selectedOpportunity)}>
-                      <Phone size={14} />
-                      Adicionar histórico
-                    </button>
+                    <button className="btn-secondary" onClick={() => void addOpportunityContactEvent(selectedOpportunity)}>Adicionar histórico</button>
                   </section>
                 </>
               ) : null}
@@ -1123,30 +1004,17 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
               {drawerTab === 'process' ? (
                 <section className="crm-panel">
                   <h4>Conversão operacional</h4>
-                  <p className="crm-conversion-note">A conversão fecha o ciclo comercial e cria cliente + processo de forma auditável.</p>
-                  <div className="crm-conversion-summary">
-                    <div>
-                      <span>Cliente</span>
-                      <strong>{selectedOpportunity.client || selectedOpportunity.personName}</strong>
-                    </div>
-                    <div>
-                      <span>Status comercial</span>
-                      <strong>{selectedOpportunity.status}</strong>
-                    </div>
-                    <div>
-                      <span>Processo vinculado</span>
-                      <strong>{selectedOpportunity.convertedProcessId ? `#${selectedOpportunity.convertedProcessId}` : 'Não convertido'}</strong>
-                    </div>
-                  </div>
-                  {selectedOpportunity.clientId || selectedOpportunity.convertedProcessId ? (
-                    <div className="crm-drawer__actions">
+                  {(selectedOpportunity.clientId || selectedOpportunity.convertedProcessId) ? (
+                    <div className="crm-process-actions">
                       {selectedOpportunity.clientId ? (
                         <button className="btn-secondary" onClick={() => navigate(`/clientes?clientId=${selectedOpportunity.clientId}`)}>
+                          <FolderOpen size={14} />
                           Abrir cliente
                         </button>
                       ) : null}
                       {selectedOpportunity.convertedProcessId ? (
                         <button className="btn-secondary" onClick={() => navigate(`/processos/${selectedOpportunity.convertedProcessId}`)}>
+                          <FolderOpen size={14} />
                           Abrir processo
                         </button>
                       ) : null}
@@ -1159,37 +1027,50 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                     </button>
                   ) : (
                     <div className="crm-conversion">
-                      <label className="crm-inline-field">
-                        <span>Cliente</span>
-                        <input value={conversionForm.clientName} onChange={(event) => setConversionForm((prev) => ({ ...prev, clientName: event.target.value }))} />
-                      </label>
-                      <label className="crm-inline-field">
-                        <span>Título do processo</span>
-                        <input value={conversionForm.processTitle} onChange={(event) => setConversionForm((prev) => ({ ...prev, processTitle: event.target.value }))} />
-                      </label>
-                      <label className="crm-inline-field">
-                        <span>Número do processo</span>
-                        <input value={conversionForm.processNumber} onChange={(event) => setConversionForm((prev) => ({ ...prev, processNumber: event.target.value }))} placeholder="Opcional" />
-                      </label>
-                      <div className="crm-conversion__grid">
-                        <label className="crm-inline-field">
-                          <span>Fase</span>
-                          <input value={conversionForm.processPhase} onChange={(event) => setConversionForm((prev) => ({ ...prev, processPhase: event.target.value }))} />
-                        </label>
-                        <label className="crm-inline-field">
-                          <span>Status</span>
-                          <input value={conversionForm.processStatus} onChange={(event) => setConversionForm((prev) => ({ ...prev, processStatus: event.target.value }))} />
-                        </label>
+                      <div className="crm-conversion__header">
+                        <span className="crm-eyebrow">Preparação da abertura</span>
+                        <strong>Transforme a oportunidade em caso operacional</strong>
+                        <p>Revise o cliente, o título do processo e a estrutura inicial antes de concluir a conversão.</p>
                       </div>
-                      <div className="crm-drawer__actions">
-                        <button className="btn-primary" onClick={() => void convertOpportunity(selectedOpportunity)}>Confirmar conversão</button>
-                        <button className="btn-secondary" onClick={() => setShowOpportunityConversion(false)}>Cancelar</button>
+                      <div className="crm-conversion__form">
+                        <label className="crm-inline-field">
+                          <span>Cliente</span>
+                          <input value={conversionForm.clientName} onChange={(event) => setConversionForm((prev) => ({ ...prev, clientName: event.target.value }))} />
+                        </label>
+                        <label className="crm-inline-field">
+                          <span>Título do processo</span>
+                          <input value={conversionForm.processTitle} onChange={(event) => setConversionForm((prev) => ({ ...prev, processTitle: event.target.value }))} />
+                        </label>
+                        <label className="crm-inline-field">
+                          <span>Número do processo</span>
+                          <input value={conversionForm.processNumber} onChange={(event) => setConversionForm((prev) => ({ ...prev, processNumber: event.target.value }))} placeholder="Opcional" />
+                        </label>
+                        <div className="crm-conversion__grid">
+                          <label className="crm-inline-field">
+                            <span>Fase</span>
+                            <input value={conversionForm.processPhase} onChange={(event) => setConversionForm((prev) => ({ ...prev, processPhase: event.target.value }))} />
+                          </label>
+                          <label className="crm-inline-field">
+                            <span>Status</span>
+                            <input value={conversionForm.processStatus} onChange={(event) => setConversionForm((prev) => ({ ...prev, processStatus: event.target.value }))} />
+                          </label>
+                        </div>
+                      </div>
+                      <div className="crm-conversion__footer">
+                        <div className="crm-conversion__hint">
+                          <ArrowRight size={14} />
+                          <span>Ao confirmar, o CRM preserva a oportunidade e cria o cliente/processo vinculado.</span>
+                        </div>
+                        <div className="crm-drawer__actions">
+                          <button className="btn-primary" onClick={() => void convertOpportunity(selectedOpportunity)}>Confirmar conversão</button>
+                          <button className="btn-secondary" onClick={() => setShowOpportunityConversion(false)}>Cancelar</button>
+                        </div>
                       </div>
                     </div>
                   )}
                 </section>
               ) : null}
-            </div>
+            </>
           ) : <div className="crm-empty">Selecione uma oportunidade para ver o detalhe.</div>}
         </aside>
       </section>
