@@ -69,6 +69,7 @@ Carteiras operacionais:
 - `POST /triage/jobs/run-cnj`
 - `POST /triage/jobs/run-cpf`
 - `POST /triage/jobs/run-diario`
+- `POST /triage/jobs/run-oab`
 - `GET /attendances`
 - `GET /attendances/:id`
 - `POST /attendances`

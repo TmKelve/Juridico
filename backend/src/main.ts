@@ -7,6 +7,7 @@ import { buildAgendaPayload } from './agenda.contract';
 import { collectCnjPublications } from './cnj-publications.provider';
 import { collectCpfPublications } from './cpf-publications.provider';
 import { collectDiarioPublications } from './diario-publications.provider';
+import { collectOabPublications } from './oab-publications.provider';
 import { buildDeadlinePayload } from './deadlines.contract';
 import { buildDocumentPayload } from './documents.contract';
 import { lookupExternalProcess } from './process-lookup.provider';
@@ -916,6 +917,231 @@ async function ingestDiarioPublications(triggeredBy: string) {
   }
 }
 
+async function ingestOabPublications(triggeredBy: string) {
+  const candidates = await prisma.process.findMany({
+    where: { processNumber: { not: null } },
+    include: { owner: { select: { email: true } } },
+    orderBy: { id: 'asc' },
+  });
+
+  const sourceJob = await prisma.publicationSourceJob.create({
+    data: {
+      sourceType: 'oab',
+      scheduledFor: new Date(),
+      startedAt: new Date(),
+      status: 'running',
+    },
+  });
+
+  let itemsCaptured = 0;
+  let itemsCreated = 0;
+  let itemsUpdated = 0;
+  let itemsFlaggedCritical = 0;
+  let itemsSentToCrm = 0;
+
+  try {
+    const captures = await collectOabPublications(
+      candidates.map((process: any) => ({
+        processId: process.id,
+        processNumber: process.processNumber,
+        clientName: process.client,
+        lawyerName: getResponsibleLabel(process.owner?.email) || 'advogado',
+        oabNumber: `SP${String(process.id).padStart(6, '0')}`,
+      })),
+    );
+
+    const processes = candidates.map((process: any) => ({
+      id: process.id,
+      processNumber: process.processNumber,
+      client: process.client,
+      clientId: process.clientId ?? null,
+    }));
+
+    const clients = await clientStore.findMany({
+      select: { id: true, cpfCnpj: true, name: true },
+    });
+
+    itemsCaptured = captures.length;
+
+    for (const capturePayload of captures) {
+      const fingerprint = createCaptureFingerprint([
+        'oab',
+        capturePayload.sourceReference,
+        capturePayload.oabNumber,
+        capturePayload.processNumber,
+        capturePayload.occurredAt,
+        capturePayload.rawText,
+      ]);
+
+      let capture = await prisma.publicationCapture.findUnique({
+        where: { fingerprint },
+      });
+
+      if (capture) {
+        capture = await prisma.publicationCapture.update({
+          where: { id: capture.id },
+          data: {
+            sourceReference: capturePayload.sourceReference,
+            occurredAt: new Date(capturePayload.occurredAt),
+            tribunal: capturePayload.tribunal,
+            processNumber: capturePayload.processNumber || null,
+            oabNumber: capturePayload.oabNumber,
+            personName: capturePayload.personName ?? null,
+            lawyerName: capturePayload.lawyerName ?? null,
+            rawText: capturePayload.rawText,
+            normalizedText: capturePayload.rawText,
+            status: 'atualizado',
+            sourceJobId: sourceJob.id,
+          },
+        });
+        itemsUpdated += 1;
+      } else {
+        capture = await prisma.publicationCapture.create({
+          data: {
+            sourceType: 'oab',
+            sourceReference: capturePayload.sourceReference,
+            occurredAt: new Date(capturePayload.occurredAt),
+            rawText: capturePayload.rawText,
+            normalizedText: capturePayload.rawText,
+            tribunal: capturePayload.tribunal,
+            processNumber: capturePayload.processNumber || null,
+            oabNumber: capturePayload.oabNumber,
+            personName: capturePayload.personName ?? null,
+            lawyerName: capturePayload.lawyerName ?? null,
+            metadataJson: { triggeredBy, source: 'oab' },
+            fingerprint,
+            status: 'processado',
+            sourceJobId: sourceJob.id,
+          },
+        });
+        itemsCreated += 1;
+      }
+
+      const target = resolveTriageTarget(
+        {
+          processNumber: capturePayload.processNumber || null,
+          cpf: null,
+          sourceType: 'oab',
+          normalizedText: capturePayload.rawText,
+        },
+        processes,
+        clients,
+      );
+
+      const queueType = inferQueueType('oab', capturePayload.rawText);
+      const suggestedAction = inferSuggestedAction({
+        sourceType: 'oab',
+        queueType,
+        processId: target.processId,
+        clientId: target.clientId,
+        hasExistingClient: Boolean(target.clientId),
+        normalizedText: capturePayload.rawText,
+      });
+
+      if (queueType === 'critica') itemsFlaggedCritical += 1;
+
+      const existingEvent = await prisma.publicationEvent.findFirst({
+        where: {
+          captureId: capture.id,
+          title: capturePayload.title,
+          eventAt: new Date(capturePayload.occurredAt),
+        },
+      });
+
+      const event = existingEvent ?? await prisma.publicationEvent.create({
+        data: {
+          captureId: capture.id,
+          processId: target.processId,
+          clientId: target.clientId,
+          eventType: capturePayload.title.toLowerCase().includes('intimação') ? 'intimacao' : 'publicacao',
+          eventAt: new Date(capturePayload.occurredAt),
+          title: capturePayload.title,
+          summary: capturePayload.summary,
+          fullText: capturePayload.rawText,
+          riskLevel: queueType === 'critica' ? 'critico' : 'normal',
+          requiresAction: true,
+          timelinePosition: 1,
+        },
+      });
+
+      const existingTriage = await prisma.triageItem.findFirst({
+        where: {
+          captureId: capture.id,
+          suggestedAction,
+          processId: target.processId,
+          clientId: target.clientId,
+          status: { in: ['pendente', 'em_revisao_manual', 'adiado'] },
+        },
+      });
+
+      if (existingTriage) {
+        await prisma.triageItem.update({
+          where: { id: existingTriage.id },
+          data: {
+            eventId: event.id,
+            queueType,
+            suggestedReason: capturePayload.summary,
+            sourceLabel: 'OAB',
+          },
+        });
+      } else {
+        await prisma.triageItem.create({
+          data: {
+            captureId: capture.id,
+            eventId: event.id,
+            processId: target.processId,
+            clientId: target.clientId,
+            queueType,
+            status: 'pendente',
+            suggestedAction,
+            suggestedReason: capturePayload.summary,
+            aiConfidenceBand: queueType === 'critica' ? 'alta' : 'media',
+            aiScoreRaw: queueType === 'critica' ? 0.83 : 0.69,
+            sourceLabel: 'OAB',
+          },
+        });
+      }
+    }
+
+    await prisma.publicationSourceJob.update({
+      where: { id: sourceJob.id },
+      data: {
+        finishedAt: new Date(),
+        status: 'success',
+        itemsCaptured,
+        itemsCreated,
+        itemsUpdated,
+        itemsFlaggedCritical,
+        itemsSentToCrm,
+      },
+    });
+
+    return {
+      sourceJobId: sourceJob.id,
+      itemsCaptured,
+      itemsCreated,
+      itemsUpdated,
+      itemsFlaggedCritical,
+      itemsSentToCrm,
+    };
+  } catch (error) {
+    await prisma.publicationSourceJob.update({
+      where: { id: sourceJob.id },
+      data: {
+        finishedAt: new Date(),
+        status: 'failed',
+        itemsCaptured,
+        itemsCreated,
+        itemsUpdated,
+        itemsFlaggedCritical,
+        itemsSentToCrm,
+        errorLog: error instanceof Error ? error.message : 'Erro desconhecido na coleta OAB',
+      },
+    });
+    throw error;
+  }
+}
+
 function scheduleCnjCollector() {
   const disabled = process.env.TRIAGE_SCHEDULER_DISABLED === 'true';
   if (disabled) return;
@@ -967,6 +1193,27 @@ function scheduleDiarioCollector() {
       await ingestDiarioPublications('scheduler');
     } catch (error) {
       console.error('[triage] Diário oficial scheduler failed:', error);
+    } finally {
+      const nextRun = computeNextScheduleDate(new Date(Date.now() + 60000));
+      const waitMs = Math.max(60000, nextRun.getTime() - Date.now());
+      setTimeout(run, waitMs);
+    }
+  };
+
+  const firstRun = computeNextScheduleDate();
+  const initialWaitMs = Math.max(60000, firstRun.getTime() - Date.now());
+  setTimeout(run, initialWaitMs);
+}
+
+function scheduleOabCollector() {
+  const disabled = process.env.TRIAGE_SCHEDULER_DISABLED === 'true';
+  if (disabled) return;
+
+  const run = async () => {
+    try {
+      await ingestOabPublications('scheduler');
+    } catch (error) {
+      console.error('[triage] OAB scheduler failed:', error);
     } finally {
       const nextRun = computeNextScheduleDate(new Date(Date.now() + 60000));
       const waitMs = Math.max(60000, nextRun.getTime() - Date.now());
@@ -1702,6 +1949,7 @@ seedData().catch((err) => {
 scheduleCnjCollector();
 scheduleCpfCollector();
 scheduleDiarioCollector();
+scheduleOabCollector();
 
 function getUserFromReq(req: express.Request): UserToken | null {
   const token = getAuthToken(req);
@@ -4328,6 +4576,19 @@ app.post('/triage/jobs/run-diario', async (req, res) => {
     res.status(201).json(result);
   } catch (error) {
     res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao executar coleta de diário oficial' });
+  }
+});
+
+app.post('/triage/jobs/run-oab', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token nao fornecido ou invalido' });
+  if (!canAccessTriage(decoded)) return res.status(403).send({ message: 'Acesso negado' });
+
+  try {
+    const result = await ingestOabPublications(getResponsibleLabel(decoded.email) || decoded.email);
+    res.status(201).json(result);
+  } catch (error) {
+    res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao executar coleta OAB' });
   }
 });
 
