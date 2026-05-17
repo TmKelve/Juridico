@@ -150,6 +150,12 @@
   color: var(--brand-700);
 }
 
+.quick-view-chip.is-active {
+  border-color: var(--brand-500);
+  background: var(--brand-100);
+  color: var(--brand-700);
+}
+
 .filters-grid-top,
 .filters-grid-bottom {
   display: grid;
@@ -263,6 +269,19 @@
   border-radius: var(--radius-xl);
   padding: var(--space-6);
   text-align: center;
+}
+
+.deadlines-empty-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--neutral-200);
+  background: var(--neutral-50);
+  color: var(--neutral-600);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-2);
 }
 
 .deadlines-empty h3 {
@@ -400,6 +419,7 @@
 .deadline-badge {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   min-height: 24px;
   border-radius: var(--radius-full);
   padding: 0 var(--space-2);

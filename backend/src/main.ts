@@ -174,6 +174,45 @@ function canAccessCrm(user: UserToken) {
   return ['ADM', 'ADV', 'ATD'].includes(user.role);
 }
 
+const OPPORTUNITY_STAGE_SEQUENCE = ['acao_recomendada', 'em_contato', 'proposta_enviada', 'negociacao', 'ganha', 'perdida'] as const;
+
+function parseOptionalDateTime(value: unknown) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return 'invalid' as const;
+  return parsed;
+}
+
+function resolveOpportunityStatus(value: unknown, fallback: string) {
+  if (typeof value !== 'string' || !value.trim()) return fallback;
+  return value.trim();
+}
+
+function validateOpportunityCommercialRules(input: {
+  currentStatus: string;
+  nextStatus: string;
+  responsible: string | null;
+  nextContactAt: Date | null;
+}) {
+  const { currentStatus, nextStatus, responsible, nextContactAt } = input;
+  const currentIndex = OPPORTUNITY_STAGE_SEQUENCE.indexOf(currentStatus as typeof OPPORTUNITY_STAGE_SEQUENCE[number]);
+  const nextIndex = OPPORTUNITY_STAGE_SEQUENCE.indexOf(nextStatus as typeof OPPORTUNITY_STAGE_SEQUENCE[number]);
+
+  if (nextStatus === 'em_contato' && !nextContactAt) {
+    return 'O estágio em_contato exige próximo contato preenchido.';
+  }
+
+  if (nextStatus !== 'acao_recomendada' && !responsible) {
+    return 'Defina um responsável para avançar a oportunidade.';
+  }
+
+  if (currentIndex >= 0 && nextIndex >= 0 && nextIndex > currentIndex + 1) {
+    return 'Avanço inválido: mova a oportunidade etapa por etapa.';
+  }
+
+  return null;
+}
+
 function getResponsibleLabel(email?: string | null) {
   if (!email) return null;
   return email.split('@')[0];
@@ -2991,14 +3030,24 @@ app.post('/crm/opportunities', async (req, res) => {
   const responsible = typeof req.body?.responsible === 'string' ? req.body.responsible.trim() || null : null;
   const cpf = typeof req.body?.cpf === 'string' ? req.body.cpf.trim() || null : null;
   const clientName = typeof req.body?.clientName === 'string' ? req.body.clientName.trim() : '';
-  const nextContactAt = typeof req.body?.nextContactAt === 'string' && req.body.nextContactAt.trim()
-    ? new Date(req.body.nextContactAt)
-    : req.body?.nextContactAt === null
-      ? null
-      : null;
+  const parsedNextContact = parseOptionalDateTime(req.body?.nextContactAt);
+  if (parsedNextContact === 'invalid') {
+    return res.status(400).send({ message: 'nextContactAt inválido. Use data/hora ISO válida.' });
+  }
+  const nextContactAt = parsedNextContact;
 
   if (!personName) return res.status(400).send({ message: 'Nome do contato é obrigatório' });
   if (!summary) return res.status(400).send({ message: 'Resumo da oportunidade é obrigatório' });
+
+  const commercialRuleError = validateOpportunityCommercialRules({
+    currentStatus: 'acao_recomendada',
+    nextStatus: status,
+    responsible,
+    nextContactAt,
+  });
+  if (commercialRuleError) {
+    return res.status(400).send({ message: commercialRuleError });
+  }
 
   let clientId: number | null = null;
   if (typeof req.body?.clientId === 'number') {
@@ -3091,19 +3140,37 @@ app.put('/crm/opportunities/:id', async (req, res) => {
   });
   if (!current) return res.status(404).send({ message: 'Oportunidade não encontrada' });
 
-  const nextContactAt = typeof req.body?.nextContactAt === 'string' && req.body.nextContactAt.trim()
-    ? new Date(req.body.nextContactAt)
-    : req.body?.nextContactAt === null
-      ? null
-      : current.nextContactAt;
+  const parsedNextContact = req.body?.nextContactAt === null
+    ? null
+    : req.body?.nextContactAt === undefined
+      ? current.nextContactAt
+      : parseOptionalDateTime(req.body?.nextContactAt);
+  if (parsedNextContact === 'invalid') {
+    return res.status(400).send({ message: 'nextContactAt inválido. Use data/hora ISO válida.' });
+  }
+  const nextContactAt = parsedNextContact;
+  const nextStatus = resolveOpportunityStatus(req.body?.status, current.status);
+  const nextResponsible = typeof req.body?.responsible === 'string'
+    ? req.body.responsible.trim() || null
+    : current.responsible;
+
+  const commercialRuleError = validateOpportunityCommercialRules({
+    currentStatus: current.status,
+    nextStatus,
+    responsible: nextResponsible,
+    nextContactAt,
+  });
+  if (commercialRuleError) {
+    return res.status(400).send({ message: commercialRuleError });
+  }
 
   const updated = await prisma.crmOpportunity.update({
     where: { id: current.id },
     data: {
-      status: typeof req.body?.status === 'string' && req.body.status.trim() ? req.body.status.trim() : current.status,
+      status: nextStatus,
       summary: typeof req.body?.summary === 'string' && req.body.summary.trim() ? req.body.summary.trim() : current.summary,
       personName: typeof req.body?.personName === 'string' && req.body.personName.trim() ? req.body.personName.trim() : current.personName,
-      responsible: typeof req.body?.responsible === 'string' ? req.body.responsible.trim() || null : current.responsible,
+      responsible: nextResponsible,
       nextContactAt,
     },
     include: { clientRecord: true, triageItems: true, contactEvents: { orderBy: { createdAt: 'desc' } } },
@@ -3165,15 +3232,20 @@ app.post('/crm/opportunities/:id/contact-events', async (req, res) => {
   if (!summary) return res.status(400).send({ message: 'Resumo do contato é obrigatório' });
 
   const kind = typeof req.body?.kind === 'string' && req.body.kind.trim() ? req.body.kind.trim() : 'contato';
-  const nextContactAt = typeof req.body?.nextContactAt === 'string' && req.body.nextContactAt.trim()
-    ? new Date(req.body.nextContactAt)
-    : null;
+  const parsedNextContact = req.body?.nextContactAt === undefined
+    ? opportunity.nextContactAt
+    : req.body?.nextContactAt === null
+      ? null
+      : parseOptionalDateTime(req.body?.nextContactAt);
+  if (parsedNextContact === 'invalid') {
+    return res.status(400).send({ message: 'nextContactAt inválido. Use data/hora ISO válida.' });
+  }
 
   const updated = await prisma.crmOpportunity.update({
     where: { id: opportunity.id },
     data: {
       lastContactAt: new Date(),
-      nextContactAt: nextContactAt ?? opportunity.nextContactAt,
+      nextContactAt: parsedNextContact,
       contactEvents: {
         create: {
           kind,
@@ -3247,6 +3319,21 @@ app.post('/crm/opportunities/:id/convert', async (req, res) => {
     include: { clientRecord: true, contactEvents: { orderBy: { createdAt: 'desc' } } },
   });
   if (!opportunity) return res.status(404).send({ message: 'Oportunidade não encontrada' });
+  if (opportunity.convertedProcessId) {
+    return res.status(409).send({ message: `Oportunidade já convertida no processo #${opportunity.convertedProcessId}.` });
+  }
+
+  const conversionConfirmed = req.body?.confirmConversion === undefined ? true : Boolean(req.body.confirmConversion);
+  if (!conversionConfirmed) {
+    return res.status(400).send({ message: 'Confirmação de conversão ausente. Revise e confirme a conversão.' });
+  }
+
+  if (!opportunity.responsible?.trim()) {
+    return res.status(400).send({ message: 'Defina um responsável comercial antes da conversão.' });
+  }
+  if (!opportunity.nextContactAt && opportunity.status === 'em_contato') {
+    return res.status(400).send({ message: 'O estágio em_contato exige próximo contato antes da conversão.' });
+  }
 
   const clientName = typeof req.body?.clientName === 'string' ? req.body.clientName.trim() : '';
   const processTitle = typeof req.body?.processTitle === 'string' ? req.body.processTitle.trim() : '';
@@ -3307,43 +3394,47 @@ app.post('/crm/opportunities/:id/convert', async (req, res) => {
     });
   }
 
-  const createdProcess = await prisma.process.create({
-    data: {
-      title: processTitle,
-      processNumber: processNumber || null,
-      client: client.name,
-      clientId: client.id,
-      phase: processPhase,
-      status: processStatus,
-      ownerId: decoded.sub,
-    },
-    include: {
-      owner: { select: { id: true, email: true, role: true } },
-      clientRecord: true,
-    },
-  });
+  const conversion = await prisma.$transaction(async (tx: any) => {
+    const createdProcess = await tx.process.create({
+      data: {
+        title: processTitle,
+        processNumber: processNumber || null,
+        client: client.name,
+        clientId: client.id,
+        phase: processPhase,
+        status: processStatus,
+        ownerId: decoded.sub,
+      },
+      include: {
+        owner: { select: { id: true, email: true, role: true } },
+        clientRecord: true,
+      },
+    });
 
-  const updatedOpportunity = await prisma.crmOpportunity.update({
-    where: { id: opportunity.id },
-    data: {
-      clientId: client.id,
-      convertedProcessId: createdProcess.id,
-      personName: client.name,
-      status: 'ganha',
-      summary: typeof req.body?.summary === 'string' && req.body.summary.trim() ? req.body.summary.trim() : opportunity.summary,
-      contactEvents: {
-        create: {
-          kind: 'conversao',
-          summary: `Convertida em cliente e processo #${createdProcess.id}.`,
-          createdBy: decoded.email,
+    const updatedOpportunity = await tx.crmOpportunity.update({
+      where: { id: opportunity.id },
+      data: {
+        clientId: client.id,
+        convertedProcessId: createdProcess.id,
+        personName: client.name,
+        status: 'ganha',
+        summary: typeof req.body?.summary === 'string' && req.body.summary.trim() ? req.body.summary.trim() : opportunity.summary,
+        contactEvents: {
+          create: {
+            kind: 'conversao',
+            summary: `Convertida em cliente e processo #${createdProcess.id}.`,
+            createdBy: decoded.email,
+          },
         },
       },
-    },
-    include: { clientRecord: true, triageItems: true, contactEvents: { orderBy: { createdAt: 'desc' } } },
+      include: { clientRecord: true, triageItems: true, contactEvents: { orderBy: { createdAt: 'desc' } } },
+    });
+
+    return { createdProcess, updatedOpportunity };
   });
 
   res.status(201).json({
-    opportunity: buildCrmOpportunityPayload(updatedOpportunity),
+    opportunity: buildCrmOpportunityPayload(conversion.updatedOpportunity),
     client: {
       id: client.id,
       name: client.name,
@@ -3352,13 +3443,13 @@ app.post('/crm/opportunities/:id/convert', async (req, res) => {
       responsible: client.responsible ?? '',
     },
     process: {
-      id: createdProcess.id,
-      title: createdProcess.title,
-      processNumber: createdProcess.processNumber ?? '',
-      phase: createdProcess.phase,
-      status: createdProcess.status,
-      clientId: createdProcess.clientId,
-      client: createdProcess.client,
+      id: conversion.createdProcess.id,
+      title: conversion.createdProcess.title,
+      processNumber: conversion.createdProcess.processNumber ?? '',
+      phase: conversion.createdProcess.phase,
+      status: conversion.createdProcess.status,
+      clientId: conversion.createdProcess.clientId,
+      client: conversion.createdProcess.client,
     },
   });
 });

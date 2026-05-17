@@ -1160,6 +1160,9 @@ export function Processes({ user }: ProcessesProps) {
 
       {emptyWithoutData && (
         <div className="my-processes-empty" role="status">
+          <div className="my-processes-empty-icon" aria-hidden="true">
+            <FolderOpen size={18} />
+          </div>
           <h3>Nenhum processo cadastrado</h3>
           <p>Comece criando o primeiro processo da sua carteira para visualizar prazos e prioridades.</p>
           <button type="button" className="btn-primary" onClick={() => { resetFormState('novo'); setShowForm(true); }}>Criar primeiro processo</button>
@@ -1168,6 +1171,9 @@ export function Processes({ user }: ProcessesProps) {
 
       {emptyWithFilter && (
         <div className="my-processes-empty" role="status">
+          <div className="my-processes-empty-icon" aria-hidden="true">
+            <Filter size={18} />
+          </div>
           <h3>Nenhum resultado para os filtros aplicados</h3>
           <p>Ajuste os filtros para ampliar sua visao da carteira.</p>
           <button type="button" className="btn-secondary" onClick={clearFilters}>Limpar filtros</button>

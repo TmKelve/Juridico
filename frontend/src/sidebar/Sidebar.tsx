@@ -1,7 +1,7 @@
-import './sidebar.css'
 import { SidebarBrand } from './SidebarBrand'
 import { SidebarNav } from './SidebarNav'
 import { SidebarFooter } from './SidebarFooter'
+import { cn } from '../lib/cn'
 
 interface SidebarUser {
   email: string
@@ -27,23 +27,23 @@ export function Sidebar({
   onFetchUsers,
   onCloseMobile,
 }: SidebarProps) {
-  const cls = [
-    'sidebar',
-    isOpen ? 'is-open' : '',
-    isCollapsed ? 'is-collapsed' : '',
-  ]
-    .filter(Boolean)
-    .join(' ')
-
   return (
     <>
-      <aside className={cls} aria-label="Navegação principal">
-        <div className="sidebar-body">
+      <aside
+        className={cn(
+          'fixed inset-y-0 left-0 z-40 flex h-dvh w-[18rem] -translate-x-full flex-col border-r border-slate-700/60 bg-slate-900 text-slate-100 shadow-2xl transition-transform duration-200 md:sticky md:top-0 md:h-screen md:translate-x-0',
+          isOpen && 'translate-x-0',
+          isCollapsed && 'md:w-[5.5rem]',
+        )}
+        aria-label="Navegação principal"
+      >
+        <div className={cn('flex min-h-0 flex-1 flex-col gap-2 px-4 pb-4 pt-6', isCollapsed && 'md:px-3')}>
           <SidebarBrand isCollapsed={isCollapsed} />
           <SidebarNav
             role={user.role}
             isCollapsed={isCollapsed}
             onFetchUsers={onFetchUsers}
+            onNavigate={onCloseMobile}
           />
         </div>
 
@@ -59,7 +59,7 @@ export function Sidebar({
       {isOpen && (
         <button
           type="button"
-          className="sidebar-backdrop"
+          className="fixed inset-0 z-30 border-none bg-slate-950/55 backdrop-blur-[1px] md:hidden"
           aria-label="Fechar navegação"
           onClick={onCloseMobile}
         />

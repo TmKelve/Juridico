@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Circle,
   Download,
   ExternalLink,
   Filter,
@@ -289,6 +290,16 @@ export function Deadlines({ user }: DeadlinesProps) {
   const areas = useMemo(() => Array.from(new Set(deadlines.map((item) => item.area).filter(Boolean))), [deadlines]);
 
   const hasActiveFilter = useMemo(() => JSON.stringify(filters) !== JSON.stringify(EMPTY_FILTERS), [filters]);
+  const activeQuickView = useMemo(() => {
+    const normalizedOwner = getResponsibleLabel(user.email);
+    if (filters.responsible === normalizedOwner && !filters.query && !filters.area && !filters.process && !filters.origin && !filters.status && !filters.priority && !filters.dueTodayOnly && !filters.dueInDays && filters.period === 'todos') return 'meus';
+    if (filters.period === 'hoje' && !filters.status && !filters.priority && !filters.responsible && !filters.area && !filters.process && !filters.origin && !filters.dueTodayOnly && !filters.dueInDays && !filters.query) return 'hoje';
+    if (filters.period === 'atrasados' && !filters.status && !filters.priority && !filters.responsible && !filters.area && !filters.process && !filters.origin && !filters.dueTodayOnly && !filters.dueInDays && !filters.query) return 'atrasados';
+    if (filters.status === 'critico' && filters.period === 'todos' && !filters.priority && !filters.responsible && !filters.area && !filters.process && !filters.origin && !filters.dueTodayOnly && !filters.dueInDays && !filters.query) return 'criticos';
+    if (filters.dueInDays === '7' && filters.period === 'todos' && !filters.status && !filters.priority && !filters.responsible && !filters.area && !filters.process && !filters.origin && !filters.dueTodayOnly && !filters.query) return 'proximos_7';
+    if (!hasActiveFilter) return 'todos';
+    return '';
+  }, [filters, hasActiveFilter, user.email]);
 
   const calendarItems = useMemo(() => {
     const grouped = new Map<string, DeadlineItem[]>();
@@ -310,7 +321,12 @@ export function Deadlines({ user }: DeadlinesProps) {
       concluido: 'Concluido',
     };
 
-    return <span className={`deadline-badge status-${status}`}>{labels[status]}</span>;
+    return (
+      <span className={`deadline-badge status-${status}`}>
+        <Circle size={9} aria-hidden="true" />
+        {labels[status]}
+      </span>
+    );
   }
 
   function priorityBadge(priority: Priority) {
@@ -319,7 +335,12 @@ export function Deadlines({ user }: DeadlinesProps) {
       media: 'Media',
       baixa: 'Baixa',
     };
-    return <span className={`deadline-badge priority-${priority}`}>{labels[priority]}</span>;
+    return (
+      <span className={`deadline-badge priority-${priority}`}>
+        <Circle size={9} aria-hidden="true" />
+        {labels[priority]}
+      </span>
+    );
   }
 
   function renderRiskTone(item: DeadlineItem) {
@@ -411,12 +432,12 @@ export function Deadlines({ user }: DeadlinesProps) {
 
       <section className="deadlines-filters" aria-label="Busca e filtros de prazos">
         <div className="deadline-quick-views">
-          <button type="button" className="quick-view-chip" onClick={() => applyQuickView('todos')}>Todos</button>
-          <button type="button" className="quick-view-chip" onClick={() => applyQuickView('hoje')}>Hoje</button>
-          <button type="button" className="quick-view-chip" onClick={() => applyQuickView('atrasados')}>Atrasados</button>
-          <button type="button" className="quick-view-chip" onClick={() => applyQuickView('criticos')}>Críticos</button>
-          <button type="button" className="quick-view-chip" onClick={() => setFilters({ ...EMPTY_FILTERS, dueInDays: '7' })}>Próximos 7 dias</button>
-          <button type="button" className="quick-view-chip" onClick={() => applyQuickView('meus')}>Meus prazos</button>
+          <button type="button" className={`quick-view-chip${activeQuickView === 'todos' ? ' is-active' : ''}`} onClick={() => applyQuickView('todos')}>Todos</button>
+          <button type="button" className={`quick-view-chip${activeQuickView === 'hoje' ? ' is-active' : ''}`} onClick={() => applyQuickView('hoje')}>Hoje</button>
+          <button type="button" className={`quick-view-chip${activeQuickView === 'atrasados' ? ' is-active' : ''}`} onClick={() => applyQuickView('atrasados')}>Atrasados</button>
+          <button type="button" className={`quick-view-chip${activeQuickView === 'criticos' ? ' is-active' : ''}`} onClick={() => applyQuickView('criticos')}>Críticos</button>
+          <button type="button" className={`quick-view-chip${activeQuickView === 'proximos_7' ? ' is-active' : ''}`} onClick={() => setFilters({ ...EMPTY_FILTERS, dueInDays: '7' })}>Próximos 7 dias</button>
+          <button type="button" className={`quick-view-chip${activeQuickView === 'meus' ? ' is-active' : ''}`} onClick={() => applyQuickView('meus')}>Meus prazos</button>
         </div>
 
         <div className="filters-grid-top">
@@ -561,6 +582,9 @@ export function Deadlines({ user }: DeadlinesProps) {
 
       {deadlines.length === 0 && !error && (
         <div className="deadlines-empty" role="status">
+          <div className="deadlines-empty-icon" aria-hidden="true">
+            <CalendarDays size={18} />
+          </div>
           <h3>Sem prazos cadastrados</h3>
           <p>Nao ha prazos vinculados a sua carteira no momento.</p>
         </div>
@@ -568,6 +592,9 @@ export function Deadlines({ user }: DeadlinesProps) {
 
       {deadlines.length > 0 && sortedDeadlines.length === 0 && (
         <div className="deadlines-empty" role="status">
+          <div className="deadlines-empty-icon" aria-hidden="true">
+            <Filter size={18} />
+          </div>
           <h3>Nenhum prazo corresponde aos filtros</h3>
           <p>Ajuste os filtros para ampliar os resultados.</p>
           <button className="btn-secondary" onClick={clearFilters}>Limpar filtros</button>

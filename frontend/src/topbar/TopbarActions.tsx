@@ -6,19 +6,20 @@ interface TopbarIconBtnProps {
   label: string
   badge?: number
   onClick?: () => void
+  className?: string
 }
 
-function TopbarIconBtn({ icon: Icon, label, badge, onClick }: TopbarIconBtnProps) {
+function TopbarIconBtn({ icon: Icon, label, badge, onClick, className }: TopbarIconBtnProps) {
   return (
     <button
       type="button"
-      className={`topbar-icon-btn${badge ? ' has-badge' : ''}`}
+      className={`relative inline-flex h-9 w-9 items-center justify-center rounded-md border-none bg-transparent p-0 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${className || ''}`}
       aria-label={label}
       onClick={onClick}
     >
       <Icon size={18} strokeWidth={1.75} />
       {badge != null && badge > 0 && (
-        <span className="topbar-badge" aria-label={`${badge} notificações`}>
+        <span className="pointer-events-none absolute right-1 top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-white bg-rose-600 px-1 text-[10px] font-bold leading-none text-white" aria-label={`${badge} notificações`}>
           {badge > 9 ? '9+' : badge}
         </span>
       )}
@@ -40,7 +41,7 @@ export function TopbarActions({
   onShortcuts,
 }: TopbarActionsProps) {
   return (
-    <div className="topbar-actions">
+    <div className="flex items-center gap-0.5">
       <TopbarIconBtn
         icon={Bell}
         label="Abrir notificações"
@@ -51,11 +52,13 @@ export function TopbarActions({
         icon={LayoutGrid}
         label="Abrir atalhos"
         onClick={onShortcuts}
+        className="hidden md:inline-flex"
       />
       <TopbarIconBtn
         icon={CircleHelp}
         label="Abrir ajuda"
         onClick={onHelp}
+        className="hidden md:inline-flex"
       />
     </div>
   )

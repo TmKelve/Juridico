@@ -3,6 +3,7 @@ import {
   BookOpen,
   Briefcase,
   CalendarDays,
+  CircleHelp,
   ClipboardCheck,
   Clock3,
   FolderCog,
@@ -11,6 +12,7 @@ import {
   Landmark,
   PieChart,
   Scale,
+  Settings,
   ShieldAlert,
   Users,
 } from 'lucide-react'
@@ -67,9 +69,10 @@ interface SidebarNavProps {
   role: string
   isCollapsed: boolean
   onFetchUsers: () => void
+  onNavigate: () => void
 }
 
-export function SidebarNav({ role, isCollapsed, onFetchUsers }: SidebarNavProps) {
+export function SidebarNav({ role, isCollapsed, onFetchUsers, onNavigate }: SidebarNavProps) {
   const sections = navSections.map((section) => ({
     ...section,
     items: section.items.map((item) => {
@@ -92,12 +95,30 @@ export function SidebarNav({ role, isCollapsed, onFetchUsers }: SidebarNavProps)
     })
   }
 
+  const supportSection: NavSection = {
+    title: 'SUPORTE',
+    items: [
+      {
+        kind: 'button',
+        label: 'Ajuda',
+        icon: CircleHelp,
+        onClick: () => trackEvent('menu_help_click'),
+      },
+      {
+        kind: 'button',
+        label: 'Configurações',
+        icon: Settings,
+        onClick: () => trackEvent('menu_settings_click'),
+      },
+    ],
+  }
+
   return (
-    <nav className="sidebar-nav shell-nav" aria-label="Navegação principal">
-      {sections.map((section) => (
-        <section className="sidebar-nav-section" aria-label={section.title} key={section.title}>
-          {!isCollapsed && <p className="sidebar-nav-heading">{section.title}</p>}
-          <div className="sidebar-nav-group">
+    <nav className="flex flex-col gap-5" aria-label="Navegação principal">
+      {[...sections, supportSection].map((section) => (
+        <section className="flex flex-col gap-2" aria-label={section.title} key={section.title}>
+          {!isCollapsed && <p className="px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">{section.title}</p>}
+          <div className="mt-1 flex flex-col gap-1">
             {section.items.map((item) =>
               item.kind === 'link' ? (
                 <SidebarNavLink
@@ -106,6 +127,8 @@ export function SidebarNav({ role, isCollapsed, onFetchUsers }: SidebarNavProps)
                   icon={item.icon}
                   to={item.to}
                   onClick={item.onClick}
+                  isCollapsed={isCollapsed}
+                  onNavigate={onNavigate}
                 />
               ) : (
                 <SidebarNavButton
@@ -113,6 +136,7 @@ export function SidebarNav({ role, isCollapsed, onFetchUsers }: SidebarNavProps)
                   label={item.label}
                   icon={item.icon}
                   onClick={item.onClick}
+                  isCollapsed={isCollapsed}
                 />
               )
             )}

@@ -1,10 +1,9 @@
-import { DashboardContainer } from './dashboard/containers/DashboardContainer';
-import './Dashboard.css';
+import { DashboardPage } from './dashboard/product/ui/DashboardPage';
 
 interface DashboardProps {
   user: { id: number; email: string; role: string };
 }
 
 export function Dashboard({ user }: DashboardProps) {
-  return <DashboardContainer user={user} />;
+  return <DashboardPage user={user} />;
 }

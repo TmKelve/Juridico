@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { api, type ApiTriageDecision, type ApiTriageItem, type ApiTriageJob } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
+import { Button, Input, Textarea } from './components/ui';
 import './Triagem.css';
 
 interface TriagemProps {
@@ -368,10 +369,10 @@ export function Triagem({ user }: TriagemProps) {
           <p>Itens críticos, sinais comerciais e eventos órfãos ficam centralizados para confirmação humana, auditoria e execução assistida.</p>
         </div>
         <div className="triage-hero-actions">
-          <button className="btn-secondary" onClick={() => void loadItems()}>
+          <Button variant="outline" onClick={() => void loadItems()}>
             <RefreshCw size={16} />
             Atualizar
-          </button>
+          </Button>
         </div>
       </section>
 
@@ -411,15 +412,15 @@ export function Triagem({ user }: TriagemProps) {
           </div>
           <div className="triage-ops__actions">
             {(['cnj', 'cpf', 'diario', 'oab'] as const).map((source) => (
-              <button
+              <Button
                 key={source}
-                className="btn-secondary"
+                variant="outline"
                 onClick={() => void runJob(source)}
                 disabled={runningSource === source}
               >
                 {runningSource === source ? <LoaderCircle size={14} className="triage-spin" /> : <RefreshCw size={14} />}
                 Rodar {SOURCE_LABEL[source]}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -530,7 +531,7 @@ export function Triagem({ user }: TriagemProps) {
             <div className="triage-filters">
               <label className="triage-search">
                 <Search size={16} />
-                <input
+                <Input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Buscar por processo, cliente, CPF ou razão sugerida..."
@@ -594,33 +595,32 @@ export function Triagem({ user }: TriagemProps) {
                   <div className="triage-card__reason">{item.suggestedReason}</div>
 
                   <div className="triage-card__actions">
-                    <button
-                      className="btn-secondary"
+                    <Button
+                      variant="outline"
                       onClick={(event) => {
                         event.stopPropagation();
                         openRelatedPublication(item);
                       }}
                     >
                       Ver publicação
-                    </button>
-                    <button
-                      className="btn-primary"
+                    </Button>
+                    <Button
                       onClick={(event) => {
                         event.stopPropagation();
                         void decide(item, 'confirmado');
                       }}
                     >
                       Confirmar
-                    </button>
-                    <button
-                      className="btn-secondary"
+                    </Button>
+                    <Button
+                      variant="outline"
                       onClick={(event) => {
                         event.stopPropagation();
                         void decide(item, 'revisao_manual');
                       }}
                     >
                       Revisão manual
-                    </button>
+                    </Button>
                   </div>
                 </article>
               ))}
@@ -730,7 +730,7 @@ export function Triagem({ user }: TriagemProps) {
                     <option key={reason} value={reason}>{reason}</option>
                   ))}
                 </select>
-                <textarea
+                <Textarea
                   rows={3}
                   placeholder="Observação opcional para decisão ou revisão manual."
                   value={decisionNote}
@@ -744,11 +744,11 @@ export function Triagem({ user }: TriagemProps) {
                   <div className="triage-panel__grid">
                     <div>
                       <span>Título do prazo</span>
-                      <input value={assistDraft.deadlineTitle} onChange={(event) => setAssistDraft((prev) => ({ ...prev, deadlineTitle: event.target.value }))} />
+                      <Input value={assistDraft.deadlineTitle} onChange={(event) => setAssistDraft((prev) => ({ ...prev, deadlineTitle: event.target.value }))} />
                     </div>
                     <div>
                       <span>Vencimento</span>
-                      <input type="date" value={assistDraft.dueDate} onChange={(event) => setAssistDraft((prev) => ({ ...prev, dueDate: event.target.value }))} />
+                      <Input type="date" value={assistDraft.dueDate} onChange={(event) => setAssistDraft((prev) => ({ ...prev, dueDate: event.target.value }))} />
                     </div>
                     <div>
                       <span>Prioridade do prazo</span>
@@ -760,15 +760,15 @@ export function Triagem({ user }: TriagemProps) {
                     </div>
                     <div>
                       <span>Tarefa derivada</span>
-                      <input value={assistDraft.taskTitle} onChange={(event) => setAssistDraft((prev) => ({ ...prev, taskTitle: event.target.value }))} />
+                      <Input value={assistDraft.taskTitle} onChange={(event) => setAssistDraft((prev) => ({ ...prev, taskTitle: event.target.value }))} />
                     </div>
                     <div>
                       <span>Vencimento da tarefa</span>
-                      <input type="date" value={assistDraft.taskDueDate} onChange={(event) => setAssistDraft((prev) => ({ ...prev, taskDueDate: event.target.value }))} />
+                      <Input type="date" value={assistDraft.taskDueDate} onChange={(event) => setAssistDraft((prev) => ({ ...prev, taskDueDate: event.target.value }))} />
                     </div>
                     <div>
                       <span>Responsável</span>
-                      <input value={assistDraft.taskOwner} onChange={(event) => setAssistDraft((prev) => ({ ...prev, taskOwner: event.target.value }))} />
+                      <Input value={assistDraft.taskOwner} onChange={(event) => setAssistDraft((prev) => ({ ...prev, taskOwner: event.target.value }))} />
                     </div>
                   </div>
                 )}
@@ -777,11 +777,11 @@ export function Triagem({ user }: TriagemProps) {
                   <div className="triage-panel__grid">
                     <div>
                       <span>Título da tarefa</span>
-                      <input value={assistDraft.taskTitle} onChange={(event) => setAssistDraft((prev) => ({ ...prev, taskTitle: event.target.value }))} />
+                      <Input value={assistDraft.taskTitle} onChange={(event) => setAssistDraft((prev) => ({ ...prev, taskTitle: event.target.value }))} />
                     </div>
                     <div>
                       <span>Vencimento</span>
-                      <input type="date" value={assistDraft.taskDueDate} onChange={(event) => setAssistDraft((prev) => ({ ...prev, taskDueDate: event.target.value }))} />
+                      <Input type="date" value={assistDraft.taskDueDate} onChange={(event) => setAssistDraft((prev) => ({ ...prev, taskDueDate: event.target.value }))} />
                     </div>
                     <div>
                       <span>Prioridade</span>
@@ -794,7 +794,7 @@ export function Triagem({ user }: TriagemProps) {
                     </div>
                     <div>
                       <span>Responsável</span>
-                      <input value={assistDraft.taskOwner} onChange={(event) => setAssistDraft((prev) => ({ ...prev, taskOwner: event.target.value }))} />
+                      <Input value={assistDraft.taskOwner} onChange={(event) => setAssistDraft((prev) => ({ ...prev, taskOwner: event.target.value }))} />
                     </div>
                   </div>
                 )}
@@ -803,17 +803,17 @@ export function Triagem({ user }: TriagemProps) {
                   <div className="triage-panel__grid">
                     <div>
                       <span>Contato</span>
-                      <input value={assistDraft.crmPersonName} onChange={(event) => setAssistDraft((prev) => ({ ...prev, crmPersonName: event.target.value }))} />
+                      <Input value={assistDraft.crmPersonName} onChange={(event) => setAssistDraft((prev) => ({ ...prev, crmPersonName: event.target.value }))} />
                     </div>
                     <div>
                       <span>Resumo para CRM</span>
-                      <textarea rows={3} value={assistDraft.crmSummary} onChange={(event) => setAssistDraft((prev) => ({ ...prev, crmSummary: event.target.value }))} />
+                      <Textarea rows={3} value={assistDraft.crmSummary} onChange={(event) => setAssistDraft((prev) => ({ ...prev, crmSummary: event.target.value }))} />
                     </div>
                   </div>
                 )}
 
                 {selected.suggestedAction !== 'criar_oportunidade' && selected.suggestedAction !== 'criar_lead' && (
-                  <textarea
+                  <Textarea
                     rows={3}
                     placeholder="Descrição operacional que acompanhará a ação."
                     value={assistDraft.taskDescription}
@@ -823,22 +823,22 @@ export function Triagem({ user }: TriagemProps) {
               </section>
 
               <div className="triage-drawer__actions">
-                <button className="btn-primary" onClick={() => void decide(selected, 'confirmado')}>
+                <Button onClick={() => void decide(selected, 'confirmado')}>
                   <CheckCircle2 size={16} />
                   Confirmar ação
-                </button>
-                <button className="btn-secondary" onClick={() => void decide(selected, 'revisao_manual')}>
+                </Button>
+                <Button variant="outline" onClick={() => void decide(selected, 'revisao_manual')}>
                   <UserRoundSearch size={16} />
                   Revisão manual
-                </button>
-                <button className="btn-secondary" onClick={() => void decide(selected, 'adiado')}>
+                </Button>
+                <Button variant="outline" onClick={() => void decide(selected, 'adiado')}>
                   <Clock3 size={16} />
                   Adiar
-                </button>
-                <button className="btn-danger" onClick={() => void decide(selected, 'descartado')}>
+                </Button>
+                <Button variant="outline" className="btn-danger" onClick={() => void decide(selected, 'descartado')}>
                   <X size={16} />
                   Descartar
-                </button>
+                </Button>
               </div>
 
               <div className="triage-drawer__links">

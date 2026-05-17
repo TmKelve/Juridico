@@ -1,25 +1,26 @@
-import { useEffect, useEffectEvent, useState } from 'react'
+import { Suspense, lazy, useEffect, useEffectEvent, useState } from 'react'
 import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AlertTriangle } from 'lucide-react'
 import { api } from './api'
 import { initMonitoring, trackAuthEvent, trackPageView, trackEvent } from './monitoring'
-import { Atendimentos } from './Atendimentos'
-import { Agenda } from './Agenda'
-import { Clients } from './Clients'
-import { CrmJuridico } from './CrmJuridico'
-import { Deadlines } from './Deadlines'
-import { Documents } from './Documents'
-import { PieceTemplates } from './PieceTemplates'
-import { Publications } from './Publications'
-import { Processes } from './Processes'
-import { ProcessDetail } from './ProcessDetail'
-import { Tasks } from './Tasks'
-import { Triagem } from './Triagem'
-import { Dashboard } from './Dashboard'
 import { Sidebar } from './sidebar/Sidebar'
 import { Topbar } from './topbar/Topbar'
 import './tokens.css'
 import './App.css'
+
+const Dashboard = lazy(() => import('./dashboard/product/ui/DashboardPage').then((module) => ({ default: module.DashboardPage })))
+const Processes = lazy(() => import('./Processes').then((module) => ({ default: module.Processes })))
+const ProcessDetail = lazy(() => import('./ProcessDetail').then((module) => ({ default: module.ProcessDetail })))
+const Deadlines = lazy(() => import('./Deadlines').then((module) => ({ default: module.Deadlines })))
+const Agenda = lazy(() => import('./Agenda').then((module) => ({ default: module.Agenda })))
+const Documents = lazy(() => import('./Documents').then((module) => ({ default: module.Documents })))
+const PieceTemplates = lazy(() => import('./PieceTemplates').then((module) => ({ default: module.PieceTemplates })))
+const Tasks = lazy(() => import('./Tasks').then((module) => ({ default: module.Tasks })))
+const Atendimentos = lazy(() => import('./Atendimentos').then((module) => ({ default: module.Atendimentos })))
+const Clients = lazy(() => import('./Clients').then((module) => ({ default: module.Clients })))
+const CrmJuridico = lazy(() => import('./CrmJuridico').then((module) => ({ default: module.CrmJuridico })))
+const Publications = lazy(() => import('./Publications').then((module) => ({ default: module.Publications })))
+const Triagem = lazy(() => import('./Triagem').then((module) => ({ default: module.Triagem })))
 
 // Initialize monitoring on app load
 initMonitoring()
@@ -214,7 +215,7 @@ function AppShell({
   const isCrmJuridico = location.pathname === '/crm-juridico'
   const shortName = (user.email || getRoleLabel(user.role)).split('@')[0].slice(0, 12)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.innerWidth < 1200 && window.innerWidth >= 768)
   const loadUsersOnRoute = useEffectEvent(() => {
     if (location.pathname === '/usuarios' && user.role === 'ADM') {
       void fetchUsers()
@@ -224,6 +225,29 @@ function AppShell({
   useEffect(() => {
     loadUsersOnRoute()
   }, [location.pathname, user.role])
+
+  useEffect(() => {
+    if (window.innerWidth < 768) {
+      setSidebarOpen(false)
+    }
+  }, [location.pathname])
+
+  useEffect(() => {
+    const onResize = () => {
+      const width = window.innerWidth
+      if (width < 768) {
+        setSidebarOpen(false)
+        return
+      }
+
+      if (width < 1200) {
+        setSidebarCollapsed(true)
+      }
+    }
+
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   const handleNavToggle = () => {
     const viewport = window.innerWidth
@@ -281,26 +305,28 @@ function AppShell({
         {error && <p className="error">{error}</p>}
 
         <section className="shell-content-canvas">
-          <Routes>
-            <Route path="/" element={<Dashboard user={user} />} />
-            <Route path="/processos" element={<Processes user={user} />} />
-            <Route path="/processos/:id" element={<ProcessDetail user={user} />} />
-            <Route path="/prazos" element={<Deadlines user={user} />} />
-            <Route path="/agenda" element={<Agenda user={user} />} />
-            <Route path="/documentos" element={<Documents user={user} />} />
-            <Route path="/modelos-pecas" element={<PieceTemplates user={user} />} />
-            <Route path="/tarefas" element={<Tasks user={user} />} />
-            <Route path="/atendimentos" element={<Atendimentos user={user} />} />
-            <Route path="/clientes" element={<Clients user={user} />} />
-            <Route path="/crm-juridico" element={<CrmJuridico user={user} />} />
-            <Route path="/publicacoes-intimacoes" element={<Publications user={user} />} />
-            <Route path="/triagem" element={<Triagem user={user} />} />
-            <Route
-              path="/usuarios"
-              element={user.role === 'ADM' ? <UsersList users={users} onRefresh={fetchUsers} /> : <Navigate to="/" replace />}
-            />
-            <Route path="*" element={<Navigate to="/" />} />
-          </Routes>
+          <Suspense fallback={<div className="page-content">Carregando...</div>}>
+            <Routes>
+              <Route path="/" element={<Dashboard user={user} />} />
+              <Route path="/processos" element={<Processes user={user} />} />
+              <Route path="/processos/:id" element={<ProcessDetail user={user} />} />
+              <Route path="/prazos" element={<Deadlines user={user} />} />
+              <Route path="/agenda" element={<Agenda user={user} />} />
+              <Route path="/documentos" element={<Documents user={user} />} />
+              <Route path="/modelos-pecas" element={<PieceTemplates user={user} />} />
+              <Route path="/tarefas" element={<Tasks user={user} />} />
+              <Route path="/atendimentos" element={<Atendimentos user={user} />} />
+              <Route path="/clientes" element={<Clients user={user} />} />
+              <Route path="/crm-juridico" element={<CrmJuridico user={user} />} />
+              <Route path="/publicacoes-intimacoes" element={<Publications user={user} />} />
+              <Route path="/triagem" element={<Triagem user={user} />} />
+              <Route
+                path="/usuarios"
+                element={user.role === 'ADM' ? <UsersList users={users} onRefresh={fetchUsers} /> : <Navigate to="/" replace />}
+              />
+              <Route path="*" element={<Navigate to="/" />} />
+            </Routes>
+          </Suspense>
         </section>
       </main>
     </div>

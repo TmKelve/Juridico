@@ -21,6 +21,7 @@ import {
 import { api, type ApiTask } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import { ProcessCombobox } from './ProcessCombobox';
+import { EmptyState, FilterBar, PageHeader, PriorityBadge as ProductPriorityBadge, StatusPill } from './components/product';
 import './Tasks.css';
 
 interface TasksProps {
@@ -193,12 +194,25 @@ function mapApiTask(task: ApiTask, userEmail: string): TaskItem {
 
 function StatusBadge({ status }: { status: TaskStatus }) {
   const cfg = STATUS_CFG[status];
-  return <span className={`tsk-badge tsk-badge--${cfg.variant}`}>{cfg.label}</span>;
+  const toneByVariant: Record<string, 'neutral' | 'info' | 'warning' | 'positive' | 'critical'> = {
+    muted: 'neutral',
+    info: 'info',
+    warning: 'warning',
+    success: 'positive',
+    error: 'critical',
+  };
+  return <StatusPill tone={toneByVariant[cfg.variant]}>{cfg.label}</StatusPill>;
 }
 
 function PriorityBadge({ priority }: { priority: TaskPriority }) {
   const cfg = PRIORITY_CFG[priority];
-  return <span className={`tsk-priority tsk-priority--${cfg.variant}`}>{cfg.label}</span>;
+  const levelByVariant: Record<string, 'low' | 'medium' | 'high' | 'urgent'> = {
+    low: 'low',
+    medium: 'medium',
+    high: 'high',
+    critical: 'urgent',
+  };
+  return <ProductPriorityBadge priority={levelByVariant[cfg.variant]} label={cfg.label} />;
 }
 
 function OriginChip({ origin }: { origin: TaskOrigin }) {
@@ -525,14 +539,17 @@ export function Tasks({ user }: TasksProps) {
   return (
     <div className="tasks-page" onClick={() => { if (openMenuId) setOpenMenuId(null); }}>
       <div className="tsk-header-card">
-        <div>
-          <p className="tsk-eyebrow">Carteira Operacional</p>
-          <p className="tsk-subtitle">Priorize entregas críticas, redistribua carga e avance a fila com rastreabilidade por processo e cliente.</p>
-        </div>
-        <div className="tsk-header-actions">
-          <button className="btn-primary" onClick={() => setShowForm(true)} aria-label="Criar nova tarefa"><Plus size={14} /> Nova Tarefa</button>
-          <button className="btn-secondary" onClick={() => exportCsv(sorted)} aria-label="Exportar tarefas"><Download size={14} /> Exportar</button>
-        </div>
+        <PageHeader
+          className="tsk-page-header"
+          title="Tarefas"
+          subtitle="Priorize entregas críticas, redistribua carga e avance a fila com rastreabilidade por processo e cliente."
+          actions={(
+            <div className="tsk-header-actions">
+              <button className="btn-primary" onClick={() => setShowForm(true)} aria-label="Criar nova tarefa"><Plus size={14} /> Nova Tarefa</button>
+              <button className="btn-secondary" onClick={() => exportCsv(sorted)} aria-label="Exportar tarefas"><Download size={14} /> Exportar</button>
+            </div>
+          )}
+        />
       </div>
 
       {error && (
@@ -558,26 +575,27 @@ export function Tasks({ user }: TasksProps) {
       </div>
 
       <div className="tsk-filters">
-        <div className="tsk-filters-top">
-          <div className="tsk-field tsk-field--search">
-            <label htmlFor="tsk-search" className="sr-only">Buscar tarefa</label>
-            <span className="tsk-input-wrap">
-              <Search size={14} />
-              <input id="tsk-search" type="search" value={filters.query} onChange={(e) => updateFilter('query', e.target.value)} placeholder="Buscar por título, cliente, processo, responsável, observação ou origem..." />
-            </span>
+        <FilterBar
+          className="tsk-filterbar"
+          searchId="tsk-search"
+          searchAriaLabel="Buscar tarefa"
+          searchPlaceholder="Buscar por título, cliente, processo, responsável, observação ou origem..."
+          searchValue={filters.query}
+          onSearchChange={(value) => updateFilter('query', value)}
+        >
+          <div className="tsk-filters-top">
+            <div className="tsk-field"><label htmlFor="tsk-status">Status</label><select id="tsk-status" value={filters.status} onChange={(e) => updateFilter('status', e.target.value)}><option value="">Todos</option>{(Object.entries(STATUS_CFG) as Array<[TaskStatus, { label: string }]>).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
+            <div className="tsk-field"><label htmlFor="tsk-priority">Prioridade</label><select id="tsk-priority" value={filters.priority} onChange={(e) => updateFilter('priority', e.target.value)}><option value="">Todas</option>{(Object.entries(PRIORITY_CFG) as Array<[TaskPriority, { label: string }]>).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
+            <div className="tsk-field"><label htmlFor="tsk-owner">Responsável</label><select id="tsk-owner" value={filters.owner} onChange={(e) => updateFilter('owner', e.target.value)}><option value="">Todos</option>{uniqueOwners.map((o) => <option key={o} value={o}>{o}</option>)}</select></div>
+            <div className="tsk-field"><label htmlFor="tsk-scope">Escopo</label><select id="tsk-scope" value={filters.scope} onChange={(e) => updateFilter('scope', e.target.value)}><option value="">Todos</option><option value="minha">Tarefa minha</option><option value="delegada_por_mim">Delegada por mim</option></select></div>
+            <div className="tsk-field"><label htmlFor="tsk-process">Processo</label><ProcessCombobox id="tsk-process" value={filters.process} onChange={(value) => updateFilter('process', value)} options={processOptions} placeholder="Buscar processo" emptyLabel="Todos" /></div>
+            <div className="tsk-field"><label htmlFor="tsk-client">Cliente</label><select id="tsk-client" value={filters.client} onChange={(e) => updateFilter('client', e.target.value)}><option value="">Todos</option>{uniqueClients.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
+            <div className="tsk-field"><label htmlFor="tsk-prazo">Prazo</label><select id="tsk-prazo" value={filters.prazo} onChange={(e) => updateFilter('prazo', e.target.value)}><option value="">Todos</option><option value="hoje">Hoje</option><option value="atrasado">Atrasado</option></select></div>
+            <div className="tsk-field"><label htmlFor="tsk-origin">Origem</label><select id="tsk-origin" value={filters.origin} onChange={(e) => updateFilter('origin', e.target.value)}><option value="">Todas</option>{(Object.entries(ORIGIN_LABEL) as Array<[TaskOrigin, string]>).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
+            <div className="tsk-field"><label htmlFor="tsk-link">Vinculada a</label><select id="tsk-link" value={filters.vinculada} onChange={(e) => updateFilter('vinculada', e.target.value)}><option value="">Todas</option><option value="prazo">Prazo</option><option value="publicacao">Publicação</option><option value="documento">Documento</option></select></div>
+            <div className="tsk-field"><label htmlFor="tsk-period">Período</label><select id="tsk-period" value={filters.period} onChange={(e) => updateFilter('period', e.target.value)}><option value="">Todos</option><option value="hoje">Hoje</option><option value="7">7 dias</option><option value="30">30 dias</option></select></div>
           </div>
-
-          <div className="tsk-field"><label htmlFor="tsk-status">Status</label><select id="tsk-status" value={filters.status} onChange={(e) => updateFilter('status', e.target.value)}><option value="">Todos</option>{(Object.entries(STATUS_CFG) as Array<[TaskStatus, { label: string }]>).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
-          <div className="tsk-field"><label htmlFor="tsk-priority">Prioridade</label><select id="tsk-priority" value={filters.priority} onChange={(e) => updateFilter('priority', e.target.value)}><option value="">Todas</option>{(Object.entries(PRIORITY_CFG) as Array<[TaskPriority, { label: string }]>).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
-          <div className="tsk-field"><label htmlFor="tsk-owner">Responsável</label><select id="tsk-owner" value={filters.owner} onChange={(e) => updateFilter('owner', e.target.value)}><option value="">Todos</option>{uniqueOwners.map((o) => <option key={o} value={o}>{o}</option>)}</select></div>
-          <div className="tsk-field"><label htmlFor="tsk-scope">Escopo</label><select id="tsk-scope" value={filters.scope} onChange={(e) => updateFilter('scope', e.target.value)}><option value="">Todos</option><option value="minha">Tarefa minha</option><option value="delegada_por_mim">Delegada por mim</option></select></div>
-          <div className="tsk-field"><label htmlFor="tsk-process">Processo</label><ProcessCombobox id="tsk-process" value={filters.process} onChange={(value) => updateFilter('process', value)} options={processOptions} placeholder="Buscar processo" emptyLabel="Todos" /></div>
-          <div className="tsk-field"><label htmlFor="tsk-client">Cliente</label><select id="tsk-client" value={filters.client} onChange={(e) => updateFilter('client', e.target.value)}><option value="">Todos</option>{uniqueClients.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
-          <div className="tsk-field"><label htmlFor="tsk-prazo">Prazo</label><select id="tsk-prazo" value={filters.prazo} onChange={(e) => updateFilter('prazo', e.target.value)}><option value="">Todos</option><option value="hoje">Hoje</option><option value="atrasado">Atrasado</option></select></div>
-          <div className="tsk-field"><label htmlFor="tsk-origin">Origem</label><select id="tsk-origin" value={filters.origin} onChange={(e) => updateFilter('origin', e.target.value)}><option value="">Todas</option>{(Object.entries(ORIGIN_LABEL) as Array<[TaskOrigin, string]>).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
-          <div className="tsk-field"><label htmlFor="tsk-link">Vinculada a</label><select id="tsk-link" value={filters.vinculada} onChange={(e) => updateFilter('vinculada', e.target.value)}><option value="">Todas</option><option value="prazo">Prazo</option><option value="publicacao">Publicação</option><option value="documento">Documento</option></select></div>
-          <div className="tsk-field"><label htmlFor="tsk-period">Período</label><select id="tsk-period" value={filters.period} onChange={(e) => updateFilter('period', e.target.value)}><option value="">Todos</option><option value="hoje">Hoje</option><option value="7">7 dias</option><option value="30">30 dias</option></select></div>
-        </div>
+        </FilterBar>
 
         <div className="tsk-filters-bottom">
           {hasActiveFilters && <span className="tsk-filter-summary"><Filter size={12} /><strong>{filtered.length}</strong> de {tasks.length}</span>}
@@ -598,21 +616,25 @@ export function Tasks({ user }: TasksProps) {
       {!loading && !error && (
         <>
           {tasks.length === 0 && (
-            <div className="tsk-empty">
-              <ClipboardCheck size={32} />
-              <h3>Nenhuma tarefa cadastrada</h3>
-              <p>Crie a primeira tarefa para organizar sua operação diária.</p>
-              <button className="btn-primary" onClick={() => setShowForm(true)}><Plus size={13} /> Nova tarefa</button>
-            </div>
+            <EmptyState
+              className="tsk-empty"
+              icon={<ClipboardCheck size={32} />}
+              title="Nenhuma tarefa cadastrada"
+              description="Crie a primeira tarefa para organizar sua operação diária."
+              actionLabel="Nova tarefa"
+              onAction={() => setShowForm(true)}
+            />
           )}
 
           {tasks.length > 0 && filtered.length === 0 && (
-            <div className="tsk-empty">
-              <Filter size={32} />
-              <h3>Nenhuma tarefa para este filtro</h3>
-              <p>Ajuste os critérios ou limpe os filtros.</p>
-              <button className="btn-secondary" onClick={clearFilters}><X size={13} /> Limpar filtros</button>
-            </div>
+            <EmptyState
+              className="tsk-empty"
+              icon={<Filter size={32} />}
+              title="Nenhuma tarefa para este filtro"
+              description="Ajuste os critérios ou limpe os filtros."
+              actionLabel="Limpar filtros"
+              onAction={clearFilters}
+            />
           )}
 
           {filtered.length > 0 && viewMode === 'lista' && (

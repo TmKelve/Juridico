@@ -19,10 +19,8 @@ import {
   Flag,
   FolderOpen,
   Inbox,
-  MoreHorizontal,
   Plus,
   RefreshCw,
-  Search,
   ShieldAlert,
   SlidersHorizontal,
   Target,
@@ -31,6 +29,8 @@ import {
   UserPlus,
   X,
 } from 'lucide-react';
+import { DrawerSection, ExecutiveCard, FilterBar, KanbanColumn, KpiCard, OpportunityCard, PageHeader, Timeline } from './components/product';
+import { Button, Tabs, TabsContent, TabsList, TabsTrigger, Textarea } from './components/ui';
 import { api, type ApiCrmLead, type ApiCrmOpportunity } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import './CrmJuridico.css';
@@ -529,6 +529,18 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
   ), [filteredOpportunities]);
 
   async function convertOpportunity(item: ApiCrmOpportunity) {
+    if (!item.responsible?.trim()) {
+      setError('Defina um responsável antes de converter em cliente + processo.');
+      return;
+    }
+    if (item.status === 'em_contato' && !item.nextContactAt && !nextContactDraft) {
+      setError('O estágio em contato exige próximo contato antes da conversão.');
+      return;
+    }
+    if (!window.confirm('Confirmar conversão da oportunidade em cliente + processo? Esta ação registra histórico e vínculo operacional.')) {
+      return;
+    }
+
     const response = await api.convertCrmOpportunity(item.id, {
       clientId: item.clientId,
       clientName: conversionForm.clientName,
@@ -537,6 +549,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
       processPhase: conversionForm.processPhase,
       processStatus: conversionForm.processStatus,
       summary: item.summary,
+      confirmConversion: true,
     });
     if (response.status !== 201 || !response.data) {
       setError(response.error || 'Não foi possível converter a oportunidade.');
@@ -775,40 +788,46 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     };
   })() : null;
 
-  const selectedOpportunityReadyToConvert = Boolean(selectedOpportunity?.responsible?.trim());
+  const selectedOpportunityReadyToConvert = Boolean(
+    selectedOpportunity?.responsible?.trim()
+      && (selectedOpportunity.status !== 'em_contato' || selectedOpportunity.nextContactAt || nextContactDraft),
+  );
+  const tabValue = tab === 'opportunities' ? 'opportunities' : 'leads';
 
   return (
     <div className="crm-page">
       <section className="crm-hero">
-        <div>
-          <span className="crm-eyebrow">Pipeline relacional</span>
-          <h2>CRM Jurídico</h2>
-          <p>Consolide leads, oportunidades derivadas da triagem e próximos passos comerciais sem perder o contexto jurídico.</p>
-        </div>
-        <div className="crm-hero__actions">
-          <button className="btn-secondary" onClick={() => void loadData()}>
-            <RefreshCw size={14} />
-            Atualizar dados
-          </button>
-          <button className="btn-primary" onClick={() => setShowNewOpportunityDialog(true)}>
-            <Plus size={14} />
-            Nova oportunidade
-          </button>
-        </div>
+        <PageHeader
+          title="CRM Jurídico"
+          subtitle="Consolide leads, oportunidades derivadas da triagem e próximos passos comerciais sem perder o contexto jurídico."
+          actions={(
+            <div className="crm-hero__actions">
+              <Button variant="outline" onClick={() => void loadData()}>
+                <RefreshCw size={14} />
+                Atualizar dados
+              </Button>
+              <Button onClick={() => setShowNewOpportunityDialog(true)}>
+                <Plus size={14} />
+                Nova oportunidade
+              </Button>
+            </div>
+          )}
+        />
       </section>
 
       <section className="crm-kpis">
         {kpiCards.map((card) => {
           const Icon = card.icon;
           return (
-            <article key={card.key} className={`crm-kpi crm-kpi--${card.tone}`}>
-              <div className="crm-kpi__icon"><Icon size={16} /></div>
-              <div className="crm-kpi__body">
-                <span>{card.label}</span>
-                <strong>{card.value}</strong>
-                <small>{card.subtext}</small>
-              </div>
-            </article>
+            <KpiCard
+              key={card.key}
+              className={`crm-kpi crm-kpi--${card.tone}`}
+              label={card.label}
+              value={String(card.value)}
+              delta={card.subtext}
+              trend={card.tone === 'amber' ? 'down' : card.tone === 'green' ? 'up' : 'neutral'}
+              icon={<Icon size={16} />}
+            />
           );
         })}
       </section>
@@ -819,7 +838,30 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
             {executiveStrip.map((item) => {
               const StripIcon = item.icon;
               return (
-                <article key={item.key} className={`crm-executive-card crm-executive-card--${item.tone}`}>
+                <ExecutiveCard
+                  key={item.key}
+                  className={`crm-executive-card crm-executive-card--${item.tone}`}
+                  title={item.title}
+                  description={item.body}
+                  footer={(
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="crm-inline-link"
+                      onClick={() => {
+                        setTab('opportunities');
+                        if (item.key === 'alerts') {
+                          setNextContactFilter('vencido');
+                        } else if (item.key === 'next-actions') {
+                          setNextContactFilter('sem_contato');
+                        }
+                      }}
+                    >
+                      {item.linkLabel}
+                      <ChevronRight size={14} />
+                    </Button>
+                  )}
+                >
                   <div className="crm-executive-card__top">
                     <span className={`crm-executive-card__icon crm-executive-card__icon--${item.tone}`}>
                       <StripIcon size={16} />
@@ -827,48 +869,41 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                     <span className="crm-executive-card__label">{item.eyebrow}</span>
                     {item.badge ? <span className="crm-chip crm-chip--warning">{item.badge}</span> : null}
                   </div>
-                  <strong>{item.title}</strong>
-                  <p>{item.body}</p>
-                  <button
-                    type="button"
-                    className="crm-inline-link"
-                    onClick={() => {
-                      setTab('opportunities');
-                      if (item.key === 'alerts') {
-                        setNextContactFilter('vencido');
-                      } else if (item.key === 'next-actions') {
-                        setNextContactFilter('sem_contato');
-                      }
-                    }}
-                  >
-                    {item.linkLabel}
-                    <ChevronRight size={14} />
-                  </button>
-                </article>
+                </ExecutiveCard>
               );
             })}
           </section>
 
           <div className="crm-toolbar">
-            <div className="crm-tabs">
-              <button className={tab === 'opportunities' ? 'is-active' : ''} onClick={() => setTab('opportunities')}>Oportunidades</button>
-              <button className={tab === 'leads' ? 'is-active' : ''} onClick={() => setTab('leads')}>Leads</button>
-            </div>
-            <label className="crm-search">
-              <Search size={14} />
-              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nome, cliente, CPF, origem ou resumo..." />
-            </label>
-            <select className="crm-filter-select" value={responsibleFilter} onChange={(event) => setResponsibleFilter(event.target.value)}>
-              <option value="">Todos responsáveis</option>
-              {responsibleOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-            </select>
-            <button className={`btn-secondary ${showMoreFilters ? 'is-active' : ''}`} onClick={() => setShowMoreFilters((prev) => !prev)}>
-              <SlidersHorizontal size={14} />
-              Mais filtros
-            </button>
-            <button type="button" className="crm-icon-button" aria-label="Configurar colunas do CRM">
-              <Columns3 size={15} />
-            </button>
+            <Tabs value={tabValue} onValueChange={(value) => setTab(value as TabKey)}>
+              <TabsList className="crm-tabs-list">
+                <TabsTrigger value="opportunities">Oportunidades</TabsTrigger>
+                <TabsTrigger value="leads">Leads</TabsTrigger>
+              </TabsList>
+              <TabsContent value="opportunities" className="crm-tabs-content" />
+              <TabsContent value="leads" className="crm-tabs-content" />
+            </Tabs>
+            <FilterBar
+              className="crm-filterbar"
+              searchPlaceholder="Buscar por nome, cliente, CPF, origem ou resumo..."
+              onSearchChange={setSearch}
+              actions={(
+                <>
+                  <Button variant={showMoreFilters ? 'default' : 'outline'} onClick={() => setShowMoreFilters((prev) => !prev)}>
+                    <SlidersHorizontal size={14} />
+                    Mais filtros
+                  </Button>
+                  <Button type="button" variant="ghost" aria-label="Configurar colunas do CRM">
+                    <Columns3 size={15} />
+                  </Button>
+                </>
+              )}
+            >
+              <select className="crm-filter-select" value={responsibleFilter} onChange={(event) => setResponsibleFilter(event.target.value)}>
+                <option value="">Todos responsáveis</option>
+                {responsibleOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+            </FilterBar>
           </div>
 
           {showMoreFilters ? (
@@ -959,14 +994,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
           ) : (
             <div className="crm-board">
               {opportunitiesByStage.map((column) => (
-                <section key={column.status} className="crm-column">
-                  <header className="crm-column__header">
-                    <div>
-                      <strong>{column.label}</strong>
-                      <span>{column.items.length} oportunidade(s)</span>
-                    </div>
-                    {column.items.length > 0 ? <b>{column.items.length} caso(s)</b> : null}
-                  </header>
+                <KanbanColumn key={column.status} className="crm-column" title={column.label} count={column.items.length}>
                   <div className="crm-column__body">
                     {column.items.length === 0 ? (
                       (() => {
@@ -982,56 +1010,36 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                       })()
                     ) : (
                       column.items.map((item) => (
-                        <article key={item.id} className={`crm-card crm-card--opportunity ${selectedOpportunity?.id === item.id ? 'is-selected' : ''}`} onClick={() => setSelectedOpportunity(item)}>
-                          <div className="crm-card__header crm-card__header--compact">
-                            <strong>{item.personName}</strong>
-                            <button
-                              type="button"
-                              className="crm-card__menu"
-                              aria-label="Ações da oportunidade"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                setSelectedOpportunity(item);
-                              }}
-                            >
-                              <MoreHorizontal size={15} />
-                            </button>
-                          </div>
-                          <div className="crm-card__badges">
-                            <span className="crm-chip crm-chip--blue">Ação recomendada</span>
-                            {item.responsible ? null : <span className="crm-chip crm-chip--warning">Sem responsável</span>}
-                            {item.hasCriticalTriage ? <span className="crm-chip crm-chip--neutral">Triagem</span> : null}
-                          </div>
-                          <p className="crm-card__source">{item.source}</p>
-                          <small>CPF: {item.cpf || 'não informado'}</small>
-                          <div className="crm-card__summary">{getSummaryPreview(item.summary)}</div>
-                          <div className="crm-card__attention">
-                            <span>{item.triageCount} triagem</span>
-                            <span>·</span>
-                            {item.responsible ? <span>{item.responsible}</span> : <span className="crm-card__warning">Sem responsável</span>}
-                          </div>
-                          <div className="crm-card__next-step">
-                            <span>Próximo passo</span>
-                            <strong className={`crm-next-contact crm-next-contact--${getNextContactState(item.nextContactAt)}`}>{getNextContactText(item.nextContactAt)}</strong>
-                          </div>
-                          <div className="crm-card__footer">
-                            <span>{OPPORTUNITY_STAGE_LABELS[item.status as keyof typeof OPPORTUNITY_STAGE_LABELS] ?? item.status}</span>
-                            {item.convertedProcessId ? (
-                              <button
-                                className="btn-ghost"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  navigate(`/processos/${item.convertedProcessId}`);
-                                }}
-                              >
-                                Abrir processo
-                              </button>
-                            ) : null}
-                            <select value={item.status} onChange={(event) => void updateOpportunityStatus(item, event.target.value)} onClick={(event) => event.stopPropagation()}>
-                              {OPPORTUNITY_STATUS.map((status) => <option key={status} value={status}>{OPPORTUNITY_STAGE_LABELS[status]}</option>)}
-                            </select>
-                          </div>
-                        </article>
+                        <OpportunityCard
+                          key={item.id}
+                          className={`crm-card crm-card--opportunity ${selectedOpportunity?.id === item.id ? 'is-selected' : ''}`}
+                          title={item.personName}
+                          account={`${formatSourceLabel(item.source)} · ${item.responsible || 'Sem responsável'}`}
+                          value={getSummaryPreview(item.summary)}
+                          status="info"
+                          statusLabel={OPPORTUNITY_STAGE_LABELS[item.status as keyof typeof OPPORTUNITY_STAGE_LABELS] ?? item.status}
+                          priority={getNextContactState(item.nextContactAt) === 'overdue' ? 'urgent' : getNextContactState(item.nextContactAt) === 'today' ? 'high' : 'medium'}
+                          onClick={() => setSelectedOpportunity(item)}
+                          footer={(
+                            <div className="crm-card__footer">
+                              <span className={`crm-next-contact crm-next-contact--${getNextContactState(item.nextContactAt)}`}>{getNextContactText(item.nextContactAt)}</span>
+                              {item.convertedProcessId ? (
+                                <button
+                                  className="btn-ghost"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    navigate(`/processos/${item.convertedProcessId}`);
+                                  }}
+                                >
+                                  Abrir processo
+                                </button>
+                              ) : null}
+                              <select value={item.status} onChange={(event) => void updateOpportunityStatus(item, event.target.value)} onClick={(event) => event.stopPropagation()}>
+                                {OPPORTUNITY_STATUS.map((status) => <option key={status} value={status}>{OPPORTUNITY_STAGE_LABELS[status]}</option>)}
+                              </select>
+                            </div>
+                          )}
+                        />
                       ))
                     )}
                   </div>
@@ -1046,7 +1054,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                     <Plus size={14} />
                     Adicionar oportunidade
                   </button>
-                </section>
+                </KanbanColumn>
               ))}
             </div>
           )}
@@ -1126,22 +1134,20 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                 ) : null}
 
                 {drawerTab === 'history' ? (
-                  <section className="crm-panel">
-                    <h4>Histórico</h4>
+                  <DrawerSection title="Histórico" description="Cadência e evolução recente do lead.">
                     {selectedLead.contactEvents.length === 0 ? (
                       <p>Nenhum contato registrado.</p>
                     ) : (
-                      <div className="crm-history">
-                        {selectedLead.contactEvents.map((event) => (
-                          <article key={event.id} className="crm-history__item">
-                            <strong>{CONTACT_KIND_LABELS[event.kind] ?? event.kind}</strong>
-                            <p>{event.summary}</p>
-                            <small>{formatDateTime(event.createdAt)}{event.createdBy ? ` · ${event.createdBy}` : ''}</small>
-                          </article>
-                        ))}
-                      </div>
+                      <Timeline
+                        items={selectedLead.contactEvents.map((event) => ({
+                          id: String(event.id),
+                          title: CONTACT_KIND_LABELS[event.kind] ?? event.kind,
+                          description: event.summary,
+                          date: `${formatDateTime(event.createdAt)}${event.createdBy ? ` · ${event.createdBy}` : ''}`,
+                        }))}
+                      />
                     )}
-                  </section>
+                  </DrawerSection>
                 ) : null}
 
                 {drawerTab === 'commercial' ? (
@@ -1167,7 +1173,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                     </section>
                     <section className="crm-panel">
                       <h4>Registrar contato</h4>
-                      <textarea
+                      <Textarea
                         value={contactNote}
                         onChange={(event) => setContactNote(event.target.value)}
                         placeholder="Resumo do contato, próxima objeção ou passo acordado..."
@@ -1300,24 +1306,16 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
               ) : null}
 
               {drawerTab === 'history' ? (
-                <section className="crm-panel">
-                  <h4>Histórico</h4>
-                  <div className="crm-timeline">
-                    {getOpportunityTimeline(selectedOpportunity).map((event) => {
-                      const TimelineIcon = event.icon;
-                      return (
-                        <article key={event.key} className="crm-timeline__item">
-                          <span className="crm-timeline__icon"><TimelineIcon size={14} /></span>
-                          <div>
-                            <strong>{event.title}</strong>
-                            <small>{event.meta}</small>
-                            {'body' in event && event.body ? <p>{event.body}</p> : null}
-                          </div>
-                        </article>
-                      );
-                    })}
-                  </div>
-                </section>
+                <DrawerSection title="Histórico" description="Eventos e marcos da oportunidade.">
+                  <Timeline
+                    items={getOpportunityTimeline(selectedOpportunity).map((event) => ({
+                      id: event.key,
+                      title: event.title,
+                      description: 'body' in event && event.body ? event.body : event.meta,
+                      date: 'body' in event && event.body ? event.meta : undefined,
+                    }))}
+                  />
+                </DrawerSection>
               ) : null}
 
                 {drawerTab === 'commercial' ? (
@@ -1354,7 +1352,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                     </label>
                     <label className="crm-inline-field crm-inline-field--full">
                       <span>Resumo do contato</span>
-                      <textarea
+                      <Textarea
                         value={contactNote}
                         onChange={(event) => setContactNote(event.target.value)}
                         placeholder="Resumo do contato, avanço da negociação ou próximo passo..."
@@ -1380,9 +1378,18 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                     <div className="crm-empty__icon"><FileText size={18} /></div>
                     <strong>Nenhum documento anexado</strong>
                     <p>Adicione documentos para apoiar a qualificação da oportunidade.</p>
-                    <button className="btn-secondary" onClick={() => navigate('/documentos')}>
+                    <button
+                      className="btn-secondary"
+                      onClick={() => {
+                        if (selectedOpportunity?.convertedProcessId) {
+                          navigate(`/processos/${selectedOpportunity.convertedProcessId}`);
+                          return;
+                        }
+                        navigate('/documentos');
+                      }}
+                    >
                       <FolderOpen size={14} />
-                      Adicionar documento
+                      {selectedOpportunity?.convertedProcessId ? 'Abrir processo para documentos' : 'Adicionar documento'}
                     </button>
                   </div>
                 </section>
@@ -1471,7 +1478,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                           <button
                             className="btn-primary"
                             disabled={!selectedOpportunityReadyToConvert}
-                            title={!selectedOpportunityReadyToConvert ? 'Defina um responsável antes de converter.' : undefined}
+                            title={!selectedOpportunityReadyToConvert ? 'Defina responsável e próximo contato quando estiver em contato.' : undefined}
                             onClick={() => void convertOpportunity(selectedOpportunity)}
                           >
                             Confirmar conversão
@@ -1502,7 +1509,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                   <button
                     className="btn-primary"
                     disabled={!selectedOpportunity.convertedProcessId && !selectedOpportunityReadyToConvert}
-                    title={!selectedOpportunity.convertedProcessId && !selectedOpportunityReadyToConvert ? 'Defina um responsável antes de converter.' : undefined}
+                    title={!selectedOpportunity.convertedProcessId && !selectedOpportunityReadyToConvert ? 'Defina responsável e próximo contato quando estiver em contato.' : undefined}
                     onClick={() => {
                       if (selectedOpportunity.convertedProcessId) {
                         navigate(`/processos/${selectedOpportunity.convertedProcessId}`);

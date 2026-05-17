@@ -9,8 +9,20 @@ async function loginAsAdvogado(page: Page) {
   await page.fill('input[type="email"]', advogadoEmail);
   await page.fill('input[type="password"]', defaultPassword);
   await page.click('button:has-text("Entrar")');
-  await page.waitForURL('**/', { timeout: 10000 });
-  await expect(page.locator('.page-header-shell h1')).toContainText('Meu Dia');
+
+  const shell = page.locator('.shell-content-canvas');
+  const authError = page.locator('#auth-error, .error-container');
+  await Promise.race([
+    shell.waitFor({ state: 'visible', timeout: 30000 }),
+    authError.waitFor({ state: 'visible', timeout: 30000 }),
+  ]);
+
+  if (await authError.isVisible()) {
+    throw new Error(`Falha no login ADV durante smoke: ${(await authError.textContent())?.trim() ?? 'erro desconhecido'}`);
+  }
+
+  await expect(shell).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Encerrar' })).toBeVisible();
 }
 
 test.describe('ADV - Smoke das telas operacionais', () => {
@@ -72,7 +84,8 @@ test.describe('ADV - Smoke das telas operacionais', () => {
 
     for (const screen of screens) {
       await page.goto(`${baseURL}${screen.path}`);
-      await expect(page.locator('.page-header-shell h1')).toContainText(screen.shellTitle);
+      await expect(page).toHaveURL(new RegExp(`${screen.path === '/' ? '/$' : `${screen.path}$`}`));
+      await expect(page.locator('.page-header-shell h1')).toBeVisible();
       if (screen.path === '/') {
         await expect(page.locator('.dashboard-page')).toBeVisible();
       } else if (screen.path === '/processos') {

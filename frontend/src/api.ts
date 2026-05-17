@@ -8,7 +8,8 @@
  * })
  */
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const configuredApiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
+const API_URL = configuredApiUrl || 'http://localhost:3000';
 type ApiBody = Record<string, unknown>;
 
 export interface ApiUser {
@@ -420,12 +421,25 @@ export async function apiClient<T = unknown>(
 
   try {
     const response = await fetch(url, fetchOptions);
-    const data = await response.json() as T & ErrorPayload;
+    const contentType = response.headers.get('content-type') || '';
+    let data: (T & ErrorPayload) | null = null;
+    let fallbackText = '';
+
+    if (contentType.includes('application/json')) {
+      data = await response.json() as T & ErrorPayload;
+    } else {
+      fallbackText = await response.text();
+    }
+
+    const safeData = (data ?? ({} as T)) as T & ErrorPayload;
+    const fallbackError = fallbackText
+      ? fallbackText.replace(/\s+/g, ' ').trim().slice(0, 180)
+      : response.statusText;
 
     return {
       status: response.status,
-      data,
-      error: !response.ok ? data?.message || response.statusText : undefined,
+      data: safeData,
+      error: !response.ok ? safeData?.message || fallbackError : undefined,
     };
   } catch (err) {
     const error = err instanceof Error ? err.message : 'Connection error';
@@ -899,6 +913,7 @@ export const api = {
     processPhase: string;
     processStatus: string;
     summary?: string;
+    confirmConversion?: boolean;
   }) =>
     apiClient<{
       opportunity: ApiCrmOpportunity;

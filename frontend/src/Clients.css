@@ -38,13 +38,6 @@
   flex-wrap: wrap;
 }
 
-.cli-header-copy {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  max-width: 720px;
-}
-
 .cli-eyebrow {
   margin: 0;
   font-size: var(--font-size-xs);
@@ -52,36 +45,6 @@
   color: var(--brand-600);
   text-transform: uppercase;
   letter-spacing: 0.07em;
-}
-
-.cli-header-title {
-  margin: 0;
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-  line-height: var(--line-height-tight);
-}
-
-.cli-subtitle {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  max-width: 640px;
-}
-
-.cli-header-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  flex-shrink: 0;
-}
-
-.cli-header-actions .btn-primary,
-.cli-header-actions .btn-secondary {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: var(--font-size-sm);
 }
 
 /* ── Alert strip ─────────────────────────────────────────────────── */
@@ -247,34 +210,6 @@
 .cli-field select:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
-}
-
-.cli-input-wrap {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: 34px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--neutral-300);
-  background: var(--bg-surface);
-  padding: 0 var(--space-2);
-  color: var(--text-muted);
-}
-
-.cli-input-wrap input {
-  flex: 1;
-  min-width: 0;
-  border: none;
-  background: transparent;
-  font-size: var(--font-size-xs);
-  color: var(--text-primary);
-  min-height: 30px;
-}
-
-.cli-input-wrap input:focus-visible { outline: none; }
-.cli-input-wrap:focus-within {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
 }
 
 .cli-checkline {
@@ -886,14 +821,6 @@
   max-width: 380px;
 }
 
-.cli-empty .btn-primary,
-.cli-empty .btn-secondary {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  margin-top: var(--space-2);
-}
-
 /* ── Detail panel ────────────────────────────────────────────────── */
 .cli-detail-overlay {
   position: fixed;
@@ -1298,15 +1225,6 @@
   flex-shrink: 0;
 }
 
-.cli-detail-foot .btn-primary,
-.cli-detail-foot .btn-secondary,
-.cli-detail-foot .btn-ghost {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: var(--font-size-sm);
-}
-
 /* ── New client modal ────────────────────────────────────────────── */
 .cli-modal-overlay {
   position: fixed;
@@ -1433,12 +1351,6 @@
   padding: var(--space-4) var(--space-5);
   border-top: 1px solid var(--border-default);
   flex-shrink: 0;
-}
-
-.cli-form-actions .btn-primary {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
 }
 
 /* ── Animations ──────────────────────────────────────────────────── */

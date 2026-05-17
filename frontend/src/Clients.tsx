@@ -18,10 +18,11 @@ import {
   Plus,
   RefreshCw,
   Save,
-  Search,
   User,
   X,
 } from 'lucide-react';
+import { EmptyState, FilterBar, KpiCard, PageHeader, StatusPill } from './components/product';
+import { Badge, Button } from './components/ui';
 import { api, type ApiClient } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import './Clients.css';
@@ -164,28 +165,29 @@ function mapClientRecord(client: ApiClient): ClientItem {
 
 function StatusBadge({ status }: { status: ClientStatus }) {
   const cfg = STATUS_CFG[status];
+  const tone = cfg.variant === 'success' ? 'positive' : cfg.variant === 'error' ? 'critical' : cfg.variant === 'brand' ? 'info' : 'neutral';
   return (
-    <span className={`cli-badge cli-badge--${cfg.variant}`} aria-label={`Status: ${cfg.label}`}>
+    <StatusPill tone={tone} aria-label={`Status: ${cfg.label}`}>
       {cfg.label}
-    </span>
+    </StatusPill>
   );
 }
 
 function TypeChip({ tipo }: { tipo: ClientType }) {
   return (
-    <span className={`cli-type-chip cli-type-chip--${tipo.toLowerCase()}`} aria-label={tipo === 'PF' ? 'Pessoa Física' : 'Pessoa Jurídica'}>
+    <Badge className={`cli-type-chip cli-type-chip--${tipo.toLowerCase()}`} variant="neutral" aria-label={tipo === 'PF' ? 'Pessoa Física' : 'Pessoa Jurídica'}>
       {tipo === 'PF' ? <User size={11} aria-hidden="true" /> : <Building2 size={11} aria-hidden="true" />}
       {tipo}
-    </span>
+    </Badge>
   );
 }
 
 function PendenciaBadge({ count }: { count: number }) {
   if (count === 0) return <span className="cli-ok-dot" aria-label="Sem pendências"><CheckCircle2 size={13} /></span>;
   return (
-    <span className={`cli-pend-badge${count >= 3 ? ' cli-pend-badge--high' : ''}`} aria-label={`${count} pendência${count > 1 ? 's' : ''}`}>
+    <Badge className={`cli-pend-badge${count >= 3 ? ' cli-pend-badge--high' : ''}`} variant="neutral" aria-label={`${count} pendência${count > 1 ? 's' : ''}`}>
       {count}
-    </span>
+    </Badge>
   );
 }
 
@@ -229,7 +231,7 @@ function ClientDetailView({
               </div>
             </div>
           </div>
-          <button className="cli-close-btn" onClick={onClose} aria-label="Fechar detalhe"><X size={16} /></button>
+          <Button className="cli-close-btn" variant="ghost" size="sm" onClick={onClose} aria-label="Fechar detalhe"><X size={16} /></Button>
         </div>
 
         {/* Tabs */}
@@ -363,13 +365,15 @@ function ClientDetailView({
                         <span className="cli-process-row-title">{p.title}</span>
                       </div>
                       <span className="cli-badge cli-badge--muted">{p.status}</span>
-                      <button
-                        className="btn-ghost cli-open-btn"
+                      <Button
+                        className="cli-open-btn"
+                        variant="ghost"
+                        size="sm"
                         onClick={() => onOpenProcesso(p.id)}
                         aria-label={`Abrir processo ${p.label}`}
                       >
                         <ExternalLink size={13} /> Abrir
-                      </button>
+                      </Button>
                     </div>
                   ))
                 )}
@@ -421,29 +425,29 @@ function ClientDetailView({
 
         {/* Footer actions */}
         <div className="cli-detail-foot">
-          <button
-            className="btn-primary"
+          <Button
+            variant="default"
             onClick={() => onGoToAtendimento(client)}
             aria-label="Registrar atendimento para este cliente"
           >
             <MessageSquare size={13} /> Registrar atendimento
-          </button>
+          </Button>
           {client.processos[0] && (
-            <button
-              className="btn-secondary"
+            <Button
+              variant="outline"
               onClick={() => onOpenProcesso(client.processos[0].id)}
               aria-label="Abrir processo principal do cliente"
             >
               <Briefcase size={13} /> Ver processo
-            </button>
+            </Button>
           )}
-          <button
-            className="btn-ghost"
+          <Button
+            variant="ghost"
             onClick={onClose}
             aria-label="Fechar painel de detalhe"
           >
             Fechar
-          </button>
+          </Button>
         </div>
       </aside>
     </div>
@@ -769,36 +773,28 @@ export function Clients({ user }: ClientsProps) {
 
       {/* ── Header ──────────────────────────────────────────────── */}
       <div className="cli-header-card">
-        <div className="cli-header-copy">
-          <p className="cli-eyebrow">Carteira e relacionamento</p>
-          <h3 className="cli-header-title">Acompanhe clientes, retornos e vínculos com processos.</h3>
-          <p className="cli-subtitle">
-            Busque rapidamente, filtre por contexto operacional e acione atendimento ou processo sem sair da carteira.
-          </p>
-        </div>
-        <div className="cli-header-actions">
-          <button
-            className="btn-primary"
-            onClick={() => setShowForm(true)}
-            aria-label="Cadastrar novo cliente"
-          >
-            <Plus size={14} /> Novo Cliente
-          </button>
-          <button
-            className="btn-secondary"
-            onClick={() => { goToAtendimento(); trackEvent('header_register_atd'); }}
-            aria-label="Registrar atendimento rápido"
-          >
-            <MessageSquare size={14} /> Registrar Atendimento
-          </button>
-          <button
-            className="btn-secondary"
-            onClick={() => exportCsv(sorted)}
-            aria-label="Exportar clientes como CSV"
-          >
-            <Download size={14} /> Exportar
-          </button>
-        </div>
+        <p className="cli-eyebrow">Carteira e relacionamento</p>
+        <PageHeader
+          title="Acompanhe clientes, retornos e vínculos com processos."
+          subtitle="Busque rapidamente, filtre por contexto operacional e acione atendimento ou processo sem sair da carteira."
+          actions={(
+            <>
+              <Button onClick={() => setShowForm(true)} aria-label="Cadastrar novo cliente">
+                <Plus size={14} /> Novo Cliente
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => { goToAtendimento(); trackEvent('header_register_atd'); }}
+                aria-label="Registrar atendimento rápido"
+              >
+                <MessageSquare size={14} /> Registrar Atendimento
+              </Button>
+              <Button variant="outline" onClick={() => exportCsv(sorted)} aria-label="Exportar clientes como CSV">
+                <Download size={14} /> Exportar
+              </Button>
+            </>
+          )}
+        />
       </div>
 
       {/* ── Alerts ──────────────────────────────────────────────── */}
@@ -806,9 +802,9 @@ export function Clients({ user }: ClientsProps) {
         <div className="cli-alert cli-alert--error" role="alert">
           <AlertTriangle size={16} />
           <span>{error}</span>
-          <button onClick={loadData} aria-label="Tentar novamente">
+          <Button variant="outline" size="sm" onClick={loadData} aria-label="Tentar novamente">
             <RefreshCw size={14} /> Tentar novamente
-          </button>
+          </Button>
         </div>
       )}
       {success && (
@@ -819,18 +815,9 @@ export function Clients({ user }: ClientsProps) {
 
       {/* ── KPIs ────────────────────────────────────────────────── */}
       <div className="cli-kpis" aria-label="Indicadores da carteira de clientes">
-        <div className="cli-kpi-card">
-          <p>Total de clientes</p>
-          <strong>{loading ? '—' : kpis.total}</strong>
-        </div>
-        <div className="cli-kpi-card cli-kpi-card--active">
-          <p>Clientes ativos</p>
-          <strong>{loading ? '—' : kpis.ativos}</strong>
-        </div>
-        <div className="cli-kpi-card">
-          <p>Com processo ativo</p>
-          <strong>{loading ? '—' : kpis.comProc}</strong>
-        </div>
+        <KpiCard label="Total de clientes" value={loading ? '—' : String(kpis.total)} />
+        <KpiCard label="Clientes ativos" value={loading ? '—' : String(kpis.ativos)} trend="up" />
+        <KpiCard label="Com processo ativo" value={loading ? '—' : String(kpis.comProc)} />
         <button
           type="button"
           className={`cli-kpi-card cli-kpi-card--warning cli-kpi-card--button${filters.aguardandoRetorno ? ' cli-kpi-card--selected' : ''}`}
@@ -841,28 +828,19 @@ export function Clients({ user }: ClientsProps) {
           <p>Aguardando retorno</p>
           <strong>{loading ? '—' : kpis.aguard}</strong>
         </button>
-        <div className="cli-kpi-card cli-kpi-card--danger">
-          <p>Pendência documental</p>
-          <strong>{loading ? '—' : kpis.docFalt}</strong>
-        </div>
+        <KpiCard label="Pendência documental" value={loading ? '—' : String(kpis.docFalt)} trend="down" />
       </div>
 
       {/* ── Filters ─────────────────────────────────────────────── */}
-      <div className="cli-filters">
+      <FilterBar
+        className="cli-filters"
+        searchPlaceholder="Buscar por nome, CPF/CNPJ, telefone, e-mail ou processo…"
+        searchValue={filters.query}
+        searchId="cli-search"
+        searchAriaLabel="Buscar cliente"
+        onSearchChange={(value) => updateFilter('query', value)}
+      >
         <div className="cli-filters-top">
-          <div className="cli-field cli-field--search">
-            <label htmlFor="cli-search" className="sr-only">Buscar cliente</label>
-            <span className="cli-input-wrap">
-              <Search size={14} aria-hidden="true" />
-              <input
-                id="cli-search"
-                type="search"
-                placeholder="Buscar por nome, CPF/CNPJ, telefone, e-mail ou processo…"
-                value={filters.query}
-                onChange={(e) => updateFilter('query', e.target.value)}
-              />
-            </span>
-          </div>
 
           <div className="cli-field">
             <label htmlFor="cli-status">Status</label>
@@ -908,7 +886,6 @@ export function Clients({ user }: ClientsProps) {
             </select>
           </div>
         </div>
-
         <div className="cli-filters-bottom">
           <div className="cli-toggle-group" aria-label="Filtros rápidos">
             <label className="cli-checkline">
@@ -947,34 +924,38 @@ export function Clients({ user }: ClientsProps) {
                 <strong>{filtered.length}</strong> de {clients.length}
               </span>
             )}
-            <button className="btn-ghost" onClick={clearFilters} aria-label="Limpar todos os filtros">
+            <Button variant="ghost" size="sm" onClick={clearFilters} aria-label="Limpar todos os filtros">
               <X size={13} /> Limpar
-            </button>
-            <button className="btn-ghost" onClick={saveFilters} aria-label="Salvar filtro atual">
+            </Button>
+            <Button variant="ghost" size="sm" onClick={saveFilters} aria-label="Salvar filtro atual">
               <Save size={13} /> Salvar filtro
-            </button>
+            </Button>
           </div>
 
           <div className="cli-view-toggle" role="group" aria-label="Modo de visualização">
-            <button
+            <Button
               className={`cli-view-btn${viewMode === 'lista' ? ' cli-view-btn--active' : ''}`}
+              variant="ghost"
+              size="sm"
               onClick={() => setViewMode('lista')}
               aria-pressed={viewMode === 'lista'}
               aria-label="Modo lista"
             >
               <List size={13} /> Lista
-            </button>
-            <button
+            </Button>
+            <Button
               className={`cli-view-btn${viewMode === 'cards' ? ' cli-view-btn--active' : ''}`}
+              variant="ghost"
+              size="sm"
               onClick={() => setViewMode('cards')}
               aria-pressed={viewMode === 'cards'}
               aria-label="Modo cards"
             >
               <LayoutGrid size={13} /> Cards
-            </button>
+            </Button>
           </div>
         </div>
-      </div>
+      </FilterBar>
 
       {/* ── Loading ──────────────────────────────────────────────── */}
       {loading && (
@@ -988,25 +969,25 @@ export function Clients({ user }: ClientsProps) {
       {!loading && !error && (
         <>
           {clients.length === 0 && (
-            <div className="cli-empty">
-              <User size={32} aria-hidden="true" />
-              <h3>Nenhum cliente cadastrado</h3>
-              <p>Cadastre o primeiro cliente para começar a acompanhar sua carteira.</p>
-              <button className="btn-primary" onClick={() => setShowForm(true)}>
-                <Plus size={14} /> Novo Cliente
-              </button>
-            </div>
+            <EmptyState
+              className="cli-empty"
+              icon={<User size={32} aria-hidden="true" />}
+              title="Nenhum cliente cadastrado"
+              description="Cadastre o primeiro cliente para começar a acompanhar sua carteira."
+              actionLabel="Novo Cliente"
+              onAction={() => setShowForm(true)}
+            />
           )}
 
           {clients.length > 0 && filtered.length === 0 && (
-            <div className="cli-empty">
-              <Filter size={32} aria-hidden="true" />
-              <h3>Nenhum cliente para este filtro</h3>
-              <p>Ajuste os critérios ou limpe os filtros para ver todos os clientes.</p>
-              <button className="btn-secondary" onClick={clearFilters}>
-                <X size={13} /> Limpar filtros
-              </button>
-            </div>
+            <EmptyState
+              className="cli-empty"
+              icon={<Filter size={32} aria-hidden="true" />}
+              title="Nenhum cliente para este filtro"
+              description="Ajuste os critérios ou limpe os filtros para ver todos os clientes."
+              actionLabel="Limpar filtros"
+              onAction={clearFilters}
+            />
           )}
 
           {/* ── Lista mode ───────────────────────────────────────── */}
@@ -1046,13 +1027,15 @@ export function Clients({ user }: ClientsProps) {
                     <option value="processos">Processos</option>
                     <option value="pendencias">Pendências</option>
                   </select>
-                  <button
-                    className="btn-ghost cli-sort-dir"
+                  <Button
+                    className="cli-sort-dir"
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setSortDesc((d) => !d)}
                     aria-label={sortDesc ? 'Decrescente' : 'Crescente'}
                   >
                     {sortDesc ? '↓' : '↑'}
-                  </button>
+                  </Button>
                 </div>
               </div>
 
@@ -1184,9 +1167,9 @@ export function Clients({ user }: ClientsProps) {
           >
             <div className="cli-modal-head">
               <h3 id="cli-form-title">Novo Cliente</h3>
-              <button onClick={() => setShowForm(false)} aria-label="Fechar formulário">
+              <Button variant="ghost" size="sm" onClick={() => setShowForm(false)} aria-label="Fechar formulário">
                 <X size={16} />
-              </button>
+              </Button>
             </div>
 
             <form className="cli-form" onSubmit={submitForm} noValidate>
@@ -1303,12 +1286,12 @@ export function Clients({ user }: ClientsProps) {
               </div>
 
               <div className="cli-form-actions">
-                <button type="button" className="btn-secondary" onClick={() => setShowForm(false)}>
+                <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
                   Cancelar
-                </button>
-                <button type="submit" className="btn-primary" disabled={!form.nome}>
+                </Button>
+                <Button type="submit" disabled={!form.nome}>
                   <Plus size={14} /> Cadastrar Cliente
-                </button>
+                </Button>
               </div>
             </form>
           </div>

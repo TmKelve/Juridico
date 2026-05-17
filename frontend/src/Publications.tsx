@@ -23,6 +23,7 @@ import {
 import { api, type ApiPublication } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import { ProcessCombobox } from './ProcessCombobox';
+import { Button, Input, Textarea } from './components/ui';
 import './Publications.css';
 
 interface PublicationsProps {
@@ -494,19 +495,19 @@ export function Publications({ user }: PublicationsProps) {
           </p>
         </div>
         <div className="pub-header-actions">
-          <button className="btn-primary" onClick={loadData} aria-label="Atualizar publicações">
+          <Button onClick={loadData} aria-label="Atualizar publicações">
             <RefreshCw size={14} /> Atualizar
-          </button>
-          <button
-            className="btn-secondary"
+          </Button>
+          <Button
+            variant="outline"
             onClick={() => { if (selected) convertToPrazo(selected.id); else setSuccess('Selecione uma publicação primeiro.'); }}
             aria-label="Criar prazo a partir da publicação selecionada"
           >
             <Plus size={14} /> Criar Prazo
-          </button>
-          <button className="btn-secondary" onClick={() => exportCsv(sorted)} aria-label="Exportar publicações como CSV">
+          </Button>
+          <Button variant="outline" onClick={() => exportCsv(sorted)} aria-label="Exportar publicações como CSV">
             <Download size={14} /> Exportar
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -555,7 +556,7 @@ export function Publications({ user }: PublicationsProps) {
             <label htmlFor="pub-search" className="sr-only">Buscar publicação</label>
             <span className="pub-input-wrap">
               <Search size={14} aria-hidden="true" />
-              <input
+              <Input
                 id="pub-search"
                 type="search"
                 placeholder="Buscar por processo, cliente, tribunal, conteúdo ou origem…"
@@ -663,12 +664,12 @@ export function Publications({ user }: PublicationsProps) {
                 <strong>{filtered.length}</strong> de {publications.length}
               </span>
             )}
-            <button className="btn-ghost" onClick={clearFilters} aria-label="Limpar todos os filtros">
+            <Button variant="ghost" onClick={clearFilters} aria-label="Limpar todos os filtros">
               <X size={13} /> Limpar
-            </button>
-            <button className="btn-ghost" onClick={saveFilters} aria-label="Salvar filtro atual">
+            </Button>
+            <Button variant="ghost" onClick={saveFilters} aria-label="Salvar filtro atual">
               <Save size={13} /> Salvar filtro
-            </button>
+            </Button>
           </div>
 
           <div className="pub-view-toggle" role="group" aria-label="Modo de visualização">
@@ -702,9 +703,9 @@ export function Publications({ user }: PublicationsProps) {
               <Bell size={32} aria-hidden="true" />
               <h3>Nenhuma publicação monitorada</h3>
               <p>Quando novas publicações forem detectadas nos diários, elas aparecerão aqui automaticamente.</p>
-              <button className="btn-primary" onClick={loadData}>
+              <Button onClick={loadData}>
                 <RefreshCw size={13} /> Verificar agora
-              </button>
+              </Button>
             </div>
           )}
 
@@ -713,9 +714,9 @@ export function Publications({ user }: PublicationsProps) {
               <Filter size={32} aria-hidden="true" />
               <h3>Nenhuma publicação para este filtro</h3>
               <p>Ajuste os critérios ou limpe os filtros para ver todas as publicações.</p>
-              <button className="btn-secondary" onClick={clearFilters}>
+              <Button variant="outline" onClick={clearFilters}>
                 <X size={13} /> Limpar filtros
-              </button>
+              </Button>
             </div>
           )}
 
@@ -734,13 +735,14 @@ export function Publications({ user }: PublicationsProps) {
                     <option value="status">Status</option>
                     <option value="processo">Processo</option>
                   </select>
-                  <button
-                    className="btn-ghost pub-sort-dir"
+                  <Button
+                    variant="ghost"
+                    className="pub-sort-dir"
                     onClick={() => setSortDesc((d) => !d)}
                     aria-label={sortDesc ? 'Decrescente' : 'Crescente'}
                   >
                     {sortDesc ? '↓' : '↑'}
-                  </button>
+                  </Button>
                 </div>
               </div>
 
@@ -909,7 +911,7 @@ export function Publications({ user }: PublicationsProps) {
               {/* Observations */}
               <div className="pub-drawer-section">
                 <span className="pub-drawer-label">Observações</span>
-                <textarea
+                <Textarea
                   className="pub-obs-input"
                   rows={3}
                   placeholder="Registre observações sobre esta publicação…"
@@ -917,57 +919,57 @@ export function Publications({ user }: PublicationsProps) {
                   onChange={(e) => setObsInput(e.target.value)}
                   aria-label="Observações sobre a publicação"
                 />
-                <button
-                  className="btn-ghost pub-save-obs"
+                <Button
+                  variant="ghost"
+                  className="pub-save-obs"
                   onClick={() => saveObs(selected.id)}
                   disabled={obsInput === selected.observacoes}
                   aria-label="Salvar observação"
                 >
                   <Save size={13} /> Salvar observação
-                </button>
+                </Button>
               </div>
             </div>
 
             <div className="pub-drawer-actions">
-              <button
-                className="btn-primary"
+              <Button
                 onClick={() => convertToPrazo(selected.id)}
                 disabled={selected.convertidaEmPrazo}
                 aria-label="Criar prazo a partir desta publicação"
               >
                 <Clock size={13} /> Criar prazo
-              </button>
-              <button
-                className="btn-secondary"
+              </Button>
+              <Button
+                variant="outline"
                 onClick={() => markTratada(selected.id)}
                 disabled={selected.status === 'tratada'}
                 aria-label="Marcar publicação como tratada"
               >
                 <CheckCircle2 size={13} /> Marcar tratada
-              </button>
-              <button
-                className="btn-secondary"
+              </Button>
+              <Button
+                variant="outline"
                 onClick={() => markRead(selected.id)}
                 disabled={selected.lida}
                 aria-label="Marcar publicação como lida"
               >
                 {selected.lida ? <Eye size={13} /> : <EyeOff size={13} />}
                 {selected.lida ? 'Lida' : 'Marcar lida'}
-              </button>
-              <button
-                className="btn-secondary"
+              </Button>
+              <Button
+                variant="outline"
                 onClick={() => createTask(selected.id)}
                 aria-label="Criar tarefa a partir desta publicação"
               >
                 <ClipboardList size={13} /> Criar tarefa
-              </button>
-              <button
-                className="btn-ghost"
+              </Button>
+              <Button
+                variant="ghost"
                 onClick={() => { navigate(`/processos/${selected.processId}`); setSelected(null); }}
                 aria-label={`Abrir processo ${selected.processLabel}`}
               >
                 <ExternalLink size={13} /> Abrir processo
-              </button>
+              </Button>
             </div>
           </aside>
         </>
