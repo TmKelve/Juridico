@@ -34,65 +34,69 @@ test.describe('ADV - Smoke das telas operacionais', () => {
         path: '/',
         shellTitle: 'Meu Dia',
         contentHeading: '',
+        contentSelector: '.dashboard-page',
       },
       {
         path: '/processos',
         shellTitle: 'Meus Processos',
         contentHeading: 'Meus Processos',
+        contentSelector: '.my-processes-page',
       },
       {
         path: '/prazos',
         shellTitle: 'Prazos',
         contentHeading: 'Prazos',
+        contentSelector: '.deadlines-page',
       },
       {
         path: '/agenda',
         shellTitle: 'Agenda',
         contentHeading: 'Agenda',
+        contentSelector: '.agenda-page',
       },
       {
         path: '/documentos',
         shellTitle: 'Documentos',
         contentHeading: 'Documentos',
+        contentSelector: '.documents-page',
       },
       {
         path: '/atendimentos',
         shellTitle: 'Atendimentos',
         contentHeading: 'Atendimentos',
+        contentSelector: '.atendimentos-page',
       },
       {
         path: '/clientes',
         shellTitle: 'Clientes',
         contentHeading: 'Clientes',
+        contentSelector: '.clients-page',
       },
       {
         path: '/publicacoes-intimacoes',
         shellTitle: 'Publicações e Intimações',
         contentHeading: 'Publicações e Intimações',
+        contentSelector: '.publications-page',
       },
       {
         path: '/modelos-pecas',
         shellTitle: 'Modelos de Peças',
         contentHeading: 'Modelos de Peças',
+        contentSelector: '.tpl-page',
       },
       {
         path: '/tarefas',
         shellTitle: 'Tarefas',
         contentHeading: 'Tarefas',
+        contentSelector: '.tasks-page',
       },
     ];
 
     for (const screen of screens) {
       await page.goto(`${baseURL}${screen.path}`);
       await expect(page).toHaveURL(new RegExp(`${screen.path === '/' ? '/$' : `${screen.path}$`}`));
-      await expect(page.locator('.page-header-shell h1')).toBeVisible();
-      if (screen.path === '/') {
-        await expect(page.locator('.dashboard-page')).toBeVisible();
-      } else if (screen.path === '/processos') {
-        await expect(page.locator('.my-processes-page')).toBeVisible();
-      } else {
-        await expect(page.getByRole('heading', { level: 2, name: screen.contentHeading })).toBeVisible();
-      }
+      await expect(page.locator('.page-header-shell h1')).toContainText(screen.shellTitle);
+      await expect(page.locator(screen.contentSelector)).toBeVisible();
       await expect(page.locator('.shell-content-canvas')).toBeVisible();
     }
   });
