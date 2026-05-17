@@ -20,6 +20,15 @@ const OPPORTUNITY_STAGE_LABELS: Record<(typeof OPPORTUNITY_STATUS)[number], stri
   ganha: 'Ganha',
   perdida: 'Perdida',
 };
+const CONTACT_KIND_LABELS: Record<string, string> = {
+  contato: 'Contato',
+  ligacao: 'Ligação',
+  whatsapp: 'WhatsApp',
+  email: 'E-mail',
+  reuniao: 'Reunião',
+  proposta: 'Proposta',
+  conversao: 'Conversão',
+};
 
 function formatDateTime(iso: string) {
   return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
@@ -39,8 +48,18 @@ function matchesNextContactFilter(nextContactAt: string | null, filter: string) 
   if (!nextContactAt) return false;
   const contactDate = new Date(nextContactAt);
   if (filter === 'hoje') return contactDate.toDateString() === new Date().toDateString();
+  if (filter === 'vencido') return contactDate < new Date() && contactDate.toDateString() !== new Date().toDateString();
   if (filter === 'futuro') return contactDate > new Date();
   return true;
+}
+
+function getNextContactState(nextContactAt: string | null) {
+  if (!nextContactAt) return 'none';
+  const contactDate = new Date(nextContactAt);
+  const today = new Date();
+  if (contactDate.toDateString() === today.toDateString()) return 'today';
+  if (contactDate < today) return 'overdue';
+  return 'future';
 }
 
 export function CrmJuridico({ user }: CrmJuridicoProps) {
@@ -58,6 +77,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
   const [selectedLead, setSelectedLead] = useState<ApiCrmLead | null>(null);
   const [selectedOpportunity, setSelectedOpportunity] = useState<ApiCrmOpportunity | null>(null);
   const [contactNote, setContactNote] = useState('');
+  const [contactKind, setContactKind] = useState('contato');
   const [nextContactDraft, setNextContactDraft] = useState('');
   const [showOpportunityConversion, setShowOpportunityConversion] = useState(false);
   const [conversionForm, setConversionForm] = useState({
@@ -175,6 +195,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     }
     const response = await api.addCrmLeadContactEvent(item.id, {
       summary,
+      kind: contactKind,
       nextContactAt: nextContactDraft || null,
     });
     if (response.status !== 201 || !response.data) {
@@ -184,6 +205,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     setLeads((prev) => prev.map((entry) => entry.id === item.id ? response.data as ApiCrmLead : entry));
     setSelectedLead(response.data as ApiCrmLead);
     setContactNote('');
+    setContactKind('contato');
     setNextContactDraft(formatDateTimeLocal((response.data as ApiCrmLead).nextContactAt));
     setSuccess('Contato registrado.');
   }
@@ -196,6 +218,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     }
     const response = await api.addCrmOpportunityContactEvent(item.id, {
       summary,
+      kind: contactKind,
       nextContactAt: nextContactDraft || null,
     });
     if (response.status !== 201 || !response.data) {
@@ -205,6 +228,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     setOpportunities((prev) => prev.map((entry) => entry.id === item.id ? response.data as ApiCrmOpportunity : entry));
     setSelectedOpportunity(response.data as ApiCrmOpportunity);
     setContactNote('');
+    setContactKind('contato');
     setNextContactDraft(formatDateTimeLocal((response.data as ApiCrmOpportunity).nextContactAt));
     setSuccess('Contato registrado.');
   }
@@ -212,6 +236,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
   useEffect(() => {
     const selected = tab === 'leads' ? selectedLead : selectedOpportunity;
     setContactNote('');
+    setContactKind('contato');
     setNextContactDraft(formatDateTimeLocal(selected?.nextContactAt ?? null));
   }, [tab, selectedLead?.id, selectedOpportunity?.id]);
 
@@ -262,6 +287,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     convertedLeads: leads.filter((item) => item.status === 'convertido').length,
     activeOpportunities: opportunities.filter((item) => !['ganha', 'perdida'].includes(item.status)).length,
     wonOpportunities: opportunities.filter((item) => item.status === 'ganha').length,
+    overdueFollowUps: [...leads, ...opportunities].filter((item) => getNextContactState(item.nextContactAt) === 'overdue').length,
   }), [leads, opportunities]);
 
   const opportunitiesByStage = useMemo(() => (
@@ -297,7 +323,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     stageFilter ? { key: 'stage', label: `Etapa: ${tab === 'opportunities' ? (OPPORTUNITY_STAGE_LABELS[stageFilter as keyof typeof OPPORTUNITY_STAGE_LABELS] ?? stageFilter) : stageFilter}` } : null,
     nextContactFilter ? {
       key: 'nextContact',
-      label: `Próximo contato: ${nextContactFilter === 'hoje' ? 'Hoje' : nextContactFilter === 'futuro' ? 'Futuro' : 'Sem contato'}`
+      label: `Próximo contato: ${nextContactFilter === 'hoje' ? 'Hoje' : nextContactFilter === 'futuro' ? 'Futuro' : nextContactFilter === 'vencido' ? 'Vencido' : 'Sem contato'}`
     } : null,
   ].filter(Boolean) as Array<{ key: string; label: string }>;
 
@@ -326,6 +352,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
         <article className="crm-kpi"><span>Leads convertidos</span><strong>{kpis.convertedLeads}</strong></article>
         <article className="crm-kpi"><span>Oportunidades ativas</span><strong>{kpis.activeOpportunities}</strong></article>
         <article className="crm-kpi"><span>Ganhos</span><strong>{kpis.wonOpportunities}</strong></article>
+        <article className="crm-kpi crm-kpi--warning"><span>Follow-up vencido</span><strong>{kpis.overdueFollowUps}</strong></article>
       </section>
 
       <section className="crm-workspace">
@@ -366,6 +393,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                 <select className="crm-filter-select" value={nextContactFilter} onChange={(event) => setNextContactFilter(event.target.value)}>
                   <option value="">Todos</option>
                   <option value="hoje">Hoje</option>
+                  <option value="vencido">Vencido</option>
                   <option value="futuro">Futuro</option>
                   <option value="sem_contato">Sem contato</option>
                 </select>
@@ -445,7 +473,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                             {item.hasCriticalTriage ? <span className="crm-flag"><ShieldAlert size={12} /> crítica</span> : null}
                           </div>
                           <div className="crm-card__meta">
-                            <span>{item.nextContactAt ? `Próximo contato ${formatDateTime(item.nextContactAt)}` : 'Sem próximo contato'}</span>
+                            <span className={`crm-next-contact crm-next-contact--${getNextContactState(item.nextContactAt)}`}>{item.nextContactAt ? `Próximo contato ${formatDateTime(item.nextContactAt)}` : 'Sem próximo contato'}</span>
                           </div>
                           <div className="crm-card__actions">
                             <select value={item.status} onChange={(event) => void updateOpportunityStatus(item, event.target.value)} onClick={(event) => event.stopPropagation()}>
@@ -512,6 +540,12 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                     placeholder="Resumo do contato, próxima objeção ou passo acordado..."
                     rows={4}
                   />
+                  <label className="crm-inline-field">
+                    <span>Tipo de contato</span>
+                    <select value={contactKind} onChange={(event) => setContactKind(event.target.value)}>
+                      {Object.entries(CONTACT_KIND_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                    </select>
+                  </label>
                   <button className="btn-secondary" onClick={() => void addLeadContactEvent(selectedLead)}>Adicionar histórico</button>
                 </section>
                 <section className="crm-panel">
@@ -522,7 +556,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                     <div className="crm-history">
                       {selectedLead.contactEvents.map((event) => (
                         <article key={event.id} className="crm-history__item">
-                          <strong>{event.kind}</strong>
+                          <strong>{CONTACT_KIND_LABELS[event.kind] ?? event.kind}</strong>
                           <p>{event.summary}</p>
                           <small>{formatDateTime(event.createdAt)}{event.createdBy ? ` · ${event.createdBy}` : ''}</small>
                         </article>
@@ -548,6 +582,12 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                 <div><span>Próximo contato</span><strong>{selectedOpportunity.nextContactAt ? formatDateTime(selectedOpportunity.nextContactAt) : '—'}</strong></div>
                 <div><span>Atualizada em</span><strong>{formatDateTime(selectedOpportunity.updatedAt)}</strong></div>
               </div>
+              {getNextContactState(selectedOpportunity.nextContactAt) === 'overdue' ? (
+                <div className="crm-alert crm-alert--danger">Follow-up vencido. Essa oportunidade exige ação imediata.</div>
+              ) : null}
+              {getNextContactState(selectedOpportunity.nextContactAt) === 'today' ? (
+                <div className="crm-alert crm-alert--warning">Follow-up previsto para hoje.</div>
+              ) : null}
               <section className="crm-panel">
                 <h4>Resumo</h4>
                 <p>{selectedOpportunity.summary}</p>
@@ -583,6 +623,12 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                   placeholder="Resumo do contato, avanço da negociação ou próximo passo..."
                   rows={4}
                 />
+                <label className="crm-inline-field">
+                  <span>Tipo de contato</span>
+                  <select value={contactKind} onChange={(event) => setContactKind(event.target.value)}>
+                    {Object.entries(CONTACT_KIND_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                  </select>
+                </label>
                 <button className="btn-secondary" onClick={() => void addOpportunityContactEvent(selectedOpportunity)}>Adicionar histórico</button>
               </section>
               <section className="crm-panel">
@@ -593,7 +639,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                   <div className="crm-history">
                     {selectedOpportunity.contactEvents.map((event) => (
                       <article key={event.id} className="crm-history__item">
-                        <strong>{event.kind}</strong>
+                        <strong>{CONTACT_KIND_LABELS[event.kind] ?? event.kind}</strong>
                         <p>{event.summary}</p>
                         <small>{formatDateTime(event.createdAt)}{event.createdBy ? ` · ${event.createdBy}` : ''}</small>
                       </article>

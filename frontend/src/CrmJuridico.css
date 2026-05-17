@@ -57,6 +57,7 @@
 
 .crm-kpi span { color: var(--neutral-600, #5f6f82); }
 .crm-kpi strong { font-size: 30px; }
+.crm-kpi--warning { border-color: #fbbf24; }
 
 .crm-workspace {
   display: grid;
@@ -257,6 +258,32 @@
   gap: 4px;
   color: #991b1b;
   font-weight: 600;
+}
+
+.crm-next-contact--overdue {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.crm-next-contact--today {
+  color: #b45309;
+  font-weight: 700;
+}
+
+.crm-alert {
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-weight: 600;
+}
+
+.crm-alert--danger {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.crm-alert--warning {
+  background: #fffbeb;
+  color: #92400e;
 }
 
 .crm-drawer {
