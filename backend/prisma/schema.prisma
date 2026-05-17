@@ -173,6 +173,7 @@ model CrmOpportunity {
   id             Int      @id @default(autoincrement())
   clientId       Int?
   clientRecord   Client?  @relation(fields: [clientId], references: [id])
+  convertedProcessId Int?
   cpf            String?
   personName     String
   source         String

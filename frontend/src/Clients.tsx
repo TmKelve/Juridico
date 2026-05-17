@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
   Briefcase,
@@ -454,6 +454,7 @@ function ClientDetailView({
 
 export function Clients({ user }: ClientsProps) {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [clients, setClients]           = useState<ClientItem[]>([]);
   const [loading, setLoading]           = useState(true);
@@ -484,6 +485,17 @@ export function Clients({ user }: ClientsProps) {
       return () => clearTimeout(t);
     }
   }, [success]);
+
+  useEffect(() => {
+    const clientId = Number(searchParams.get('clientId') || '');
+    if (!clientId || Number.isNaN(clientId)) return;
+    const match = clients.find((client) => Number(client.id) === clientId);
+    if (!match) return;
+    setSelectedClient(match);
+    const next = new URLSearchParams(searchParams);
+    next.delete('clientId');
+    setSearchParams(next, { replace: true });
+  }, [clients, searchParams, setSearchParams]);
 
   async function loadData() {
     setLoading(true);

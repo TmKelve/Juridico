@@ -3258,6 +3258,7 @@ app.post('/crm/opportunities/:id/convert', async (req, res) => {
     where: { id: opportunity.id },
     data: {
       clientId: client.id,
+      convertedProcessId: createdProcess.id,
       personName: client.name,
       status: 'ganha',
       summary: typeof req.body?.summary === 'string' && req.body.summary.trim() ? req.body.summary.trim() : opportunity.summary,

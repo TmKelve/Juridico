@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { CalendarClock, RefreshCw, Search, ShieldAlert, TrendingUp } from 'lucide-react';
 import { api, type ApiCrmLead, type ApiCrmOpportunity } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
@@ -63,6 +64,7 @@ function getNextContactState(nextContactAt: string | null) {
 }
 
 export function CrmJuridico({ user }: CrmJuridicoProps) {
+  const navigate = useNavigate();
   const [tab, setTab] = useState<TabKey>('opportunities');
   const [leads, setLeads] = useState<ApiCrmLead[]>([]);
   const [opportunities, setOpportunities] = useState<ApiCrmOpportunity[]>([]);
@@ -476,6 +478,17 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                             <span className={`crm-next-contact crm-next-contact--${getNextContactState(item.nextContactAt)}`}>{item.nextContactAt ? `Próximo contato ${formatDateTime(item.nextContactAt)}` : 'Sem próximo contato'}</span>
                           </div>
                           <div className="crm-card__actions">
+                            {item.convertedProcessId ? (
+                              <button
+                                className="btn-ghost"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  navigate(`/processos/${item.convertedProcessId}`);
+                                }}
+                              >
+                                Abrir processo
+                              </button>
+                            ) : null}
                             <select value={item.status} onChange={(event) => void updateOpportunityStatus(item, event.target.value)} onClick={(event) => event.stopPropagation()}>
                               {OPPORTUNITY_STATUS.map((status) => <option key={status} value={status}>{OPPORTUNITY_STAGE_LABELS[status]}</option>)}
                             </select>
@@ -649,6 +662,20 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
               </section>
               <section className="crm-panel">
                 <h4>Conversão operacional</h4>
+                {selectedOpportunity.clientId || selectedOpportunity.convertedProcessId ? (
+                  <div className="crm-drawer__actions">
+                    {selectedOpportunity.clientId ? (
+                      <button className="btn-secondary" onClick={() => navigate(`/clientes?clientId=${selectedOpportunity.clientId}`)}>
+                        Abrir cliente
+                      </button>
+                    ) : null}
+                    {selectedOpportunity.convertedProcessId ? (
+                      <button className="btn-secondary" onClick={() => navigate(`/processos/${selectedOpportunity.convertedProcessId}`)}>
+                        Abrir processo
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
                 {!showOpportunityConversion ? (
                   <button className="btn-primary" onClick={() => setShowOpportunityConversion(true)}>
                     <TrendingUp size={14} />

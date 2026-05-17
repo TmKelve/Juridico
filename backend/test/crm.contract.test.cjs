@@ -34,6 +34,7 @@ test('buildCrmOpportunityPayload maps opportunity contract', async () => {
 
   const payload = buildCrmOpportunityPayload({
     id: 11,
+    convertedProcessId: 22,
     cpf: '12345678900',
     personName: 'Cliente Prisma',
     source: 'publicacao_automatizada',
@@ -48,6 +49,7 @@ test('buildCrmOpportunityPayload maps opportunity contract', async () => {
   });
 
   assert.equal(payload.client, '');
+  assert.equal(payload.convertedProcessId, 22);
   assert.equal(payload.triageCount, 0);
   assert.equal(payload.hasCriticalTriage, false);
   assert.equal(payload.responsible, '');

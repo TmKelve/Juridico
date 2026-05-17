@@ -347,6 +347,7 @@ export interface ApiCrmLead {
 
 export interface ApiCrmOpportunity {
   id: number;
+  convertedProcessId: number | null;
   cpf: string;
   personName: string;
   source: string;

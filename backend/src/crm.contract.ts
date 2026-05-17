@@ -23,6 +23,7 @@ type RawCrmLead = {
 
 type RawCrmOpportunity = {
   id: number;
+  convertedProcessId?: number | null;
   cpf?: string | null;
   personName: string;
   source: string;
@@ -74,6 +75,7 @@ export function buildCrmLeadPayload(item: RawCrmLead) {
 export function buildCrmOpportunityPayload(item: RawCrmOpportunity) {
   return {
     id: item.id,
+    convertedProcessId: item.convertedProcessId ?? null,
     cpf: item.cpf ?? '',
     personName: item.personName,
     source: item.source,
