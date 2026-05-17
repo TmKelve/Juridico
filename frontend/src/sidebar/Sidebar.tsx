@@ -30,6 +30,7 @@ export function Sidebar({
   return (
     <>
       <aside
+        data-open={isOpen ? 'true' : 'false'}
         className={cn(
           'fixed inset-y-0 left-0 z-40 flex h-dvh w-[18rem] -translate-x-full flex-col border-r border-slate-700/60 bg-slate-900 text-slate-100 shadow-2xl transition-transform duration-200 md:sticky md:top-0 md:h-screen md:translate-x-0',
           isOpen && 'translate-x-0',

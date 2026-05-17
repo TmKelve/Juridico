@@ -285,7 +285,7 @@ function AppShell({
         />
 
         {!isCrmJuridico ? (
-          <header className="page-header-shell">
+          <header className={`page-header-shell${isDashboard ? ' page-header-shell--dashboard' : ''}`}>
             <div>
               <div className="page-header-badge">{pageMeta.badge}</div>
               <h1>{pageMeta.title}</h1>

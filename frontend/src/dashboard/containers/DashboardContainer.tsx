@@ -204,27 +204,51 @@ export function DashboardContainer({ user }: DashboardContainerProps) {
 
       <DashboardShell
         header={(
-          <section className="dashboard-hero" aria-label="Resumo do dia">
-            <div className="dashboard-hero-copy">
-              <div className="dashboard-hero-eyebrow">Dashboard</div>
-              <h2>{hero.title}</h2>
-              <p>{hero.subtitle}</p>
-              <span className="dashboard-hero-date-badge">{hero.dateLabel}</span>
-            </div>
-
-            <div className="dashboard-hero-right">
-              <div className="dashboard-hero-actions">
-                <button className="btn-primary btn-compact" onClick={() => onShortcutClick('nova_tarefa')}>
-                  <Plus size={14} aria-hidden="true" />
-                  Nova Tarefa
-                </button>
-                <button className="btn-secondary btn-compact" onClick={() => onShortcutClick('ver_agenda')}>
+          <>
+            <section className="dashboard-hero" aria-label="Resumo do dia">
+              <div className="dashboard-hero-copy">
+                <div className="dashboard-hero-eyebrow">Dashboard</div>
+                <h2>{hero.title}</h2>
+                <p>{hero.subtitle}</p>
+                <span className="dashboard-hero-date-badge">
                   <CalendarDays size={14} aria-hidden="true" />
-                  Ver Agenda
-                </button>
+                  {hero.dateLabel}
+                </span>
               </div>
-            </div>
-          </section>
+
+              <div className="dashboard-hero-right">
+                <div className="dashboard-hero-actions">
+                  <button className="btn-secondary btn-compact" onClick={() => onShortcutClick('ver_agenda')}>
+                    <CalendarDays size={16} aria-hidden="true" />
+                    Ver Agenda
+                  </button>
+                  <button className="btn-primary btn-compact" onClick={() => onShortcutClick('nova_tarefa')}>
+                    <Plus size={16} aria-hidden="true" />
+                    Nova Tarefa
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section className="responsibility-panel" aria-label="Painel de responsabilidades">
+              <div className="responsibility-panel__copy">
+                <div className="responsibility-panel__eyebrow">
+                  <Users size={16} aria-hidden="true" />
+                  Painel de responsabilidades
+                </div>
+                <p>Entregue carga, bloqueios e urgências antes que virem atraso operacional.</p>
+                <strong>{hero.summary}</strong>
+              </div>
+              <div className="responsibility-panel__insights" aria-label="Alertas do dia">
+                {hero.insights.map((insight) => (
+                  <span key={insight.text} className={`responsibility-insight responsibility-insight--${insight.tone}`}>
+                    {insight.tone === 'error' ? <AlertTriangle size={18} aria-hidden="true" /> : <Clock size={18} aria-hidden="true" />}
+                    {insight.text}
+                  </span>
+                ))}
+              </div>
+            </section>
+          </>
         )}
         kpi={<KpiStrip kpis={kpis} onKpiClick={onKpiClick} />}
         nextAction={nextBestAction ? (

@@ -289,6 +289,10 @@
   gap: var(--space-4);
 }
 
+.page-header-shell--dashboard {
+  display: none;
+}
+
 .page-header-actions {
   display: inline-flex;
   gap: var(--space-2);
@@ -462,6 +466,14 @@
   .app-shell,
   .app-shell.sidebar-is-collapsed {
     grid-template-columns: 1fr;
+  }
+
+  aside[aria-label="Navegação principal"][data-open="false"] {
+    transform: translateX(-100%) !important;
+  }
+
+  aside[aria-label="Navegação principal"][data-open="true"] {
+    transform: translateX(0) !important;
   }
 
   .shell-main {
