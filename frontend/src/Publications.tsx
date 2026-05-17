@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   Bell,
@@ -141,6 +141,7 @@ function TipoChip({ tipo }: { tipo: PubTipo }) {
 
 export function Publications({ user }: PublicationsProps) {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [publications, setPublications] = useState<PublicationItem[]>([]);
   const [loading, setLoading]           = useState(true);
@@ -162,6 +163,20 @@ export function Publications({ user }: PublicationsProps) {
     trackPageView('publicacoes', { role: user.role });
     loadData();
   }, [user.role]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const processId = params.get('processId');
+    const clientName = params.get('clientName');
+
+    if (!processId && !clientName) return;
+
+    setFilters((prev) => ({
+      ...prev,
+      process: processId ?? prev.process,
+      client: processId ? prev.client : clientName ?? prev.client,
+    }));
+  }, [location.search]);
 
   useEffect(() => { setPage(1); }, [filters, sortBy, sortDesc, viewMode]);
 
@@ -341,6 +356,25 @@ export function Publications({ user }: PublicationsProps) {
     });
     return arr;
   }, [filtered, sortBy, sortDesc]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const processId = params.get('processId');
+    const clientName = params.get('clientName');
+    if (!publications.length || (!processId && !clientName)) return;
+
+    const focused = [...publications]
+      .filter((item) => {
+        if (processId) return String(item.processId) === processId;
+        if (clientName) return item.client === clientName;
+        return false;
+      })
+      .sort((a, b) => b.dataPublicacao.localeCompare(a.dataPublicacao))[0];
+
+    if (!focused) return;
+    setSelected(focused);
+    setObsInput(focused.observacoes);
+  }, [location.search, publications]);
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / PER_PAGE));
   const pageItems  = sorted.slice((page - 1) * PER_PAGE, page * PER_PAGE);

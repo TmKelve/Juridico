@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   Briefcase,
@@ -66,6 +67,7 @@ function kpiTone(value: number, danger = false) {
 }
 
 export function Triagem({ user }: TriagemProps) {
+  const navigate = useNavigate();
   const [items, setItems] = useState<ApiTriageItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -211,6 +213,19 @@ export function Triagem({ user }: TriagemProps) {
 
   const activeCount = filteredItems.length;
 
+  function openRelatedPublication(item: ApiTriageItem) {
+    const params = new URLSearchParams();
+    if (item.processId) params.set('processId', String(item.processId));
+    if (item.client) params.set('clientName', item.client);
+    if (item.capture.processNumber) params.set('processNumber', item.capture.processNumber);
+    navigate(`/publicacoes-intimacoes?${params.toString()}`);
+    trackEvent('triage_open_publication', {
+      id: item.id,
+      processId: item.processId ?? 0,
+      hasClient: Boolean(item.client),
+    });
+  }
+
   return (
     <div className="triage-page">
       <section className="triage-hero">
@@ -337,6 +352,15 @@ export function Triagem({ user }: TriagemProps) {
                   <div className="triage-card__reason">{item.suggestedReason}</div>
 
                   <div className="triage-card__actions">
+                    <button
+                      className="btn-secondary"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openRelatedPublication(item);
+                      }}
+                    >
+                      Ver publicação
+                    </button>
                     <button
                       className="btn-primary"
                       onClick={(event) => {
@@ -492,6 +516,12 @@ export function Triagem({ user }: TriagemProps) {
               </div>
 
               <div className="triage-drawer__links">
+                {(selected.processId || selected.client) ? (
+                  <button type="button" onClick={() => openRelatedPublication(selected)}>
+                    <ExternalLink size={14} />
+                    Ver publicação
+                  </button>
+                ) : null}
                 {selected.processId ? (
                   <a href={`/processos/${selected.processId}`}>
                     <ExternalLink size={14} />
