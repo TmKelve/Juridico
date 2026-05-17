@@ -134,4 +134,25 @@ test.describe('ADV - Smoke das telas operacionais', () => {
     await page.getByRole('button', { name: 'Confirmar conversão' }).click();
     await expect(page.getByRole('dialog', { name: 'Confirmar conversão da oportunidade' })).toBeVisible();
   });
+
+  test('deve manter contexto ao redirecionar de CRM para processos e documentos', async ({ page }) => {
+    await loginAsAdvogado(page);
+
+    await page.goto(`${baseURL}/crm-juridico`);
+    await expect(page.locator('.crm-page')).toBeVisible();
+    await expect(page.locator('.crm-workspace')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Processo' }).click();
+    await expect(page.locator('.crm-process-actions')).toBeVisible();
+    await page.getByRole('button', { name: 'Vincular processo existente' }).click();
+    await expect(page).toHaveURL(/\/processos\?/);
+    await expect(page).toHaveURL(/q=Tom(\+|%20)Kelve/);
+
+    await page.goto(`${baseURL}/crm-juridico`);
+    await expect(page.locator('.crm-page')).toBeVisible();
+    await page.getByRole('button', { name: 'Documentos' }).click();
+    await page.getByRole('button', { name: 'Adicionar documento' }).click();
+    await expect(page).toHaveURL(/\/documentos\?/);
+    await expect(page).toHaveURL(/client=Tom(\+|%20)Kelve/);
+  });
 });
