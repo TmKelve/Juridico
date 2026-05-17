@@ -4,9 +4,9 @@ import type { AgendaItem, AlertItem, MovementItem, ResponsibilityItem } from '..
 export function useContextFeed(items: ResponsibilityItem[]) {
   const agenda = useMemo<AgendaItem[]>(() => {
     return [
-      { id: 'a1', hour: '09:30', label: 'Audiência de instrução', context: '3ª Vara Cível' },
-      { id: 'a2', hour: '11:00', label: 'Reunião com cliente', context: 'Contrato empresarial' },
-      { id: 'a3', hour: '15:30', label: 'Prazo de manifestação', context: 'Processo #1029475' },
+      { id: 'a1', hour: '09:30', label: 'Audiência de instrução', context: '3ª Vara Cível', type: 'audiencia' },
+      { id: 'a2', hour: '11:00', label: 'Reunião com cliente', context: 'Contrato empresarial', type: 'reuniao' },
+      { id: 'a3', hour: '15:30', label: 'Prazo de manifestação', context: 'Processo #1029475', type: 'prazo' },
     ];
   }, []);
 

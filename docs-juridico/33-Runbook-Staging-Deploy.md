@@ -50,15 +50,13 @@ VITE_GA_MEASUREMENT_ID=
 
 ## 5. Ordem De Execucao
 
-1. configurar identidade Git local
-2. criar commit de baseline
-3. publicar branch no remoto
-4. aplicar secrets e variaveis do ambiente de staging
-5. deixar o CI rodar
-6. se CI passar, fazer deploy do backend
-7. aplicar `prisma migrate deploy` no banco de staging
-8. fazer deploy do frontend
-9. executar smoke de staging
+1. aplicar secrets e variaveis do ambiente de staging
+2. usar a branch `codex/baseline-postgres-staging` como baseline inicial
+3. validar CI verde no remoto
+4. fazer deploy do backend
+5. aplicar `prisma migrate deploy` no banco de staging
+6. fazer deploy do frontend
+7. executar smoke de staging
 
 ## 6. Comandos Locais De Preflight
 
@@ -131,7 +129,8 @@ Observacao:
 
 ## 9. Riscos Ainda Abertos
 
-- Git ainda sem baseline commitada
+- baseline Git ja publicada em `codex/baseline-postgres-staging`
+- CI minima ja validada com smoke verde no GitHub Actions
 - staging remoto ainda nao provisionado nesta thread
 - bundle frontend continua acima do warning de 500 kB
 - warnings de hooks no frontend ainda existem

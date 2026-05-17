@@ -663,7 +663,7 @@ export function Agenda({ user }: AgendaProps) {
       </header>
 
       <section className="agenda-kpis" aria-label="Indicadores da agenda">
-        <article className="agenda-kpi-card">
+        <article className={`agenda-kpi-card${kpis.today > 0 ? ' agenda-kpi-card--warning' : ''}`}>
           <p>Compromissos hoje</p>
           <strong>{kpis.today}</strong>
           <small>Foco imediato</small>
@@ -673,7 +673,7 @@ export function Agenda({ user }: AgendaProps) {
           <strong>{kpis.audienceWeek}</strong>
           <small>Ritos presenciais</small>
         </article>
-        <article className="agenda-kpi-card agenda-kpi-card--warning">
+        <article className={`agenda-kpi-card${kpis.pendingReturns > 0 ? ' agenda-kpi-card--warning' : ' agenda-kpi-card--success'}`}>
           <p>Retornos pendentes</p>
           <strong>{kpis.pendingReturns}</strong>
           <small>Exigem acompanhamento</small>
@@ -683,7 +683,7 @@ export function Agenda({ user }: AgendaProps) {
           <strong>{kpis.deadlines}</strong>
           <small>Vinculados a entrega</small>
         </article>
-        <article className="agenda-kpi-card agenda-kpi-card--danger">
+        <article className={`agenda-kpi-card${kpis.overlaps > 0 ? ' agenda-kpi-card--danger' : ' agenda-kpi-card--success'}`}>
           <p>Conflitos</p>
           <strong>{kpis.overlaps}</strong>
           <small>{kpis.overlaps > 0 ? 'Há sobreposição' : 'Nenhuma sobreposição'}</small>

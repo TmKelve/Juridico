@@ -1,0 +1,14 @@
+- generic [ref=e6]:
+  - img "Lexora" [ref=e8]
+  - generic [ref=e9]:
+    - generic [ref=e10]:
+      - generic [ref=e11]: Email
+      - textbox "Email" [ref=e12]:
+        - /placeholder: seu@email.com
+    - generic [ref=e13]:
+      - generic [ref=e14]: Senha
+      - textbox "Senha" [ref=e15]:
+        - /placeholder: ••••••
+    - button "Entrar" [ref=e16] [cursor=pointer]
+  - group [ref=e17] [cursor=pointer]:
+    - generic "▸ Precisa de credenciais para teste?" [ref=e18]

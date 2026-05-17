@@ -32,7 +32,8 @@ Esta pasta contém a documentação de produto para o SaaS Jurídico, organizada
 22. 32-Baseline-Staging-CI.md - baseline operacional para staging e pipeline mínima com Postgres limpo.
 23. 33-Runbook-Staging-Deploy.md - runbook operacional para primeira subida de staging.
 24. 34-Handoff-Git-Baseline.md - handoff operacional para o primeiro commit tecnico e publicacao no remoto.
-25. test-acessibilidade-login.js - script automatizado de testes WCAG (executar no console).
+25. 35-Decisao-Stack-Staging-MVP.md - stack recomendada para o primeiro staging remoto com menor atrito operacional.
+26. test-acessibilidade-login.js - script automatizado de testes WCAG (executar no console).
 
 ## Status Atual
 - Baseline vigente: alpha funcional avançado, conforme `28-Validacao-Telas-ADV-Full-Lifecycle.md`.
@@ -41,7 +42,9 @@ Esta pasta contém a documentação de produto para o SaaS Jurídico, organizada
 - Frontend passa em lint, ainda com warnings de dependência em hooks.
 - Runtime soberano do backend já opera em Postgres.
 - Smoke integrado frontend + backend passou em banco Postgres limpo.
-- Próximo bloqueio real está em baseline Git, CI versionada e staging remoto persistente.
+- A branch `codex/baseline-postgres-staging` já está publicada no GitHub.
+- A CI mínima já passou com smoke remoto verde.
+- Próximo bloqueio real está no provisionamento do staging remoto persistente.
 - Documentos anteriores a `28` devem ser tratados como histórico quando conflitarem com o estado real do código.
 
 ## Como usar

@@ -211,6 +211,7 @@ function AppShell({
   const location = useLocation()
   const pageMeta = getPageMeta(location.pathname, user.role)
   const isDashboard = location.pathname === '/'
+  const isCrmJuridico = location.pathname === '/crm-juridico'
   const shortName = (user.email || getRoleLabel(user.role)).split('@')[0].slice(0, 12)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -256,24 +257,26 @@ function AppShell({
           onShortcuts={() => trackEvent('shortcuts_opened')}
         />
 
-        <header className="page-header-shell">
-          <div>
-            <div className="page-header-badge">{pageMeta.badge}</div>
-            <h1>{pageMeta.title}</h1>
-            <p>{pageMeta.subtitle}</p>
-          </div>
+        {!isCrmJuridico ? (
+          <header className="page-header-shell">
+            <div>
+              <div className="page-header-badge">{pageMeta.badge}</div>
+              <h1>{pageMeta.title}</h1>
+              <p>{pageMeta.subtitle}</p>
+            </div>
 
-          <div className="page-header-actions">
-            {isDashboard ? (
-              <>
-                <button className="btn-primary" onClick={() => trackEvent('header_new_task_click')}>Nova Tarefa</button>
-                <button className="btn-secondary" onClick={() => trackEvent('header_view_agenda_click')}>Ver Agenda</button>
-              </>
-            ) : (
-              <button className="btn-primary" onClick={() => fetchHome()}>Atualizar dados</button>
-            )}
-          </div>
-        </header>
+            <div className="page-header-actions">
+              {isDashboard ? (
+                <>
+                  <button className="btn-primary" onClick={() => trackEvent('header_new_task_click')}>Nova Tarefa</button>
+                  <button className="btn-secondary" onClick={() => trackEvent('header_view_agenda_click')}>Ver Agenda</button>
+                </>
+              ) : (
+                <button className="btn-primary" onClick={() => fetchHome()}>Atualizar dados</button>
+              )}
+            </div>
+          </header>
+        ) : null}
 
         {error && <p className="error">{error}</p>}
 

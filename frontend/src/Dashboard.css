@@ -83,6 +83,35 @@
   font-weight: var(--font-weight-semibold);
 }
 
+/* Semantic chip variants */
+.dashboard-hero-chip--warning {
+  background: var(--warning-50, #fffbeb);
+  border-color: var(--warning-300, #fcd34d);
+  color: var(--warning-800, #92400e);
+}
+
+.dashboard-hero-chip--error {
+  background: var(--error-50, #fef2f2);
+  border-color: var(--error-300, #fca5a5);
+  color: var(--error-800, #991b1b);
+}
+
+.dashboard-hero-chip--success {
+  background: var(--success-50, #f0fdf4);
+  border-color: var(--success-300, #86efac);
+  color: var(--success-800, #166534);
+}
+
+.dashboard-hero-chip--info {
+  background: var(--info-50, #eff6ff);
+  border-color: var(--info-300, #93c5fd);
+  color: var(--info-800, #1e40af);
+}
+
+.dashboard-hero-chip--neutral {
+  /* keep default brand style */
+}
+
 .support-layer {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1013,6 +1042,27 @@
   border: 2px solid var(--brand-500);
 }
 
+/* Timeline node color variants by event type */
+.agenda-timeline-node[data-event-type="audiencia"] {
+  background: var(--error-100, #fee2e2);
+  border-color: var(--error-500, #ef4444);
+}
+
+.agenda-timeline-node[data-event-type="reuniao"] {
+  background: var(--info-100, #dbeafe);
+  border-color: var(--info-500, #3b82f6);
+}
+
+.agenda-timeline-node[data-event-type="prazo"] {
+  background: var(--warning-100, #fef3c7);
+  border-color: var(--warning-500, #f59e0b);
+}
+
+.agenda-timeline-node[data-event-type="tarefa"] {
+  background: var(--success-100, #dcfce7);
+  border-color: var(--success-500, #22c55e);
+}
+
 .agenda-timeline-node::after {
   content: '';
   position: absolute;
@@ -1112,8 +1162,12 @@
   cursor: pointer;
 }
 
+.processes-table tbody tr:nth-child(odd) {
+  background: var(--surface-muted, rgba(0, 0, 0, 0.015));
+}
+
 .processes-table tbody tr:hover {
-  background: var(--neutral-50);
+  background: var(--brand-50, #eff6ff);
 }
 
 .queue-row {

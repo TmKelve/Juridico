@@ -19,6 +19,7 @@ export function TodayAgendaWidget({ items }: TodayAgendaWidgetProps) {
               time={item.hour}
               title={item.label}
               context={item.context}
+              eventType={item.type}
             />
           ))}
         </ul>

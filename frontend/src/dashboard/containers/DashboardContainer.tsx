@@ -88,10 +88,10 @@ export function DashboardContainer({ user }: DashboardContainerProps) {
       dateLabel: longDate.charAt(0).toUpperCase() + longDate.slice(1),
       summary: `Você tem ${agendaToday} compromisso(s) no dia, ${todayCount} item(ns) para atuar hoje e ${overdueCount} atraso(s) exigindo correção.`,
       insights: [
-        `${todayCount} item(ns) exigem atuação hoje`,
-        `${overdueCount} atraso(s) pedem correção imediata`,
-        `${pausedCount} processo(s) estão sem avanço`,
-        `${agendaToday} compromisso(s) no dia`,
+        { text: `${todayCount} item(ns) exigem atuação hoje`, tone: todayCount > 0 ? 'warning' : 'neutral' },
+        { text: `${overdueCount} atraso(s) pedem correção imediata`, tone: overdueCount > 0 ? 'error' : 'success' },
+        { text: `${pausedCount} processo(s) estão sem avanço`, tone: pausedCount > 0 ? 'warning' : 'neutral' },
+        { text: `${agendaToday} compromisso(s) no dia`, tone: 'info' },
       ],
     };
   }, [agenda.length, items, profile]);
@@ -181,7 +181,6 @@ export function DashboardContainer({ user }: DashboardContainerProps) {
           <section className="dashboard-hero" aria-label="Resumo do dia">
             <div className="dashboard-hero-copy">
               <div className="dashboard-hero-eyebrow">Painel de responsabilidades</div>
-              <h2>{hero.title}</h2>
               <div className="dashboard-hero-date">{hero.dateLabel}</div>
               <p>{hero.subtitle}</p>
               <p className="dashboard-hero-summary">{hero.summary}</p>
@@ -189,7 +188,7 @@ export function DashboardContainer({ user }: DashboardContainerProps) {
 
             <div className="dashboard-hero-insights" aria-label="Insights do dia">
               {hero.insights.map((insight) => (
-                <span key={insight} className="dashboard-hero-chip">{insight}</span>
+                <span key={insight.text} className={`dashboard-hero-chip dashboard-hero-chip--${insight.tone}`}>{insight.text}</span>
               ))}
             </div>
           </section>

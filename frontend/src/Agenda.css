@@ -136,6 +136,10 @@
   border-left: 3px solid var(--error-600);
 }
 
+.agenda-kpi-card--success {
+  border-left: 3px solid var(--success-600);
+}
+
 .agenda-alert {
   display: flex;
   gap: var(--space-2);
@@ -450,9 +454,11 @@
 }
 
 .agenda-week-column--today {
-  border-color: color-mix(in srgb, var(--brand-500) 45%, var(--border-default) 55%);
-  background: color-mix(in srgb, var(--brand-50) 70%, white 30%);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-300) 35%, transparent);
+  border-color: var(--brand-400, #60a5fa);
+  background: color-mix(in srgb, var(--brand-50) 85%, white 15%);
+  box-shadow:
+    inset 0 3px 0 0 var(--brand-500, #3b82f6),
+    0 2px 8px rgba(59, 130, 246, 0.08);
 }
 
 .agenda-week-column > header,

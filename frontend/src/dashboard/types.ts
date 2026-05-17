@@ -28,6 +28,7 @@ export interface AgendaItem {
   hour: string;
   label: string;
   context: string;
+  type?: 'audiencia' | 'reuniao' | 'prazo' | 'tarefa';
 }
 
 export interface MovementItem {

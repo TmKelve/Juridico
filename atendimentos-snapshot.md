@@ -1,0 +1,166 @@
+- generic [ref=e18] [box=0,0,994,1304]:
+  - complementary "Navegação principal" [ref=e19] [box=0,0,72,1304]:
+    - generic [ref=e20] [box=0,0,71,1135]:
+      - generic "Lexora" [ref=e21] [box=12,24,47,32]:
+        - img [ref=e22] [box=20,24,32,32]
+      - navigation "Navegação principal" [ref=e23] [box=12,88,47,544]:
+        - link [ref=e24] [cursor=pointer] [box=12,88,47,40]:
+          - /url: /usuarios
+          - img [ref=e26] [box=28,100,16,16]
+        - link [ref=e31] [cursor=pointer] [box=12,130,47,40]:
+          - /url: /
+          - img [ref=e33] [box=28,142,16,16]
+        - link [ref=e36] [cursor=pointer] [box=12,172,47,40]:
+          - /url: /processos
+          - img [ref=e38] [box=28,184,16,16]
+        - link [ref=e42] [cursor=pointer] [box=12,214,47,40]:
+          - /url: /tarefas
+          - img [ref=e44] [box=28,226,16,16]
+        - link [ref=e48] [cursor=pointer] [box=12,256,47,40]:
+          - /url: /prazos
+          - img [ref=e50] [box=28,268,16,16]
+        - link [ref=e53] [cursor=pointer] [box=12,298,47,40]:
+          - /url: /documentos
+          - img [ref=e55] [box=28,310,16,16]
+        - link [ref=e57] [cursor=pointer] [box=12,340,47,40]:
+          - /url: /modelos-pecas
+          - img [ref=e59] [box=28,352,16,16]
+        - link [ref=e61] [cursor=pointer] [box=12,382,47,40]:
+          - /url: /publicacoes-intimacoes
+          - img [ref=e63] [box=28,394,16,16]
+        - link [ref=e66] [cursor=pointer] [box=12,424,47,40]:
+          - /url: /atendimentos
+          - img [ref=e68] [box=28,436,16,16]
+        - link [ref=e73] [cursor=pointer] [box=12,466,47,40]:
+          - /url: /clientes
+          - img [ref=e75] [box=28,478,16,16]
+        - link [ref=e78] [cursor=pointer] [box=12,508,47,40]:
+          - /url: /agenda
+          - img [ref=e80] [box=28,520,16,16]
+        - button [ref=e82] [cursor=pointer] [box=12,550,47,40]:
+          - img [ref=e84] [box=28,562,16,16]
+        - button [ref=e86] [cursor=pointer] [box=12,592,47,40]:
+          - img [ref=e88] [box=28,604,16,16]
+    - generic [ref=e91] [box=0,1135,71,169]:
+      - generic [ref=e92] [box=12,1148,47,82]:
+        - button [ref=e93] [cursor=pointer] [box=12,1148,47,40]:
+          - img [ref=e95] [box=28,1160,16,16]
+        - button [ref=e98] [cursor=pointer] [box=12,1190,47,40]:
+          - img [ref=e100] [box=28,1202,16,16]
+      - 'generic "Usuário: Coordenador Jurídico" [ref=e103] [box=12,1242,47,42]':
+        - generic [ref=e104] [box=21,1254,30,30]: A
+  - main [ref=e105] [box=72,0,922,1304]:
+    - banner [ref=e106] [box=88,16,875,56]:
+      - generic [ref=e107] [box=104,21,624,46]:
+        - button "Alternar navegação" [ref=e108] [cursor=pointer] [box=104,24,36,40]:
+          - img [ref=e109] [box=113,35,18,18]
+        - generic "Busca global" [ref=e110] [box=152,21,280,38]:
+          - img [ref=e111] [box=165,32,15,15]
+          - searchbox "Buscar processo, cliente, tarefa ou responsável" [ref=e114] [box=188,21,231,38]
+      - generic [ref=e115] [box=744,24,203,40]:
+        - generic [ref=e116] [box=744,24,112,40]:
+          - button "Abrir notificações" [ref=e117] [cursor=pointer] [box=744,24,36,40]:
+            - img [ref=e118] [box=753,35,18,18]
+            - generic "3 notificações" [box=758,28,18,16]: "3"
+          - button "Abrir atalhos" [ref=e121] [cursor=pointer] [box=782,24,36,40]:
+            - img [ref=e122] [box=791,35,18,18]
+          - button "Abrir ajuda" [ref=e127] [cursor=pointer] [box=820,24,36,40]:
+            - img [ref=e128] [box=829,35,18,18]
+        - button "Abrir menu do perfil" [ref=e132] [cursor=pointer] [box=881,24,66,40]:
+          - generic [ref=e133] [box=885,28,32,32]: A
+          - img [ref=e134] [box=925,37,14,14]
+    - generic [ref=e136] [box=88,92,875,108]:
+      - generic [ref=e137] [box=88,92,520,108]:
+        - generic [ref=e138] [box=88,98,64,17]: Operação
+        - heading "Atendimentos" [level=1] [ref=e139] [box=88,119,520,31]
+        - paragraph [ref=e140] [box=88,154,520,46]: Registre interações, acompanhe retornos e mantenha cada vínculo cliente–processo atualizado.
+      - button "Atualizar dados" [ref=e142] [cursor=pointer] [box=833,92,130,40]
+    - generic [ref=e144] [box=88,220,875,1400]:
+      - generic [ref=e145] [box=88,220,875,191]:
+        - generic [ref=e146] [box=109,237,580,101]:
+          - paragraph [ref=e147] [box=109,237,580,18]: Gestão Relacional
+          - heading "Atendimentos" [level=2] [ref=e148] [box=109,259,580,29]
+          - paragraph [ref=e149] [box=109,296,580,42]: Registre interações, acompanhe retornos e mantenha cada vínculo cliente–processo atualizado.
+        - generic [ref=e150] [box=109,354,455,40]:
+          - button "Registrar novo atendimento" [ref=e151] [cursor=pointer] [box=109,354,172,40]:
+            - img [ref=e152] [box=125,367,14,14]
+            - text: Novo Atendimento
+          - button "Agendar retorno para cliente" [ref=e153] [cursor=pointer] [box=289,354,161,40]:
+            - img [ref=e154] [box=306,367,14,14]
+            - text: Agendar Retorno
+          - button "Exportar atendimentos como CSV" [ref=e156] [cursor=pointer] [box=458,354,106,40]:
+            - img [ref=e157] [box=475,367,14,14]
+            - text: Exportar
+      - generic "Indicadores de atendimento" [ref=e160] [box=88,427,875,270]:
+        - generic [ref=e161] [box=88,427,432,82]:
+          - paragraph [ref=e162] [box=107,440,396,18]: Atendimentos hoje
+          - strong [ref=e163] [box=107,466,396,30]: "0"
+        - generic [ref=e164] [box=532,427,432,82]:
+          - paragraph [ref=e165] [box=551,440,396,18]: Retornos pendentes
+          - strong [ref=e166] [box=551,466,396,30]: "2"
+        - generic [ref=e167] [box=88,521,432,82]:
+          - paragraph [ref=e168] [box=107,534,396,18]: Clientes sem resposta
+          - strong [ref=e169] [box=107,560,396,30]: "0"
+        - generic [ref=e170] [box=532,521,432,82]:
+          - paragraph [ref=e171] [box=551,534,396,18]: Interações na semana
+          - strong [ref=e172] [box=551,560,396,30]: "6"
+        - generic [ref=e173] [box=88,615,432,82]:
+          - paragraph [ref=e174] [box=107,628,396,18]: Processos críticos
+          - strong [ref=e175] [box=107,654,396,30]: "0"
+      - generic [ref=e176] [box=88,713,875,430]:
+        - generic [ref=e177] [box=109,730,833,330]:
+          - generic [ref=e178] [box=109,730,553,42]:
+            - generic [ref=e179] [box=108,729,1,1]: Buscar atendimento
+            - generic [ref=e180] [box=109,730,553,42]
+          - generic [ref=e185] [box=109,780,413,64]:
+            - generic [ref=e186] [box=109,780,413,18]: Cliente
+            - combobox "Cliente" [ref=e187] [cursor=pointer] [box=109,810,413,34]
+          - generic [ref=e188] [box=530,780,413,64]:
+            - generic [ref=e189] [box=530,780,413,18]: Processo
+            - combobox "Processo" [ref=e190] [cursor=pointer] [box=530,810,413,34]
+          - generic [ref=e191] [box=109,852,413,64]:
+            - generic [ref=e192] [box=109,852,413,18]: Canal
+            - combobox "Canal" [ref=e193] [cursor=pointer] [box=109,882,413,34]
+          - generic [ref=e194] [box=530,852,413,64]:
+            - generic [ref=e195] [box=530,852,413,18]: Status
+            - combobox "Status" [ref=e196] [cursor=pointer] [box=530,882,413,34]
+          - generic [ref=e197] [box=109,924,413,64]:
+            - generic [ref=e198] [box=109,924,413,18]: Responsável
+            - combobox "Responsável" [ref=e199] [cursor=pointer] [box=109,954,413,34]
+          - generic [ref=e200] [box=530,924,413,64]:
+            - generic [ref=e201] [box=530,924,413,18]: Período
+            - combobox "Período" [ref=e202] [cursor=pointer] [box=530,954,413,34]
+          - generic [ref=e203] [box=109,996,413,64]:
+            - generic [ref=e204] [box=109,996,413,18]: Área
+            - combobox "Área" [ref=e205] [cursor=pointer] [box=109,1026,413,34]
+        - generic [ref=e206] [box=109,1072,833,54]:
+          - generic [ref=e207] [cursor=pointer] [box=109,1072,153,46]:
+            - checkbox "Mostrar apenas atendimentos com retorno pendente" [ref=e208] [box=113,1075,14,40]
+            - text: Com retorno pendente
+          - generic [ref=e209] [cursor=pointer] [box=274,1072,135,46]:
+            - checkbox "Mostrar apenas atendimentos sem próximo passo" [ref=e210] [box=278,1075,14,40]
+            - text: Sem próximo passo
+          - generic [ref=e211] [box=515,1079,214,40]:
+            - button "Limpar todos os filtros" [ref=e212] [cursor=pointer] [box=515,1079,89,40]
+            - button "Salvar filtro atual" [ref=e216] [cursor=pointer] [box=611,1079,117,40]
+          - group "Modo de visualização" [ref=e221] [box=741,1077,201,44]:
+            - button "Lista" [pressed] [ref=e222] [cursor=pointer] [box=743,1079,49,40]
+            - button "Conversa" [ref=e223] [cursor=pointer] [box=794,1079,74,40]
+            - button "Timeline" [ref=e224] [cursor=pointer] [box=870,1079,70,40]
+      - generic [ref=e225] [box=88,1159,875,461]:
+        - generic [ref=e226] [box=89,1160,873,60]:
+          - generic [ref=e227] [box=109,1178,109,22]: 6 atendimentos
+          - generic [ref=e228] [box=810,1172,132,35]:
+            - generic [ref=e229] [box=809,1189,1,1]: Ordenar por
+            - combobox "Ordenar por" [ref=e230] [box=810,1175,93,28]
+            - button "Ordem decrescente (clique para crescente)" [ref=e231] [cursor=pointer] [box=911,1172,31,35]: ↓
+        - table "Lista de atendimentos" [ref=e233] [box=89,1220,1112,384]:
+          - rowgroup [ref=e234] [box=90,1220,1111,35]:
+            - row "Cliente Processo Canal Assunto / Resumo Data Status Próximo passo Ações" [ref=e235] [box=90,1220,1111,35]
+          - rowgroup [ref=e245] [box=90,1255,1111,348]:
+            - 'row "Atendimento de Cliente Atlas: Informações sobre data de audiência" [ref=e246] [cursor=pointer] [box=90,1255,1111,58]'
+            - 'row "Atendimento de Cliente Nexo: Urgência: notificação recebida" [ref=e273] [cursor=pointer] [box=90,1313,1111,58]'
+            - 'row "Atendimento de Cliente Atlas: Atualização de dados de contato" [ref=e300] [cursor=pointer] [box=90,1371,1111,58]'
+            - 'row "Atendimento de Cliente Nexo: Prazo e pagamento de custas" [ref=e327] [cursor=pointer] [box=90,1429,1111,58]'
+            - 'row "Atendimento de Cliente Prisma: Resultado de diligência judicial" [ref=e354] [cursor=pointer] [box=90,1487,1111,58]'
+            - 'row "Atendimento de Cliente Prisma: Solicitação de extensão de prazo" [ref=e381] [cursor=pointer] [box=90,1545,1111,58]'
