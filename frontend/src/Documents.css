@@ -112,6 +112,29 @@
   gap: var(--space-3);
 }
 
+.documents-quick-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.status-shortcut {
+  min-height: 30px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--neutral-300);
+  background: var(--white);
+  padding: 0 var(--space-3);
+  font-size: var(--font-size-xs);
+  color: var(--neutral-700);
+}
+
+.status-shortcut.is-active {
+  border-color: var(--brand-300);
+  background: var(--brand-100);
+  color: var(--brand-700);
+  font-weight: var(--font-weight-semibold);
+}
+
 .documents-filters-grid-top,
 .documents-filters-grid-bottom {
   display: grid;
@@ -131,7 +154,7 @@
 }
 
 .documents-field.search {
-  grid-column: span 4;
+  grid-column: span 5;
 }
 
 .documents-field select,
@@ -185,9 +208,11 @@
 }
 
 .documents-filter-actions {
-  grid-column: span 5;
+  grid-column: span 3;
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
 
@@ -214,6 +239,17 @@
   display: inline-flex;
   align-items: center;
   padding: 0 var(--space-2);
+}
+
+.documents-active-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.active-filter-chip--dismiss {
+  gap: 6px;
+  cursor: pointer;
 }
 
 .documents-checklist-shell {
@@ -725,7 +761,6 @@
 
   .documents-filter-actions {
     justify-content: flex-start;
-    flex-wrap: wrap;
   }
 
   .documents-table-shell {

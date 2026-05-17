@@ -10,6 +10,8 @@ import {
   FolderOpen,
   Grid3X3,
   List,
+  ChevronDown,
+  ChevronUp,
   MoreHorizontal,
   RefreshCw,
   Save,
@@ -92,6 +94,7 @@ export function Documents({ user }: DocumentsProps) {
   const [selectedDocument, setSelectedDocument] = useState<DocumentItem | null>(null);
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [page, setPage] = useState(1);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   const [checklist, setChecklist] = useState<ChecklistItem[]>([
     { id: 'chk-1', title: 'Documento de identidade', required: true, received: false, linkedDocumentId: null },
@@ -151,6 +154,10 @@ export function Documents({ user }: DocumentsProps) {
 
   function updateFilter<K extends keyof DocumentFilters>(key: K, value: DocumentFilters[K]) {
     setFilters((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function removeFilterChip(key: keyof DocumentFilters) {
+    updateFilter(key as never, EMPTY_FILTERS[key] as never);
   }
 
   function clearFilters() {
@@ -334,6 +341,20 @@ export function Documents({ user }: DocumentsProps) {
     () => JSON.stringify(filters) !== JSON.stringify(EMPTY_FILTERS),
     [filters]
   );
+  const activeFilterChips = useMemo(() => {
+    const chips: Array<{ key: keyof DocumentFilters; label: string }> = [];
+    if (filters.query) chips.push({ key: 'query', label: `Busca: ${filters.query}` });
+    if (filters.client) chips.push({ key: 'client', label: `Cliente: ${filters.client}` });
+    if (filters.process) chips.push({ key: 'process', label: `Processo: ${filters.process}` });
+    if (filters.category) chips.push({ key: 'category', label: `Categoria: ${filters.category}` });
+    if (filters.status) chips.push({ key: 'status', label: `Status: ${filters.status}` });
+    if (filters.origin) chips.push({ key: 'origin', label: `Origem: ${filters.origin}` });
+    if (filters.period) chips.push({ key: 'period', label: `Período: ${filters.period}d` });
+    if (filters.version !== 'todas') chips.push({ key: 'version', label: `Versão: ${filters.version}` });
+    if (filters.pendingOnly) chips.push({ key: 'pendingOnly', label: 'Apenas pendentes' });
+    if (filters.requiredOnly) chips.push({ key: 'requiredOnly', label: 'Checklist obrigatório' });
+    return chips;
+  }, [filters]);
 
   const emptyWithoutData = !loading && !error && documents.length === 0;
   const emptyWithFilter = !loading && !error && documents.length > 0 && sortedDocuments.length === 0;
@@ -427,16 +448,31 @@ export function Documents({ user }: DocumentsProps) {
       )}
 
       <section className="documents-filters" aria-label="Busca e filtros de documentos">
+        <div className="documents-quick-status">
+          <button className={`status-shortcut ${filters.status === '' ? 'is-active' : ''}`} onClick={() => updateFilter('status', '')}>
+            Todos
+          </button>
+          <button className={`status-shortcut ${filters.status === 'pendente' ? 'is-active' : ''}`} onClick={() => updateFilter('status', 'pendente')}>
+            Pendentes
+          </button>
+          <button className={`status-shortcut ${filters.status === 'aguardando_validacao' ? 'is-active' : ''}`} onClick={() => updateFilter('status', 'aguardando_validacao')}>
+            Aguardando validação
+          </button>
+          <button className={`status-shortcut ${filters.status === 'validado' ? 'is-active' : ''}`} onClick={() => updateFilter('status', 'validado')}>
+            Validados
+          </button>
+        </div>
+
         <div className="documents-filters-grid-top">
           <label className="documents-field search">
-            <span>Busca</span>
+            <span>Busca principal</span>
             <div className="input-icon-wrap">
               <Search size={14} aria-hidden="true" />
               <input
                 type="search"
                 value={filters.query}
                 onChange={(event) => updateFilter('query', event.target.value)}
-                placeholder="Nome, cliente, processo, categoria ou observacao"
+                placeholder="Nome do documento, cliente, processo ou observação"
               />
             </div>
           </label>
@@ -475,81 +511,98 @@ export function Documents({ user }: DocumentsProps) {
               <option value="rejeitado">Rejeitado</option>
             </select>
           </label>
-        </div>
-
-        <div className="documents-filters-grid-bottom">
-          <label className="documents-field">
-            <span>Versao</span>
-            <select value={filters.version} onChange={(event) => updateFilter('version', event.target.value as VersionFilter)}>
-              <option value="todas">Todas</option>
-              <option value="mais_recente">Mais recente</option>
-              <option value="historicas">Historicas</option>
-            </select>
-          </label>
-
-          <label className="documents-field">
-            <span>Origem</span>
-            <select value={filters.origin} onChange={(event) => updateFilter('origin', event.target.value)}>
-              <option value="">Todas</option>
-              {ORIGINS.map((origin) => <option key={origin} value={origin}>{origin}</option>)}
-            </select>
-          </label>
-
-          <label className="documents-field">
-            <span>Periodo</span>
-            <select value={filters.period} onChange={(event) => updateFilter('period', event.target.value)}>
-              <option value="">Qualquer periodo</option>
-              <option value="3">Ultimos 3 dias</option>
-              <option value="7">Ultimos 7 dias</option>
-              <option value="15">Ultimos 15 dias</option>
-              <option value="30">Ultimos 30 dias</option>
-            </select>
-          </label>
-
-          <label className="documents-checkline">
-            <input
-              type="checkbox"
-              checked={filters.pendingOnly}
-              onChange={(event) => updateFilter('pendingOnly', event.target.checked)}
-            />
-            Apenas pendentes
-          </label>
-
-          <label className="documents-checkline">
-            <input
-              type="checkbox"
-              checked={filters.requiredOnly}
-              onChange={(event) => updateFilter('requiredOnly', event.target.checked)}
-            />
-            Checklist obrigatorio
-          </label>
-
-          <label className="documents-field">
-            <span>Ordenar por</span>
-            <select value={sortBy} onChange={(event) => setSortBy(event.target.value as SortField)}>
-              <option value="data">Data</option>
-              <option value="versao">Versao</option>
-              <option value="status">Status</option>
-            </select>
-          </label>
-
-          <label className="documents-field">
-            <span>Direcao</span>
-            <select value={sortDirection} onChange={(event) => setSortDirection(event.target.value as SortDirection)}>
-              <option value="asc">Ascendente</option>
-              <option value="desc">Descendente</option>
-            </select>
-          </label>
-
           <div className="documents-filter-actions">
-            <button className="btn-ghost" onClick={clearFilters}><Filter size={14} aria-hidden="true" />Limpar filtros</button>
+            <button className="btn-ghost" onClick={() => setShowAdvancedFilters((prev) => !prev)}>
+              <Filter size={14} aria-hidden="true" />
+              Filtros avançados
+              {showAdvancedFilters ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
+            </button>
+            <button className="btn-ghost" onClick={clearFilters}><Filter size={14} aria-hidden="true" />Limpar</button>
             <button className="btn-ghost" onClick={saveFilters}><Save size={14} aria-hidden="true" />Salvar filtro</button>
             <button className="btn-ghost" onClick={() => setViewMode((prev) => (prev === 'lista' ? 'grade' : 'lista'))}>
               {viewMode === 'lista' ? <Grid3X3 size={14} aria-hidden="true" /> : <List size={14} aria-hidden="true" />}
-              {viewMode === 'lista' ? 'Lista / Grade' : 'Grade / Lista'}
+              {viewMode === 'lista' ? 'Visualizar em grade' : 'Visualizar em lista'}
             </button>
           </div>
         </div>
+
+        {showAdvancedFilters ? (
+          <div className="documents-filters-grid-bottom">
+            <label className="documents-field">
+              <span>Versao</span>
+              <select value={filters.version} onChange={(event) => updateFilter('version', event.target.value as VersionFilter)}>
+                <option value="todas">Todas</option>
+                <option value="mais_recente">Mais recente</option>
+                <option value="historicas">Historicas</option>
+              </select>
+            </label>
+
+            <label className="documents-field">
+              <span>Origem</span>
+              <select value={filters.origin} onChange={(event) => updateFilter('origin', event.target.value)}>
+                <option value="">Todas</option>
+                {ORIGINS.map((origin) => <option key={origin} value={origin}>{origin}</option>)}
+              </select>
+            </label>
+
+            <label className="documents-field">
+              <span>Periodo</span>
+              <select value={filters.period} onChange={(event) => updateFilter('period', event.target.value)}>
+                <option value="">Qualquer periodo</option>
+                <option value="3">Ultimos 3 dias</option>
+                <option value="7">Ultimos 7 dias</option>
+                <option value="15">Ultimos 15 dias</option>
+                <option value="30">Ultimos 30 dias</option>
+              </select>
+            </label>
+
+            <label className="documents-checkline">
+              <input
+                type="checkbox"
+                checked={filters.pendingOnly}
+                onChange={(event) => updateFilter('pendingOnly', event.target.checked)}
+              />
+              Apenas pendentes
+            </label>
+
+            <label className="documents-checkline">
+              <input
+                type="checkbox"
+                checked={filters.requiredOnly}
+                onChange={(event) => updateFilter('requiredOnly', event.target.checked)}
+              />
+              Checklist obrigatorio
+            </label>
+
+            <label className="documents-field">
+              <span>Ordenar por</span>
+              <select value={sortBy} onChange={(event) => setSortBy(event.target.value as SortField)}>
+                <option value="data">Data</option>
+                <option value="versao">Versao</option>
+                <option value="status">Status</option>
+              </select>
+            </label>
+
+            <label className="documents-field">
+              <span>Direcao</span>
+              <select value={sortDirection} onChange={(event) => setSortDirection(event.target.value as SortDirection)}>
+                <option value="asc">Ascendente</option>
+                <option value="desc">Descendente</option>
+              </select>
+            </label>
+          </div>
+        ) : null}
+
+        {activeFilterChips.length > 0 ? (
+          <div className="documents-active-filters">
+            {activeFilterChips.map((chip) => (
+              <button key={`${chip.key}-${chip.label}`} type="button" className="active-filter-chip active-filter-chip--dismiss" onClick={() => removeFilterChip(chip.key)}>
+                {chip.label}
+                <X size={12} aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         <div className="documents-filter-summary">
           <strong>{sortedDocuments.length}</strong> documento(s) na visualizacao atual.
