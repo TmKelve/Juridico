@@ -352,6 +352,15 @@ Origem:
 
 - direto da API
 
+Ações observadas:
+
+- `PUT /crm/leads/:id`
+- `PUT /crm/opportunities/:id`
+- `POST /crm/leads/:id/contact-events`
+- `POST /crm/opportunities/:id/contact-events`
+- `POST /crm/leads/:id/convert`
+- `POST /crm/opportunities/:id/convert`
+
 ## 5. Mapeamento Por Tela
 
 ### Login

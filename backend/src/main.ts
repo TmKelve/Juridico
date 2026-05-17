@@ -3168,6 +3168,131 @@ app.post('/crm/leads/:id/convert', async (req, res) => {
   });
 });
 
+app.post('/crm/opportunities/:id/convert', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+  if (!canAccessCrm(decoded)) return res.status(403).send({ message: 'Acesso negado' });
+
+  const opportunity = await prisma.crmOpportunity.findUnique({
+    where: { id: Number(req.params.id) },
+    include: { clientRecord: true, contactEvents: { orderBy: { createdAt: 'desc' } } },
+  });
+  if (!opportunity) return res.status(404).send({ message: 'Oportunidade não encontrada' });
+
+  const clientName = typeof req.body?.clientName === 'string' ? req.body.clientName.trim() : '';
+  const processTitle = typeof req.body?.processTitle === 'string' ? req.body.processTitle.trim() : '';
+  const processPhase = typeof req.body?.processPhase === 'string' ? req.body.processPhase.trim() : '';
+  const processStatus = typeof req.body?.processStatus === 'string' ? req.body.processStatus.trim() : '';
+  const processNumber = normalizeProcessNumber(req.body?.processNumber);
+
+  if (!clientName || !processTitle || !processPhase || !processStatus) {
+    return res.status(400).send({ message: 'Cliente e dados principais do processo são obrigatórios' });
+  }
+
+  if (processNumber) {
+    const existingProcess = await prisma.process.findFirst({ where: { processNumber } });
+    if (existingProcess) {
+      return res.status(409).send({ message: 'Esse numero de processo ja esta cadastrado na carteira' });
+    }
+  }
+
+  let client = null as any;
+
+  if (typeof req.body?.clientId === 'number') {
+    client = await clientStore.findUnique({ where: { id: req.body.clientId } });
+  }
+
+  if (!client && opportunity.clientId) {
+    client = await clientStore.findUnique({ where: { id: opportunity.clientId } });
+  }
+
+  if (!client && opportunity.cpf) {
+    client = await clientStore.findFirst({ where: { cpfCnpj: opportunity.cpf } });
+  }
+
+  if (!client) {
+    client = await clientStore.findFirst({ where: { name: clientName } });
+  }
+
+  if (client) {
+    client = await clientStore.update({
+      where: { id: client.id },
+      data: {
+        cpfCnpj: opportunity.cpf || client.cpfCnpj,
+        legalArea: processPhase || client.legalArea,
+        responsible: opportunity.responsible || getResponsibleLabel(decoded.email),
+        status: client.status || 'ativo',
+      },
+    });
+  } else {
+    client = await clientStore.create({
+      data: {
+        name: clientName,
+        type: 'PF',
+        cpfCnpj: opportunity.cpf || null,
+        status: 'ativo',
+        legalArea: processPhase,
+        responsible: opportunity.responsible || getResponsibleLabel(decoded.email),
+        notes: 'Cliente criado a partir da conversão de oportunidade do CRM Jurídico.',
+      },
+    });
+  }
+
+  const createdProcess = await prisma.process.create({
+    data: {
+      title: processTitle,
+      processNumber: processNumber || null,
+      client: client.name,
+      clientId: client.id,
+      phase: processPhase,
+      status: processStatus,
+      ownerId: decoded.sub,
+    },
+    include: {
+      owner: { select: { id: true, email: true, role: true } },
+      clientRecord: true,
+    },
+  });
+
+  const updatedOpportunity = await prisma.crmOpportunity.update({
+    where: { id: opportunity.id },
+    data: {
+      clientId: client.id,
+      personName: client.name,
+      status: 'ganha',
+      summary: typeof req.body?.summary === 'string' && req.body.summary.trim() ? req.body.summary.trim() : opportunity.summary,
+      contactEvents: {
+        create: {
+          kind: 'conversao',
+          summary: `Convertida em cliente e processo #${createdProcess.id}.`,
+          createdBy: decoded.email,
+        },
+      },
+    },
+    include: { clientRecord: true, triageItems: true, contactEvents: { orderBy: { createdAt: 'desc' } } },
+  });
+
+  res.status(201).json({
+    opportunity: buildCrmOpportunityPayload(updatedOpportunity),
+    client: {
+      id: client.id,
+      name: client.name,
+      cpfCnpj: client.cpfCnpj ?? '',
+      status: client.status,
+      responsible: client.responsible ?? '',
+    },
+    process: {
+      id: createdProcess.id,
+      title: createdProcess.title,
+      processNumber: createdProcess.processNumber ?? '',
+      phase: createdProcess.phase,
+      status: createdProcess.status,
+      clientId: createdProcess.clientId,
+      client: createdProcess.client,
+    },
+  });
+});
+
 app.get('/publications', async (req, res) => {
   const decoded = getUserFromReq(req);
   if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });

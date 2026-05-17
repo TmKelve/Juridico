@@ -45,6 +45,14 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
   const [selectedOpportunity, setSelectedOpportunity] = useState<ApiCrmOpportunity | null>(null);
   const [contactNote, setContactNote] = useState('');
   const [nextContactDraft, setNextContactDraft] = useState('');
+  const [showOpportunityConversion, setShowOpportunityConversion] = useState(false);
+  const [conversionForm, setConversionForm] = useState({
+    clientName: '',
+    processTitle: '',
+    processNumber: '',
+    processPhase: 'Inicial',
+    processStatus: 'Ativo',
+  });
 
   useEffect(() => {
     trackPageView('crm_juridico', { role: user.role });
@@ -193,6 +201,18 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     setNextContactDraft(formatDateTimeLocal(selected?.nextContactAt ?? null));
   }, [tab, selectedLead?.id, selectedOpportunity?.id]);
 
+  useEffect(() => {
+    if (!selectedOpportunity) return;
+    setConversionForm({
+      clientName: selectedOpportunity.client || selectedOpportunity.personName,
+      processTitle: selectedOpportunity.summary.slice(0, 120) || `Novo processo - ${selectedOpportunity.personName}`,
+      processNumber: '',
+      processPhase: 'Inicial',
+      processStatus: 'Ativo',
+    });
+    setShowOpportunityConversion(false);
+  }, [selectedOpportunity?.id]);
+
   const filteredLeads = useMemo(() => {
     const q = search.trim().toLowerCase();
     return leads.filter((item) => !q || [item.personName, item.client, item.cpf, item.summary, item.source].join(' ').toLowerCase().includes(q));
@@ -217,6 +237,26 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
       items: filteredOpportunities.filter((item) => item.status === status),
     }))
   ), [filteredOpportunities]);
+
+  async function convertOpportunity(item: ApiCrmOpportunity) {
+    const response = await api.convertCrmOpportunity(item.id, {
+      clientId: item.clientId,
+      clientName: conversionForm.clientName,
+      processTitle: conversionForm.processTitle,
+      processNumber: conversionForm.processNumber,
+      processPhase: conversionForm.processPhase,
+      processStatus: conversionForm.processStatus,
+      summary: item.summary,
+    });
+    if (response.status !== 201 || !response.data) {
+      setError(response.error || 'Não foi possível converter a oportunidade.');
+      return;
+    }
+    setOpportunities((prev) => prev.map((entry) => entry.id === item.id ? response.data!.opportunity : entry));
+    setSelectedOpportunity(response.data.opportunity);
+    setShowOpportunityConversion(false);
+    setSuccess(`Oportunidade convertida em cliente e processo #${response.data.process.id}.`);
+  }
 
   return (
     <div className="crm-page">
@@ -467,6 +507,44 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                         <small>{formatDateTime(event.createdAt)}{event.createdBy ? ` · ${event.createdBy}` : ''}</small>
                       </article>
                     ))}
+                  </div>
+                )}
+              </section>
+              <section className="crm-panel">
+                <h4>Conversão operacional</h4>
+                {!showOpportunityConversion ? (
+                  <button className="btn-primary" onClick={() => setShowOpportunityConversion(true)}>
+                    <TrendingUp size={14} />
+                    Converter em cliente + processo
+                  </button>
+                ) : (
+                  <div className="crm-conversion">
+                    <label className="crm-inline-field">
+                      <span>Cliente</span>
+                      <input value={conversionForm.clientName} onChange={(event) => setConversionForm((prev) => ({ ...prev, clientName: event.target.value }))} />
+                    </label>
+                    <label className="crm-inline-field">
+                      <span>Título do processo</span>
+                      <input value={conversionForm.processTitle} onChange={(event) => setConversionForm((prev) => ({ ...prev, processTitle: event.target.value }))} />
+                    </label>
+                    <label className="crm-inline-field">
+                      <span>Número do processo</span>
+                      <input value={conversionForm.processNumber} onChange={(event) => setConversionForm((prev) => ({ ...prev, processNumber: event.target.value }))} placeholder="Opcional" />
+                    </label>
+                    <div className="crm-conversion__grid">
+                      <label className="crm-inline-field">
+                        <span>Fase</span>
+                        <input value={conversionForm.processPhase} onChange={(event) => setConversionForm((prev) => ({ ...prev, processPhase: event.target.value }))} />
+                      </label>
+                      <label className="crm-inline-field">
+                        <span>Status</span>
+                        <input value={conversionForm.processStatus} onChange={(event) => setConversionForm((prev) => ({ ...prev, processStatus: event.target.value }))} />
+                      </label>
+                    </div>
+                    <div className="crm-drawer__actions">
+                      <button className="btn-primary" onClick={() => void convertOpportunity(selectedOpportunity)}>Confirmar conversão</button>
+                      <button className="btn-secondary" onClick={() => setShowOpportunityConversion(false)}>Cancelar</button>
+                    </div>
                   </div>
                 )}
               </section>

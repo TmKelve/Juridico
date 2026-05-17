@@ -877,6 +877,21 @@ export const api = {
   convertCrmLead: (id: number, data?: Partial<{ personName: string; status: string; summary: string }>) =>
     apiClient<{ lead: ApiCrmLead; opportunity: ApiCrmOpportunity }>(`/crm/leads/${id}/convert`, { method: 'POST', body: data ?? {} }),
 
+  convertCrmOpportunity: (id: number, data: {
+    clientId?: number | null;
+    clientName: string;
+    processTitle: string;
+    processNumber?: string;
+    processPhase: string;
+    processStatus: string;
+    summary?: string;
+  }) =>
+    apiClient<{
+      opportunity: ApiCrmOpportunity;
+      client: { id: number; name: string; cpfCnpj: string; status: string; responsible: string };
+      process: { id: number; title: string; processNumber: string; phase: string; status: string; clientId: number | null; client: string };
+    }>(`/crm/opportunities/${id}/convert`, { method: 'POST', body: data }),
+
   addCrmLeadContactEvent: (id: number, data: { kind?: string; summary: string; nextContactAt?: string | null }) =>
     apiClient<ApiCrmLead>(`/crm/leads/${id}/contact-events`, { method: 'POST', body: data }),
 
