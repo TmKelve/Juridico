@@ -32,6 +32,7 @@ type RawTriageItem = {
   };
   event?: {
     id: number;
+    publicationId?: number | null;
     title: string;
     summary: string;
     riskLevel: string;
@@ -107,6 +108,7 @@ export function buildTriageItemPayload(item: RawTriageItem) {
     event: item.event
       ? {
           id: item.event.id,
+          publicationId: (item.event as { publicationId?: number | null }).publicationId ?? null,
           title: item.event.title,
           summary: item.event.summary,
           riskLevel: item.event.riskLevel,

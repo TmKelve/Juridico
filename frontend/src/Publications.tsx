@@ -166,10 +166,11 @@ export function Publications({ user }: PublicationsProps) {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
+    const publicationId = params.get('publicationId');
     const processId = params.get('processId');
     const clientName = params.get('clientName');
 
-    if (!processId && !clientName) return;
+    if (!publicationId && !processId && !clientName) return;
 
     setFilters((prev) => ({
       ...prev,
@@ -359,12 +360,14 @@ export function Publications({ user }: PublicationsProps) {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
+    const publicationId = params.get('publicationId');
     const processId = params.get('processId');
     const clientName = params.get('clientName');
-    if (!publications.length || (!processId && !clientName)) return;
+    if (!publications.length || (!publicationId && !processId && !clientName)) return;
 
     const focused = [...publications]
       .filter((item) => {
+        if (publicationId) return String(item.id) === publicationId;
         if (processId) return String(item.processId) === processId;
         if (clientName) return item.client === clientName;
         return false;

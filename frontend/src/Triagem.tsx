@@ -215,12 +215,14 @@ export function Triagem({ user }: TriagemProps) {
 
   function openRelatedPublication(item: ApiTriageItem) {
     const params = new URLSearchParams();
+    if (item.event?.publicationId) params.set('publicationId', String(item.event.publicationId));
     if (item.processId) params.set('processId', String(item.processId));
     if (item.client) params.set('clientName', item.client);
     if (item.capture.processNumber) params.set('processNumber', item.capture.processNumber);
     navigate(`/publicacoes-intimacoes?${params.toString()}`);
     trackEvent('triage_open_publication', {
       id: item.id,
+      publicationId: item.event?.publicationId ?? 0,
       processId: item.processId ?? 0,
       hasClient: Boolean(item.client),
     });

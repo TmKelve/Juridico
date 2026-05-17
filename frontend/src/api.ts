@@ -236,6 +236,7 @@ export interface ApiTemplate {
 
 export interface ApiTriageEvent {
   id: number;
+  publicationId: number | null;
   title: string;
   summary: string;
   riskLevel: string;
