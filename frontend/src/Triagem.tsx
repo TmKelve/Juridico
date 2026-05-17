@@ -8,13 +8,14 @@ import {
   ExternalLink,
   FileClock,
   Filter,
+  LoaderCircle,
   RefreshCw,
   Search,
   ShieldAlert,
   UserRoundSearch,
   X,
 } from 'lucide-react';
-import { api, type ApiTriageDecision, type ApiTriageItem } from './api';
+import { api, type ApiTriageDecision, type ApiTriageItem, type ApiTriageJob } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import './Triagem.css';
 
@@ -46,6 +47,15 @@ const CONFIDENCE_LABEL: Record<ApiTriageItem['aiConfidenceBand'], string> = {
   alta: 'Alta',
   media: 'Média',
   baixa: 'Baixa',
+};
+
+const SOURCE_LABEL: Record<string, string> = {
+  cnj: 'CNJ',
+  cpf: 'CPF',
+  diario_oficial: 'Diário Oficial',
+  diario: 'Diário Oficial',
+  oab: 'OAB',
+  scheduler: 'Scheduler',
 };
 
 function formatDateTime(iso: string) {
@@ -81,6 +91,9 @@ export function Triagem({ user }: TriagemProps) {
   const [statusFilter, setStatusFilter] = useState('');
   const [selected, setSelected] = useState<ApiTriageItem | null>(null);
   const [drawerLoading, setDrawerLoading] = useState(false);
+  const [jobs, setJobs] = useState<ApiTriageJob[]>([]);
+  const [jobsLoading, setJobsLoading] = useState(false);
+  const [runningSource, setRunningSource] = useState<string>('');
   const [discardReason, setDiscardReason] = useState<string>('duplicada');
   const [decisionNote, setDecisionNote] = useState('');
   const [assistDraft, setAssistDraft] = useState({
@@ -99,6 +112,7 @@ export function Triagem({ user }: TriagemProps) {
   useEffect(() => {
     trackPageView('triagem', { role: user.role });
     void loadItems();
+    void loadJobs();
   }, [user.role]);
 
   useEffect(() => {
@@ -122,6 +136,20 @@ export function Triagem({ user }: TriagemProps) {
       captureException(err as Error, { context: 'triage_load' });
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadJobs() {
+    setJobsLoading(true);
+    try {
+      const response = await api.getTriageJobs();
+      if (response.status === 200 && Array.isArray(response.data)) {
+        setJobs(response.data);
+      }
+    } catch (err) {
+      captureException(err as Error, { context: 'triage_jobs_load' });
+    } finally {
+      setJobsLoading(false);
     }
   }
 
@@ -242,6 +270,21 @@ export function Triagem({ user }: TriagemProps) {
     trackEvent('triage_decision', { id: item.id, decisionType });
   }
 
+  async function runJob(source: 'cnj' | 'cpf' | 'diario' | 'oab') {
+    setRunningSource(source);
+    setError('');
+    const response = await api.runTriageJob(source);
+    if (response.status !== 201 && response.status !== 200) {
+      setError(response.error || 'Não foi possível executar a coleta manual.');
+      setRunningSource('');
+      return;
+    }
+    await Promise.all([loadJobs(), loadItems()]);
+    setSuccess(`Coleta ${SOURCE_LABEL[source]} executada manualmente.`);
+    trackEvent('triage_job_run', { source });
+    setRunningSource('');
+  }
+
   const filteredItems = useMemo(() => {
     const normalized = search.trim().toLowerCase();
     return items.filter((item) => {
@@ -272,6 +315,7 @@ export function Triagem({ user }: TriagemProps) {
   }, [items]);
 
   const activeCount = filteredItems.length;
+  const latestJobs = jobs.slice(0, 4);
 
   function openRelatedPublication(item: ApiTriageItem) {
     const params = new URLSearchParams();
@@ -330,6 +374,52 @@ export function Triagem({ user }: TriagemProps) {
           <strong>{kpis.crmGenerated}</strong>
           <small>Leads e oportunidades derivados</small>
         </button>
+      </section>
+
+      <section className="triage-ops">
+        <div className="triage-ops__header">
+          <div>
+            <span className="triage-eyebrow">Observabilidade</span>
+            <h3>Últimos ciclos de coleta</h3>
+          </div>
+          <div className="triage-ops__actions">
+            {(['cnj', 'cpf', 'diario', 'oab'] as const).map((source) => (
+              <button
+                key={source}
+                className="btn-secondary"
+                onClick={() => void runJob(source)}
+                disabled={runningSource === source}
+              >
+                {runningSource === source ? <LoaderCircle size={14} className="triage-spin" /> : <RefreshCw size={14} />}
+                Rodar {SOURCE_LABEL[source]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="triage-jobs">
+          {jobsLoading ? (
+            <div className="triage-job triage-job--empty">Carregando jobs...</div>
+          ) : latestJobs.length === 0 ? (
+            <div className="triage-job triage-job--empty">Nenhum job registrado ainda.</div>
+          ) : (
+            latestJobs.map((job) => (
+              <article key={job.id} className={`triage-job triage-job--${job.status}`}>
+                <div className="triage-job__top">
+                  <strong>{SOURCE_LABEL[job.sourceType] || job.sourceType}</strong>
+                  <span className={`triage-job__status triage-job__status--${job.status}`}>{job.status}</span>
+                </div>
+                <div className="triage-job__meta">
+                  <span>{formatDateTime(job.scheduledFor)}</span>
+                  <span>{job.itemsCaptured} capturados</span>
+                  <span>{job.itemsFlaggedCritical} críticos</span>
+                  <span>{job.itemsSentToCrm} CRM</span>
+                </div>
+                {job.errorLog ? <p className="triage-job__error">{job.errorLog}</p> : null}
+              </article>
+            ))
+          )}
+        </div>
       </section>
 
       <section className="triage-workspace">

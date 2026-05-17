@@ -5,6 +5,7 @@
 
 .triage-hero,
 .triage-workspace,
+.triage-ops,
 .triage-kpi,
 .triage-card,
 .triage-panel,
@@ -47,6 +48,101 @@
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 16px;
+}
+
+.triage-ops {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+}
+
+.triage-ops__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: start;
+}
+
+.triage-ops__header h3 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.triage-ops__actions,
+.triage-jobs,
+.triage-job__meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.triage-jobs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.triage-job {
+  border: 1px solid var(--neutral-200, #dbe2ea);
+  border-radius: 14px;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+  background: #fff;
+}
+
+.triage-job--success { border-left: 4px solid #16a34a; }
+.triage-job--failed { border-left: 4px solid #dc2626; }
+.triage-job--running { border-left: 4px solid #2563eb; }
+.triage-job--partial_failure { border-left: 4px solid #f59e0b; }
+
+.triage-job__top {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.triage-job__status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.triage-job__status--success { background: #dcfce7; color: #166534; }
+.triage-job__status--failed { background: #fee2e2; color: #991b1b; }
+.triage-job__status--running { background: #dbeafe; color: #1d4ed8; }
+.triage-job__status--partial_failure { background: #fef3c7; color: #92400e; }
+
+.triage-job__meta {
+  color: var(--neutral-600, #5f6f82);
+  font-size: 12px;
+}
+
+.triage-job__error {
+  color: #991b1b;
+  font-size: 13px;
+}
+
+.triage-job--empty {
+  min-height: 96px;
+  place-items: center;
+  color: var(--neutral-600, #5f6f82);
+}
+
+.triage-spin {
+  animation: triage-spin 1s linear infinite;
+}
+
+@keyframes triage-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .triage-kpi {
@@ -394,6 +490,10 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .triage-jobs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .triage-workspace {
     grid-template-columns: 1fr;
   }
@@ -414,6 +514,14 @@
   }
 
   .triage-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .triage-ops__header {
+    display: grid;
+  }
+
+  .triage-jobs {
     grid-template-columns: 1fr;
   }
 

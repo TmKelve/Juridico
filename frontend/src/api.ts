@@ -305,6 +305,21 @@ export interface ApiTriageItem {
   }>;
 }
 
+export interface ApiTriageJob {
+  id: number;
+  sourceType: string;
+  scheduledFor: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  status: 'pending' | 'running' | 'success' | 'partial_failure' | 'failed';
+  itemsCaptured: number;
+  itemsCreated: number;
+  itemsUpdated: number;
+  itemsFlaggedCritical: number;
+  itemsSentToCrm: number;
+  errorLog: string | null;
+}
+
 interface LoginResponse {
   user: ApiUser;
 }
@@ -790,6 +805,12 @@ export const api = {
 
   getTriageItem: (id: number) =>
     apiClient<ApiTriageItem>(`/triage/${id}`),
+
+  getTriageJobs: () =>
+    apiClient<ApiTriageJob[]>('/triage/jobs'),
+
+  runTriageJob: (source: 'cnj' | 'cpf' | 'diario' | 'oab') =>
+    apiClient(`/triage/jobs/run-${source}`, { method: 'POST' }),
 
   updateTriageItem: (id: number, data: Partial<{
     status: ApiTriageItem['status'];
