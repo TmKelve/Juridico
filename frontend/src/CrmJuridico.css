@@ -134,6 +134,54 @@
   gap: 14px;
 }
 
+.crm-board {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(240px, 1fr));
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.crm-column {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 12px;
+  min-width: 240px;
+  padding: 14px;
+  border: 1px solid var(--neutral-200, #dbe2ea);
+  border-radius: 16px;
+  background: var(--surface-muted, #f8fafc);
+}
+
+.crm-column__header strong,
+.crm-column__header span {
+  display: block;
+}
+
+.crm-column__header span {
+  margin-top: 4px;
+  color: var(--neutral-600, #5f6f82);
+  font-size: 12px;
+}
+
+.crm-column__body {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.crm-column__empty {
+  min-height: 120px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--neutral-300, #cbd5e1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--neutral-600, #5f6f82);
+  text-align: center;
+  padding: 12px;
+}
+
 .crm-card {
   display: grid;
   gap: 10px;

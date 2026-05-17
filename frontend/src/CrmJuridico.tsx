@@ -12,6 +12,14 @@ type TabKey = 'leads' | 'opportunities';
 
 const LEAD_STATUS = ['novo', 'qualificado', 'contatado', 'convertido', 'perdido'] as const;
 const OPPORTUNITY_STATUS = ['acao_recomendada', 'em_contato', 'proposta_enviada', 'negociacao', 'ganha', 'perdida'] as const;
+const OPPORTUNITY_STAGE_LABELS: Record<(typeof OPPORTUNITY_STATUS)[number], string> = {
+  acao_recomendada: 'Ação recomendada',
+  em_contato: 'Em contato',
+  proposta_enviada: 'Proposta enviada',
+  negociacao: 'Negociação',
+  ganha: 'Ganha',
+  perdida: 'Perdida',
+};
 
 function formatDateTime(iso: string) {
   return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
@@ -202,6 +210,14 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     wonOpportunities: opportunities.filter((item) => item.status === 'ganha').length,
   }), [leads, opportunities]);
 
+  const opportunitiesByStage = useMemo(() => (
+    OPPORTUNITY_STATUS.map((status) => ({
+      status,
+      label: OPPORTUNITY_STAGE_LABELS[status],
+      items: filteredOpportunities.filter((item) => item.status === status),
+    }))
+  ), [filteredOpportunities]);
+
   return (
     <div className="crm-page">
       <section className="crm-hero">
@@ -271,25 +287,45 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
           ) : filteredOpportunities.length === 0 ? (
             <div className="crm-empty">Nenhuma oportunidade encontrada.</div>
           ) : (
-            <div className="crm-list">
-              {filteredOpportunities.map((item) => (
-                <article key={item.id} className={`crm-card ${selectedOpportunity?.id === item.id ? 'is-selected' : ''}`} onClick={() => setSelectedOpportunity(item)}>
-                  <div className="crm-card__header">
-                    <strong>{item.personName}</strong>
-                    <span className={`crm-status crm-status--${item.status}`}>{item.status}</span>
+            <div className="crm-board">
+              {opportunitiesByStage.map((column) => (
+                <section key={column.status} className="crm-column">
+                  <header className="crm-column__header">
+                    <div>
+                      <strong>{column.label}</strong>
+                      <span>{column.items.length} oportunidade(s)</span>
+                    </div>
+                  </header>
+                  <div className="crm-column__body">
+                    {column.items.length === 0 ? (
+                      <div className="crm-column__empty">Sem oportunidades neste estágio.</div>
+                    ) : (
+                      column.items.map((item) => (
+                        <article key={item.id} className={`crm-card ${selectedOpportunity?.id === item.id ? 'is-selected' : ''}`} onClick={() => setSelectedOpportunity(item)}>
+                          <div className="crm-card__header">
+                            <strong>{item.personName}</strong>
+                            <span className={`crm-status crm-status--${item.status}`}>{OPPORTUNITY_STAGE_LABELS[item.status as keyof typeof OPPORTUNITY_STAGE_LABELS] ?? item.status}</span>
+                          </div>
+                          <p>{item.client || 'Sem cliente vinculado'} · {item.source}</p>
+                          <small>{item.cpf || 'CPF não informado'}</small>
+                          <div className="crm-card__meta">
+                            <span>{item.triageCount} triagem(ns)</span>
+                            {item.responsible ? <span>{item.responsible}</span> : null}
+                            {item.hasCriticalTriage ? <span className="crm-flag"><ShieldAlert size={12} /> crítica</span> : null}
+                          </div>
+                          <div className="crm-card__meta">
+                            <span>{item.nextContactAt ? `Próximo contato ${formatDateTime(item.nextContactAt)}` : 'Sem próximo contato'}</span>
+                          </div>
+                          <div className="crm-card__actions">
+                            <select value={item.status} onChange={(event) => void updateOpportunityStatus(item, event.target.value)} onClick={(event) => event.stopPropagation()}>
+                              {OPPORTUNITY_STATUS.map((status) => <option key={status} value={status}>{OPPORTUNITY_STAGE_LABELS[status]}</option>)}
+                            </select>
+                          </div>
+                        </article>
+                      ))
+                    )}
                   </div>
-                  <p>{item.client || 'Sem cliente vinculado'} · {item.source}</p>
-                  <small>{item.cpf || 'CPF não informado'}</small>
-                  <div className="crm-card__meta">
-                    <span>{item.triageCount} triagem(ns)</span>
-                    {item.hasCriticalTriage ? <span className="crm-flag"><ShieldAlert size={12} /> crítica</span> : null}
-                  </div>
-                  <div className="crm-card__actions">
-                    <select value={item.status} onChange={(event) => void updateOpportunityStatus(item, event.target.value)} onClick={(event) => event.stopPropagation()}>
-                      {OPPORTUNITY_STATUS.map((status) => <option key={status} value={status}>{status}</option>)}
-                    </select>
-                  </div>
-                </article>
+                </section>
               ))}
             </div>
           )}
