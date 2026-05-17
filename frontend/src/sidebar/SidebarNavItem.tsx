@@ -31,7 +31,7 @@ export function SidebarNavLink({ label, icon: Icon, to, end, onClick, isCollapse
       title={isCollapsed ? label : undefined}
       className={cn(
         'group relative flex h-10 w-full items-center gap-3 rounded-lg border border-transparent px-3 text-left text-sm text-slate-300 transition-colors hover:bg-slate-800 hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-0',
-        isCollapsed && 'justify-center px-0 md:justify-center',
+        isCollapsed ? 'justify-center px-0 md:justify-center' : 'justify-start',
         isActive && 'border-slate-600/60 bg-slate-800 text-slate-50 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.18)]',
       )}
       aria-current={isActive ? 'page' : undefined}
@@ -63,7 +63,7 @@ export function SidebarNavButton({ label, icon: Icon, onClick, variant, isCollap
       title={isCollapsed ? label : undefined}
       className={cn(
         'group relative flex h-10 w-full items-center gap-3 rounded-lg border border-transparent px-3 text-left text-sm text-slate-300 transition-colors hover:bg-slate-800 hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-0',
-        isCollapsed && 'justify-center px-0 md:justify-center',
+        isCollapsed ? 'justify-center px-0 md:justify-center' : 'justify-start',
         variant === 'danger' && 'text-rose-300 hover:bg-rose-900/30 hover:text-rose-200',
       )}
       onClick={onClick}

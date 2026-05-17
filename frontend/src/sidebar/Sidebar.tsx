@@ -37,7 +37,7 @@ export function Sidebar({
         )}
         aria-label="Navegação principal"
       >
-        <div className={cn('flex min-h-0 flex-1 flex-col gap-2 px-4 pb-4 pt-6', isCollapsed && 'md:px-3')}>
+        <div className={cn('flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden px-4 pb-4 pt-6', isCollapsed && 'md:px-3')}>
           <SidebarBrand isCollapsed={isCollapsed} />
           <SidebarNav
             role={user.role}
