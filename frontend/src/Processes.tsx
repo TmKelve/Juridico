@@ -2,24 +2,32 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
+  Building2,
+  CalendarDays,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Circle,
+  ClipboardCheck,
   Download,
+  Eye,
   FilePlus2,
   Filter,
+  Flag,
   FolderOpen,
   KanbanSquare,
   Loader2,
   MoreHorizontal,
+  Paperclip,
   Plus,
   RefreshCw,
   Save,
   Search,
+  Send,
   ShieldAlert,
   Timer,
   UserRound,
+  UsersRound,
   X,
 } from 'lucide-react';
 import { api } from './api';
@@ -743,6 +751,17 @@ export function Processes({ user }: ProcessesProps) {
     navigate(`/processos/${processId}`);
   }
 
+  function handleQuickDrawerPrimary(process: EnrichedProcess) {
+    const action = getPrimaryDrawerAction(process).label;
+    if (action === 'Abrir detalhe completo' || action === 'Ver prazo') {
+      openProcessDetail(process.id);
+      return;
+    }
+
+    setSuccess(`${action} registrado como proximo passo.`);
+    setSelectedProcess(null);
+  }
+
   function renderStatusBadge(status: KanbanStage) {
     const labels: Record<KanbanStage, string> = {
       aguardando_acao: 'Aguardando acao',
@@ -816,12 +835,10 @@ export function Processes({ user }: ProcessesProps) {
         <div className="my-processes-header-actions">
           <button
             type="button"
-            className="btn-secondary"
+            className="btn-primary"
             onClick={() => {
-              setShowForm((prev) => !prev);
-              if (!showForm) {
-                resetFormState('novo');
-              }
+              resetFormState('novo');
+              setShowForm(true);
             }}
           >
             <Plus size={16} aria-hidden="true" />
@@ -873,12 +890,17 @@ export function Processes({ user }: ProcessesProps) {
       )}
 
       {showForm && (
-        <section className="my-processes-form" aria-label="Formulario de processo">
+        <div className="process-form-modal-backdrop" role="presentation">
+          <section className="my-processes-form process-form-modal" role="dialog" aria-modal="true" aria-labelledby="process-form-title">
           <div className="process-form-head">
             <div>
-              <h3>{editingId ? 'Editar processo' : 'Novo processo'}</h3>
+              <p className="process-form-eyebrow">Cadastro operacional</p>
+              <h3 id="process-form-title">{editingId ? 'Editar processo' : 'Novo processo'}</h3>
               <p>{editingId ? 'Atualize o cadastro e o contexto operacional do processo.' : 'Escolha entre processo novo ou processo ja em andamento antes de concluir o cadastro.'}</p>
             </div>
+            <button type="button" className="icon-action" onClick={() => { setShowForm(false); resetFormState('novo'); }} aria-label="Fechar cadastro de processo">
+              <X size={16} aria-hidden="true" />
+            </button>
             {!editingId && (
               <div className="process-entry-switch" role="tablist" aria-label="Tipo de cadastro do processo">
                 <button
@@ -1079,7 +1101,8 @@ export function Processes({ user }: ProcessesProps) {
               </button>
             </div>
           </form>
-        </section>
+          </section>
+        </div>
       )}
 
       <section className={`my-processes-filters${isFiltersCompact ? ' is-compact' : ''}`} aria-label="Busca e filtros">
@@ -1401,6 +1424,7 @@ export function Processes({ user }: ProcessesProps) {
               <div>
                 <small>Detalhe rapido</small>
                 <h3 id="quick-drawer-title">Processo #{selectedProcess.id}</h3>
+                <p>{selectedProcess.title}</p>
               </div>
               <button type="button" className="icon-action" onClick={() => setSelectedProcess(null)} aria-label="Fechar drawer">
                 <X size={16} aria-hidden="true" />
@@ -1409,8 +1433,14 @@ export function Processes({ user }: ProcessesProps) {
 
             <div className="process-quick-drawer-body">
               <section className="drawer-hero">
-                <p className="drawer-hero-client">{selectedProcess.client}</p>
-                <p className="drawer-hero-matter">{selectedProcess.title}</p>
+                <div className="drawer-hero-icon" aria-hidden="true">
+                  <Building2 size={20} />
+                </div>
+                <div>
+                  <p className="drawer-hero-client">Cliente e processo</p>
+                  <p className="drawer-hero-matter">{selectedProcess.client}</p>
+                  <small>{selectedProcess.title}</small>
+                </div>
                 <div className="drawer-hero-badges">
                   {renderStatusBadge(selectedProcess.operationalStatus)}
                   {renderPriorityBadge(selectedProcess.priority)}
@@ -1419,14 +1449,14 @@ export function Processes({ user }: ProcessesProps) {
 
               <section className="drawer-risk-summary">
                 <div>
-                  <span>Próximo prazo</span>
+                  <span><CalendarDays size={14} aria-hidden="true" />Próximo prazo</span>
                   <strong>{formatDate(selectedProcess.nextDeadlineAt)}</strong>
                   {selectedProcessDueContext && (
                     <small className={`deadline-context deadline-context--${selectedProcessDueContext.tone}`}>{selectedProcessDueContext.label}</small>
                   )}
                 </div>
                 <div>
-                  <span>Última movimentação</span>
+                  <span><Timer size={14} aria-hidden="true" />Última movimentação</span>
                   <strong>{formatDate(selectedProcess.lastMovementAt)}</strong>
                   <small>{formatStaleContext(selectedProcess.lastMovementAt)}</small>
                 </div>
@@ -1434,56 +1464,57 @@ export function Processes({ user }: ProcessesProps) {
 
               <section className="drawer-facts-grid" aria-label="Resumo rapido do processo">
                 <article className="drawer-fact-card">
-                  <span>Area</span>
+                  <span><FolderOpen size={14} aria-hidden="true" />Área</span>
                   <strong>{selectedProcess.area}</strong>
                 </article>
                 <article className="drawer-fact-card">
-                  <span>Fase atual</span>
+                  <span><ClipboardCheck size={14} aria-hidden="true" />Fase atual</span>
                   <strong>{selectedProcess.phase}</strong>
                 </article>
                 <article className="drawer-fact-card">
-                  <span>Proximo prazo</span>
-                  <strong>{formatDate(selectedProcess.nextDeadlineAt)}</strong>
-                </article>
-                <article className="drawer-fact-card">
-                  <span>Ultima movimentacao</span>
-                  <strong>{formatDate(selectedProcess.lastMovementAt)}</strong>
-                </article>
-                <article className="drawer-fact-card">
-                  <span>Documentos pendentes</span>
+                  <span><FilePlus2 size={14} aria-hidden="true" />Documentos pendentes</span>
                   <strong>{selectedProcess.pendingDocuments}</strong>
                 </article>
                 <article className="drawer-fact-card">
-                  <span>Audiencia futura</span>
+                  <span><UsersRound size={14} aria-hidden="true" />Audiência futura</span>
                   <strong>{selectedProcess.hasFutureHearing ? 'Sim' : 'Nao'}</strong>
                 </article>
               </section>
 
               <section className="drawer-fact-list" aria-label="Indicadores adicionais">
                 <div>
-                  <span>Publicacao recente</span>
+                  <span><AlertTriangle size={14} aria-hidden="true" />Publicação recente</span>
                   <strong>{selectedProcess.hasNewPublication ? 'Sim' : 'Nao'}</strong>
                 </div>
               </section>
 
               <div className="drawer-next-step">
-                <h4>Proximo passo</h4>
+                <h4><Flag size={16} aria-hidden="true" />Proximo passo</h4>
                 <p>{selectedProcess.nextStep}</p>
               </div>
 
               <div className="drawer-checklist">
-                <h4>Checklist operacional</h4>
-                <label><input type="checkbox" readOnly checked={selectedProcess.pendingDocuments === 0} /> Solicitar documento</label>
-                <label><input type="checkbox" readOnly checked={!selectedProcess.hasNewPublication} /> Revisar publicações</label>
-                <label><input type="checkbox" readOnly checked={dayDiff(selectedProcess.nextDeadlineAt, new Date()) > 1} /> Conferir prazo crítico</label>
-                <label><input type="checkbox" readOnly checked={Math.abs(dayDiff(selectedProcess.lastMovementAt, new Date())) < 15} /> Registrar andamento</label>
+                <h4><ClipboardCheck size={16} aria-hidden="true" />Checklist operacional</h4>
+                <label><span className="checklist-handle" aria-hidden="true">::</span><input type="checkbox" readOnly checked={selectedProcess.pendingDocuments === 0} /> Solicitar documento</label>
+                <label><span className="checklist-handle" aria-hidden="true">::</span><input type="checkbox" readOnly checked={!selectedProcess.hasNewPublication} /> Revisar publicações</label>
+                <label><span className="checklist-handle" aria-hidden="true">::</span><input type="checkbox" readOnly checked={dayDiff(selectedProcess.nextDeadlineAt, new Date()) > 1} /> Conferir prazo crítico</label>
+                <label><span className="checklist-handle" aria-hidden="true">::</span><input type="checkbox" readOnly checked={Math.abs(dayDiff(selectedProcess.lastMovementAt, new Date())) < 15} /> Registrar andamento</label>
               </div>
 
               <div className="drawer-actions">
-                <button type="button" className="btn-primary" onClick={() => openProcessDetail(selectedProcess.id)}>{selectedProcessPrimaryAction?.label ?? 'Abrir detalhe completo'}</button>
-                <button type="button" className="btn-secondary">{selectedProcessPrimaryAction?.secondary ?? 'Registrar andamento'}</button>
-                <button type="button" className="btn-secondary">Anexar documento</button>
-                <button type="button" className="btn-secondary">Registrar atendimento</button>
+                <button type="button" className="btn-primary drawer-action-primary" onClick={() => handleQuickDrawerPrimary(selectedProcess)}>
+                  <Send size={16} aria-hidden="true" />
+                  {selectedProcessPrimaryAction?.label ?? 'Solicitar documento'}
+                </button>
+                <div className="drawer-action-grid">
+                  <button type="button" className="btn-secondary"><Paperclip size={15} aria-hidden="true" />Anexar documento</button>
+                  <button type="button" className="btn-secondary"><UsersRound size={15} aria-hidden="true" />Registrar atendimento</button>
+                </div>
+                <button type="button" className="btn-secondary drawer-action-full" onClick={() => openProcessDetail(selectedProcess.id)}>
+                  <Eye size={15} aria-hidden="true" />
+                  Ver processo completo
+                  <ChevronRight size={15} aria-hidden="true" />
+                </button>
               </div>
             </div>
           </aside>
