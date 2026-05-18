@@ -1338,6 +1338,74 @@ export function Processes({ user }: ProcessesProps) {
             </tbody>
           </table>
 
+          <div className="processes-mobile-list" aria-label="Lista compacta de processos">
+            {paginatedProcesses.map((process) => {
+              const dueContext = formatDueContext(process.nextDeadlineAt);
+
+              return (
+                <article key={process.id} className="process-mobile-card">
+                  <button
+                    type="button"
+                    className="process-mobile-card-main"
+                    onClick={() => {
+                      setSelectedProcess(process);
+                      setMenuOpenId(null);
+                    }}
+                    aria-label={`Abrir detalhe rapido do processo ${process.id}`}
+                  >
+                    <span className="process-mobile-card-kicker">Processo #{process.id}</span>
+                    <strong>{process.title}</strong>
+                    <span>{process.client} · {process.area}</span>
+                  </button>
+
+                  <div className="process-mobile-card-badges">
+                    {renderStatusBadge(process.operationalStatus)}
+                    {renderPriorityBadge(process.priority)}
+                  </div>
+
+                  <dl className="process-mobile-card-grid">
+                    <div>
+                      <dt>Prazo</dt>
+                      <dd>
+                        <strong className={dayDiff(process.nextDeadlineAt, new Date()) <= 1 ? 'text-critical' : ''}>{formatDate(process.nextDeadlineAt)}</strong>
+                        <span className={`deadline-context deadline-context--${dueContext.tone}`}>{dueContext.label}</span>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Fase</dt>
+                      <dd>
+                        <strong>{process.phase}</strong>
+                        <span>{process.tribunal}</span>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Movimentação</dt>
+                      <dd>
+                        <strong>{formatDate(process.lastMovementAt)}</strong>
+                        <span>{formatStaleContext(process.lastMovementAt)}</span>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Responsável</dt>
+                      <dd>
+                        <strong>{process.owner?.email ?? '—'}</strong>
+                      </dd>
+                    </div>
+                  </dl>
+
+                  <div className="process-mobile-card-actions">
+                    <button type="button" className="btn-primary" onClick={() => setSelectedProcess(process)}>
+                      Abrir rápido
+                    </button>
+                    <button type="button" className="btn-secondary" onClick={() => openProcessDetail(process.id)}>
+                      Detalhe
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+
           {totalPages > 1 && (
             <div className="my-processes-pagination">
               <button
