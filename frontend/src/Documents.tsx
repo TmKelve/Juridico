@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useEffectEvent, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -104,10 +104,11 @@ export function Documents({ user }: DocumentsProps) {
   ]);
 
   const itemsPerPage = 10;
+  const loadDocumentsOnMount = useEffectEvent(loadDocuments);
 
   useEffect(() => {
     trackPageView('documents', { role: user.role });
-    loadDocuments();
+    loadDocumentsOnMount();
   }, [user.role]);
 
   useEffect(() => {

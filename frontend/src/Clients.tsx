@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useEffectEvent, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -475,10 +475,11 @@ export function Clients({ user }: ClientsProps) {
   const [openMenuId, setOpenMenuId]     = useState<string | null>(null);
   const [showForm, setShowForm]         = useState(false);
   const [form, setForm]                 = useState<NewClientForm>(EMPTY_FORM);
+  const loadDataOnMount = useEffectEvent(loadData);
 
   useEffect(() => {
     trackPageView('clientes', { role: user.role });
-    loadData();
+    loadDataOnMount();
   }, [user.role]);
 
   useEffect(() => { setPage(1); }, [filters, sortBy, sortDesc, viewMode]);

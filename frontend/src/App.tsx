@@ -227,9 +227,13 @@ function AppShell({
   }, [location.pathname, user.role])
 
   useEffect(() => {
-    if (window.innerWidth < 768) {
+    if (window.innerWidth >= 768) return
+
+    const handle = window.requestAnimationFrame(() => {
       setSidebarOpen(false)
-    }
+    })
+
+    return () => window.cancelAnimationFrame(handle)
   }, [location.pathname])
 
   useEffect(() => {

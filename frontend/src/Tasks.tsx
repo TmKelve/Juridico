@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useEffectEvent, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -241,10 +241,11 @@ export function Tasks({ user }: TasksProps) {
 
   const ITEMS_PER_PAGE = 12;
   const isAdv = user.role === 'ADV';
+  const loadDataOnMount = useEffectEvent(loadData);
 
   useEffect(() => {
     trackPageView('tarefas', { role: user.role });
-    loadData();
+    loadDataOnMount();
   }, [user.role]);
 
   useEffect(() => {

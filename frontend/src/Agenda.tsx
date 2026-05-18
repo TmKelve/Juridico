@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useEffectEvent, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   CalendarClock,
@@ -277,10 +277,11 @@ export function Agenda({ user }: AgendaProps) {
   const [createDraft, setCreateDraft] = useState<AgendaCreateDraft>(EMPTY_CREATE_DRAFT);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedEvent, setSelectedEvent] = useState<AgendaEvent | null>(null);
+  const loadAgendaOnMount = useEffectEvent(loadAgenda);
 
   useEffect(() => {
     trackPageView('agenda', { role: user.role });
-    loadAgenda();
+    loadAgendaOnMount();
   }, [user.role]);
 
   function closeDrawer() {

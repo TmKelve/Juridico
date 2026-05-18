@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useEffectEvent, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   CalendarDays,
@@ -115,10 +115,11 @@ export function Deadlines({ user }: DeadlinesProps) {
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   const itemsPerPage = 10;
+  const loadDeadlinesOnMount = useEffectEvent(loadDeadlines);
 
   useEffect(() => {
     trackPageView('deadlines', { role: user.role });
-    loadDeadlines();
+    loadDeadlinesOnMount();
   }, [user.role]);
 
   useEffect(() => {

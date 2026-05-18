@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useEffectEvent, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -269,10 +269,11 @@ export function Atendimentos({ user }: AtendimentosProps) {
 
   const isAdv = user.role === 'ADV';
   const ITEMS_PER_PAGE = 12;
+  const loadDataOnMount = useEffectEvent(loadData);
 
   useEffect(() => {
     trackPageView('atendimentos', { role: user.role });
-    loadData();
+    loadDataOnMount();
   }, [user.role]);
 
   useEffect(() => {

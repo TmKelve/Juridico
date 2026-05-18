@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useEffectEvent, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -293,10 +293,11 @@ export function Processes({ user }: ProcessesProps) {
 
   const isAdvogado = user.role === 'ADV';
   const itemsPerPage = 10;
+  const loadProcessesOnMount = useEffectEvent(loadProcesses);
 
   useEffect(() => {
     trackPageView('processes', { role: user.role, view: 'meus_processos' });
-    loadProcesses();
+    loadProcessesOnMount();
   }, [user.role]);
 
   useEffect(() => {

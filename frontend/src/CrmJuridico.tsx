@@ -251,7 +251,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
 
   useEffect(() => {
     setDrawerTab('overview');
-  }, [tab, selectedLead?.id, selectedOpportunity?.id]);
+  }, [tab, selectedLead, selectedOpportunity]);
 
   async function loadData() {
     setLoading(true);
@@ -425,7 +425,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     setContactNote('');
     setContactKind('contato');
     setNextContactDraft(formatDateTimeLocal(selected?.nextContactAt ?? null));
-  }, [tab, selectedLead?.id, selectedOpportunity?.id]);
+  }, [tab, selectedLead, selectedOpportunity]);
 
   useEffect(() => {
     if (!selectedOpportunity) return;
@@ -438,7 +438,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     });
     setShowOpportunityConversion(false);
     setShowConvertConfirmDialog(false);
-  }, [selectedOpportunity?.id]);
+  }, [selectedOpportunity]);
 
   const filteredLeads = useMemo(() => {
     const q = search.trim().toLowerCase();

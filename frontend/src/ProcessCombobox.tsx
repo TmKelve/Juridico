@@ -35,7 +35,7 @@ export function ProcessCombobox({
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   const [isOpen, setIsOpen] = useState(false);
-  const [query, setQuery] = useState('');
+  const [inputState, setInputState] = useState({ value, query: '' });
   const [activeIndex, setActiveIndex] = useState(-1);
 
   const selectedOption = useMemo(
@@ -43,22 +43,24 @@ export function ProcessCombobox({
     [options, value],
   );
 
-  useEffect(() => {
-    setQuery(selectedOption?.label ?? '');
-  }, [selectedOption]);
+  const query = inputState.value === value ? inputState.query : selectedOption?.label ?? '';
+
+  function setQuery(nextQuery: string) {
+    setInputState({ value, query: nextQuery });
+  }
 
   useEffect(() => {
     function handlePointer(event: MouseEvent) {
       if (!rootRef.current?.contains(event.target as Node)) {
         setIsOpen(false);
         setActiveIndex(-1);
-        setQuery(selectedOption?.label ?? '');
+        setInputState({ value, query: selectedOption?.label ?? '' });
       }
     }
 
     document.addEventListener('mousedown', handlePointer);
     return () => document.removeEventListener('mousedown', handlePointer);
-  }, [selectedOption]);
+  }, [selectedOption, value]);
 
   const normalizedQuery = query.trim().toLowerCase();
   const filteredOptions = useMemo(() => {
