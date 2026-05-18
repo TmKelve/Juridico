@@ -27,6 +27,7 @@ initMonitoring()
 
 type User = { id: number; email: string; role: string }
 type HomePayload = { profile: string; home: { menu: string[]; cards: string[] } }
+const SIDEBAR_COMFORTABLE_WIDTH = 1440
 
 function getRoleLabel(role: string) {
   const labels: Record<string, string> = {
@@ -215,7 +216,9 @@ function AppShell({
   const isCrmJuridico = location.pathname === '/crm-juridico'
   const shortName = (user.email || getRoleLabel(user.role)).split('@')[0].slice(0, 12)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.innerWidth < 1200 && window.innerWidth >= 768)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => window.innerWidth < SIDEBAR_COMFORTABLE_WIDTH && window.innerWidth >= 768,
+  )
   const loadUsersOnRoute = useEffectEvent(() => {
     if (location.pathname === '/usuarios' && user.role === 'ADM') {
       void fetchUsers()
@@ -240,7 +243,7 @@ function AppShell({
         return
       }
 
-      if (width < 1200) {
+      if (width < SIDEBAR_COMFORTABLE_WIDTH) {
         setSidebarCollapsed(true)
         return
       }
