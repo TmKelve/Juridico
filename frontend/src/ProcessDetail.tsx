@@ -3,13 +3,23 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   AlertTriangle,
   CalendarClock,
+  CalendarDays,
   CheckCircle2,
   Clock3,
+  FileCheck2,
   FileText,
   Flag,
+  FolderOpen,
+  Handshake,
+  Landmark,
   MoreHorizontal,
+  PlusCircle,
   RefreshCw,
+  Scale,
+  Send,
+  UserRound,
   X,
+  type LucideIcon,
 } from 'lucide-react';
 import { api } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
@@ -74,6 +84,7 @@ interface RightRailItem {
 interface QuickFact {
   label: string;
   value: string;
+  icon: LucideIcon;
   tone?: 'default' | 'warning' | 'danger' | 'success';
 }
 
@@ -111,6 +122,35 @@ function labelOfEvent(type: EventType) {
   };
 
   return labels[type];
+}
+
+function iconOfEvent(type: EventType): LucideIcon {
+  const icons: Record<EventType, LucideIcon> = {
+    cadastro: FolderOpen,
+    andamento: RefreshCw,
+    fase: Flag,
+    prazo: CalendarDays,
+    documento: FileText,
+    publicacao: FileCheck2,
+    atendimento: Handshake,
+    tarefa: CheckCircle2,
+    comentario: MoreHorizontal,
+  };
+
+  return icons[type];
+}
+
+function iconOfRailItem(kind: RightRailItem['kind']): LucideIcon {
+  const icons: Record<RightRailItem['kind'], LucideIcon> = {
+    prazo: CalendarDays,
+    tarefa: RefreshCw,
+    documento: FileText,
+    publicacao: FileCheck2,
+    interacao: Handshake,
+    alerta: AlertTriangle,
+  };
+
+  return icons[kind];
 }
 
 function sampleTimeline(process: ProcessData): TimelineEvent[] {
@@ -249,11 +289,11 @@ export function ProcessDetail({ user }: ProcessDetailProps) {
     if (!processData) return [];
 
     return [
-      { label: 'Fase atual', value: processData.phase },
-      { label: 'Proximo prazo', value: formatDate(new Date(Date.now() + 1000 * 60 * 60 * 24 * 2)), tone: 'warning' },
-      { label: 'Proxima audiencia', value: formatDate(new Date(Date.now() + 1000 * 60 * 60 * 24 * 7)) },
-      { label: 'Documentos pendentes', value: '1', tone: 'danger' },
-      { label: 'Status operacional', value: processData.status === 'ativo' ? 'Em acompanhamento' : processData.status, tone: 'success' },
+      { label: 'Fase atual', value: processData.phase, icon: Flag },
+      { label: 'Proximo prazo', value: formatDate(new Date(Date.now() + 1000 * 60 * 60 * 24 * 2)), icon: CalendarDays, tone: 'warning' },
+      { label: 'Proxima audiencia', value: formatDate(new Date(Date.now() + 1000 * 60 * 60 * 24 * 7)), icon: CalendarClock },
+      { label: 'Documentos pendentes', value: '1', icon: FileText, tone: 'danger' },
+      { label: 'Status operacional', value: processData.status === 'ativo' ? 'Em acompanhamento' : processData.status, icon: CheckCircle2, tone: 'success' },
     ];
   }, [processData]);
 
@@ -373,15 +413,22 @@ export function ProcessDetail({ user }: ProcessDetailProps) {
 
       <header className="process-head-card">
         <div className="process-head-main">
-          <p className="process-head-eyebrow">Detalhe do Processo</p>
-          <h2>Processo #{processData.id}</h2>
-          <p className="process-head-subtitle">{processData.title} · {processData.client}</p>
+          <div className="process-head-title-row">
+            <div className="process-head-icon" aria-hidden="true">
+              <FolderOpen size={26} />
+            </div>
+            <div>
+              <p className="process-head-eyebrow">Operação jurídica</p>
+              <h2>Processo #{processData.id}</h2>
+              <p className="process-head-subtitle">{processData.title} · {processData.client}</p>
+            </div>
+          </div>
 
           <div className="process-head-meta">
-            <span>Area juridica: Civel Empresarial</span>
-            <span>Fase atual: {processData.phase}</span>
-            <span>Tribunal/Vara: TRT 2 · 6ª Vara</span>
-            <span>Responsavel principal: {processData.owner?.email || user.email}</span>
+            <span><Landmark size={15} aria-hidden="true" />Area juridica: Civel Empresarial</span>
+            <span><Flag size={15} aria-hidden="true" />Fase atual: {processData.phase}</span>
+            <span><Scale size={15} aria-hidden="true" />Tribunal/Vara: TRT 2 · 6ª Vara</span>
+            <span><UserRound size={15} aria-hidden="true" />Responsavel principal: {processData.owner?.email || user.email}</span>
           </div>
 
           <div className="process-head-tags">
@@ -392,10 +439,10 @@ export function ProcessDetail({ user }: ProcessDetailProps) {
         </div>
 
         <div className="process-head-actions">
-          <button className="btn-primary" aria-label="Registrar andamento" onClick={() => setOpenModal('andamento')}>Registrar andamento</button>
-          <button className="btn-secondary" aria-label="Criar prazo" onClick={() => setOpenModal('prazo')}>Criar prazo</button>
-          <button className="btn-secondary" aria-label="Registrar documento" onClick={() => setOpenModal('documento')}>Registrar documento</button>
-          <button className="btn-secondary" aria-label="Registrar atendimento" onClick={() => setOpenModal('atendimento')}>Registrar atendimento</button>
+          <button className="btn-primary" aria-label="Registrar andamento" onClick={() => setOpenModal('andamento')}><PlusCircle size={16} aria-hidden="true" />Registrar andamento</button>
+          <button className="btn-secondary" aria-label="Criar prazo" onClick={() => setOpenModal('prazo')}><CalendarDays size={16} aria-hidden="true" />Criar prazo</button>
+          <button className="btn-secondary" aria-label="Registrar documento" onClick={() => setOpenModal('documento')}><FileText size={16} aria-hidden="true" />Registrar documento</button>
+          <button className="btn-secondary" aria-label="Registrar atendimento" onClick={() => setOpenModal('atendimento')}><Handshake size={16} aria-hidden="true" />Registrar atendimento</button>
           <button className="btn-secondary" aria-label="Mais ações">
             <MoreHorizontal size={15} aria-hidden="true" />
             Mais acoes
@@ -406,8 +453,13 @@ export function ProcessDetail({ user }: ProcessDetailProps) {
       <section className="process-quick-facts" aria-label="Cards de visao rapida">
         {quickFacts.map((fact) => (
           <article key={fact.label} className={`quick-fact-card ${fact.tone || 'default'}`}>
-            <p>{fact.label}</p>
-            <strong>{fact.value}</strong>
+            <span className="quick-fact-icon" aria-hidden="true">
+              <fact.icon size={20} />
+            </span>
+            <div>
+              <p>{fact.label}</p>
+              <strong>{fact.value}</strong>
+            </div>
           </article>
         ))}
       </section>
@@ -451,7 +503,12 @@ export function ProcessDetail({ user }: ProcessDetailProps) {
                       onClick={() => setSelectedContextItem(event)}
                       aria-label={`Abrir detalhe de ${labelOfEvent(event.type)}: ${event.title}`}
                     >
-                      <div className="timeline-icon" data-type={event.type} aria-hidden="true" />
+                      <div className="timeline-icon" data-type={event.type} aria-hidden="true">
+                        {(() => {
+                          const Icon = iconOfEvent(event.type);
+                          return <Icon size={20} />;
+                        })()}
+                      </div>
                       <div className="timeline-content">
                         <div className="timeline-head">
                           <span className="timeline-kind">{labelOfEvent(event.type)}</span>
@@ -483,7 +540,10 @@ export function ProcessDetail({ user }: ProcessDetailProps) {
               <ul>
                 {rightRail?.prazos.map((item) => (
                   <li key={item.id}>
-                    <button onClick={() => setSelectedContextItem(item)}>{item.title}<small>{item.meta}</small></button>
+                    <button onClick={() => setSelectedContextItem(item)}>
+                      <span className="rail-item-icon" aria-hidden="true">{(() => { const Icon = iconOfRailItem(item.kind); return <Icon size={16} />; })()}</span>
+                      <span>{item.title}<small>{item.meta}</small></span>
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -494,7 +554,10 @@ export function ProcessDetail({ user }: ProcessDetailProps) {
               <ul>
                 {rightRail?.tarefas.map((item) => (
                   <li key={item.id}>
-                    <button onClick={() => setSelectedContextItem(item)}>{item.title}<small>{item.meta}</small></button>
+                    <button onClick={() => setSelectedContextItem(item)}>
+                      <span className="rail-item-icon" aria-hidden="true">{(() => { const Icon = iconOfRailItem(item.kind); return <Icon size={16} />; })()}</span>
+                      <span>{item.title}<small>{item.meta}</small></span>
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -505,7 +568,10 @@ export function ProcessDetail({ user }: ProcessDetailProps) {
               <ul>
                 {rightRail?.docs.map((item) => (
                   <li key={item.id}>
-                    <button onClick={() => setSelectedContextItem(item)}>{item.title}<small>{item.meta}</small></button>
+                    <button onClick={() => setSelectedContextItem(item)}>
+                      <span className="rail-item-icon" aria-hidden="true">{(() => { const Icon = iconOfRailItem(item.kind); return <Icon size={16} />; })()}</span>
+                      <span>{item.title}<small>{item.meta}</small></span>
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -516,7 +582,10 @@ export function ProcessDetail({ user }: ProcessDetailProps) {
               <ul>
                 {rightRail?.pubs.map((item) => (
                   <li key={item.id}>
-                    <button onClick={() => setSelectedContextItem(item)}>{item.title}<small>{item.meta}</small></button>
+                    <button onClick={() => setSelectedContextItem(item)}>
+                      <span className="rail-item-icon" aria-hidden="true">{(() => { const Icon = iconOfRailItem(item.kind); return <Icon size={16} />; })()}</span>
+                      <span>{item.title}<small>{item.meta}</small></span>
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -527,7 +596,10 @@ export function ProcessDetail({ user }: ProcessDetailProps) {
               <ul>
                 {rightRail?.interacoes.map((item) => (
                   <li key={item.id}>
-                    <button onClick={() => setSelectedContextItem(item)}>{item.title}<small>{item.meta}</small></button>
+                    <button onClick={() => setSelectedContextItem(item)}>
+                      <span className="rail-item-icon" aria-hidden="true">{(() => { const Icon = iconOfRailItem(item.kind); return <Icon size={16} />; })()}</span>
+                      <span>{item.title}<small>{item.meta}</small></span>
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -538,7 +610,10 @@ export function ProcessDetail({ user }: ProcessDetailProps) {
               <ul>
                 {rightRail?.alertas.map((item) => (
                   <li key={item.id}>
-                    <button onClick={() => setSelectedContextItem(item)}>{item.title}<small>{item.meta}</small></button>
+                    <button onClick={() => setSelectedContextItem(item)}>
+                      <span className="rail-item-icon" aria-hidden="true">{(() => { const Icon = iconOfRailItem(item.kind); return <Icon size={16} />; })()}</span>
+                      <span>{item.title}<small>{item.meta}</small></span>
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -582,7 +657,7 @@ export function ProcessDetail({ user }: ProcessDetailProps) {
               )}
 
               <div className="context-actions">
-                <button className="btn-primary">Abrir detalhe completo</button>
+                <button className="btn-primary"><Send size={16} aria-hidden="true" />Abrir detalhe completo</button>
                 <button className="btn-secondary">Registrar andamento</button>
                 <button className="btn-secondary">Criar prazo</button>
                 <button className="btn-secondary">Criar tarefa</button>
