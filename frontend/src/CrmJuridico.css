@@ -1,6 +1,8 @@
 .crm-page {
   display: grid;
   gap: 12px;
+  width: min(100%, 1680px);
+  margin: 0 auto;
   padding: 20px;
   background:
     linear-gradient(180deg, rgba(245, 248, 251, 0.92), rgba(247, 249, 251, 1) 240px),
@@ -337,7 +339,7 @@
 
 .crm-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 400px);
+  grid-template-columns: minmax(0, 1fr) minmax(420px, 480px);
   overflow: visible;
   align-items: start;
   gap: 12px;
@@ -799,6 +801,11 @@
   color: #0f172a;
 }
 
+.crm-card--opportunity h4 {
+  font-size: 15px;
+  line-height: 1.35;
+}
+
 .crm-card__menu {
   width: 28px;
   height: 28px;
@@ -1006,7 +1013,7 @@
   overflow-x: hidden;
   width: 100%;
   min-width: 0;
-  max-width: 400px;
+  max-width: 480px;
   padding: 14px;
   border: 1px solid var(--neutral-200, #dbe2ea);
   box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
