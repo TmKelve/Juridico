@@ -1494,30 +1494,47 @@ export function Processes({ user }: ProcessesProps) {
                   <p className="kanban-empty">Sem processos nesta coluna.</p>
                 )}
                 {kanbanGroups[column.key].map((process) => (
-                  <button
-                    key={process.id}
-                    type="button"
-                    className="kanban-card"
-                    data-priority={process.priority}
-                    onClick={() => setSelectedProcess(process)}
-                    aria-label={`Abrir detalhe rapido do processo ${process.id}`}
-                  >
-                    <div className="kanban-card-headline">
-                      <small className="kanban-card-id">Processo #{process.id}</small>
-                      <strong className="kanban-card-client">{process.client}</strong>
+                  <article key={process.id} className="kanban-card" data-priority={process.priority}>
+                    <button
+                      type="button"
+                      className="kanban-card-main"
+                      onClick={() => setSelectedProcess(process)}
+                      aria-label={`Abrir detalhe rapido do processo ${process.id}`}
+                    >
+                      <div className="kanban-card-topline">
+                        <small className="kanban-card-id">Processo #{process.id}</small>
+                        <span className="kanban-card-area">{process.area}</span>
+                      </div>
+                      <div className="kanban-card-headline">
+                        <strong className="kanban-card-client">{process.client}</strong>
+                        <p className="kanban-card-matter">{process.title}</p>
+                      </div>
+                      <small className="kanban-card-context">{process.phase} · {process.owner?.email ?? 'Sem responsavel'}</small>
+                      <div className="kanban-card-meta">
+                        {renderStatusBadge(process.operationalStatus)}
+                        {renderPriorityBadge(process.priority)}
+                      </div>
+                      <div className="kanban-card-deadline">
+                        <span className="kanban-card-deadline-label">Proximo prazo</span>
+                        <time dateTime={process.nextDeadlineAt.toISOString()}>{formatDate(process.nextDeadlineAt)}</time>
+                        <span className={`deadline-context deadline-context--${formatDueContext(process.nextDeadlineAt).tone}`}>{formatDueContext(process.nextDeadlineAt).label}</span>
+                      </div>
+                      <div className="kanban-card-next-step">
+                        <span>Próximo passo</span>
+                        <strong>{process.nextStep}</strong>
+                      </div>
+                    </button>
+                    <div className="kanban-card-actions">
+                      <button type="button" className="btn-ghost kanban-card-action" onClick={() => openProcessDetail(process.id)}>
+                        <Eye size={14} aria-hidden="true" />
+                        Detalhe
+                      </button>
+                      <button type="button" className="btn-secondary kanban-card-action" onClick={() => setSelectedProcess(process)}>
+                        <Send size={14} aria-hidden="true" />
+                        Abrir rápido
+                      </button>
                     </div>
-                    <p className="kanban-card-matter">{process.title}</p>
-                    <small className="kanban-card-context">{process.area} · {process.phase}</small>
-                    <div className="kanban-card-meta">
-                      {renderStatusBadge(process.operationalStatus)}
-                      {renderPriorityBadge(process.priority)}
-                    </div>
-                    <div className="kanban-card-deadline">
-                      <time dateTime={process.nextDeadlineAt.toISOString()}>{formatDate(process.nextDeadlineAt)}</time>
-                      <span className={`deadline-context deadline-context--${formatDueContext(process.nextDeadlineAt).tone}`}>{formatDueContext(process.nextDeadlineAt).label}</span>
-                    </div>
-                    <small className="kanban-card-next-step">{process.nextStep}</small>
-                  </button>
+                  </article>
                 ))}
               </div>
             </article>
