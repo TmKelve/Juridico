@@ -182,8 +182,11 @@
 }
 
 .my-processes-form {
-  background: var(--white);
-  border: 1px solid var(--neutral-200);
+  background:
+    radial-gradient(980px 220px at 8% -40%, color-mix(in srgb, var(--brand-100) 56%, transparent), transparent 72%),
+    linear-gradient(180deg, var(--white) 0%, color-mix(in srgb, var(--white) 92%, var(--neutral-50)) 100%),
+    var(--white);
+  border: 1px solid color-mix(in srgb, var(--neutral-200) 86%, var(--brand-200));
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-card);
   padding: var(--space-4) var(--space-5);
@@ -221,6 +224,12 @@
   }
 }
 
+.process-form-layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
 .process-form-eyebrow {
   margin: 0 0 var(--space-1);
   font-size: 11px;
@@ -241,6 +250,26 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--space-3);
   margin-bottom: var(--space-3);
+}
+
+.process-form-title-group {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.process-form-title-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-lg);
+  background: var(--brand-100);
+  color: var(--brand-700);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-sm);
+  flex-shrink: 0;
 }
 
 .process-form-head > .process-entry-switch {
@@ -273,6 +302,7 @@
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   cursor: pointer;
+  gap: 6px;
 }
 
 .process-entry-chip.is-active {
@@ -281,8 +311,89 @@
   color: var(--brand-700);
 }
 
+.process-form-context {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.process-form-context-item {
+  border: 1px solid color-mix(in srgb, var(--neutral-200) 84%, var(--brand-200));
+  border-radius: var(--radius-lg);
+  background: var(--white);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.process-form-context-item span {
+  font-size: 11px;
+  color: var(--neutral-500);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: var(--font-weight-semibold);
+}
+
+.process-form-context-item strong {
+  font-size: var(--font-size-sm);
+  color: var(--neutral-900);
+  line-height: 1.4;
+}
+
+.process-form-section {
+  border: 1px solid color-mix(in srgb, var(--neutral-200) 84%, var(--brand-200));
+  border-radius: var(--radius-lg);
+  background: var(--white);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.process-form-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.process-form-section-eyebrow {
+  margin: 0;
+  font-size: 11px;
+  color: var(--brand-700);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: var(--font-weight-semibold);
+}
+
+.process-form-section-head h4 {
+  margin: 4px 0 0;
+  font-size: var(--font-size-md);
+  color: var(--neutral-900);
+}
+
+.process-form-section-badge {
+  min-height: 28px;
+  border-radius: var(--radius-full);
+  padding: 0 var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  background: var(--brand-100);
+  border: 1px solid var(--brand-200);
+  color: var(--brand-700);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.process-form-section-badge.is-muted {
+  background: var(--white);
+  border-color: var(--neutral-200);
+  color: var(--neutral-600);
+}
+
 .process-lookup-panel {
-  margin-bottom: var(--space-3);
   border: 1px solid var(--brand-200);
   border-radius: var(--radius-lg);
   background: linear-gradient(180deg, var(--brand-50) 0%, var(--white) 100%);
@@ -350,8 +461,8 @@
 
 .form-grid input,
 .form-grid select {
-  min-height: 36px;
-  border: 1px solid var(--neutral-300);
+  min-height: 42px;
+  border: 1px solid color-mix(in srgb, var(--neutral-300) 88%, var(--brand-100));
   border-radius: var(--radius-md);
   padding: 0 var(--space-3);
   font-size: var(--font-size-sm);
@@ -367,11 +478,20 @@
 }
 
 .form-actions {
-  margin-top: var(--space-3);
   display: flex;
   align-items: center;
   gap: var(--space-2);
   flex-wrap: wrap;
+  border-top: 1px solid var(--neutral-100);
+  padding-top: var(--space-3);
+}
+
+.form-actions-note {
+  margin: 0 auto 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--neutral-500);
+  line-height: 1.45;
+  max-width: 420px;
 }
 
 .client-search-field {
@@ -439,6 +559,13 @@
 .client-shortcut-btn:hover {
   background: var(--white);
   border-style: solid;
+}
+
+.form-actions .btn-primary,
+.form-actions .btn-secondary {
+  min-height: 40px;
+  border-radius: var(--radius-md);
+  font-weight: var(--font-weight-semibold);
 }
 
 .my-processes-filters {
@@ -1906,6 +2033,15 @@
     grid-template-columns: 1fr;
   }
 
+  .process-form-context {
+    grid-template-columns: 1fr;
+  }
+
+  .process-form-section-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .filter-preset-btn {
     width: 100%;
     justify-content: center;
@@ -1928,6 +2064,15 @@
   .filter-actions {
     justify-content: flex-start;
     flex-wrap: wrap;
+  }
+
+  .form-actions {
+    align-items: stretch;
+  }
+
+  .form-actions-note {
+    max-width: none;
+    width: 100%;
   }
 
   .filter-actions .btn-ghost,
@@ -1976,6 +2121,41 @@
 @media (max-width: 520px) {
   .my-processes-kpis {
     grid-template-columns: 1fr;
+  }
+
+  .process-form-modal-backdrop {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .process-form-modal {
+    width: 100%;
+    max-height: min(92dvh, 860px);
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  }
+
+  .my-processes-form {
+    padding: var(--space-4);
+  }
+
+  .process-form-head {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .process-form-title-group {
+    gap: var(--space-2);
+  }
+
+  .process-entry-switch {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .process-entry-chip,
+  .form-actions .btn-primary,
+  .form-actions .btn-secondary {
+    width: 100%;
+    justify-content: center;
   }
 
   .process-mobile-card-grid,

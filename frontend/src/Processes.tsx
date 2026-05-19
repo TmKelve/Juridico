@@ -893,215 +893,260 @@ export function Processes({ user }: ProcessesProps) {
       {showForm && (
         <div className="process-form-modal-backdrop" role="presentation">
           <section className="my-processes-form process-form-modal" role="dialog" aria-modal="true" aria-labelledby="process-form-title">
-          <div className="process-form-head">
-            <div>
-              <p className="process-form-eyebrow">Cadastro operacional</p>
-              <h3 id="process-form-title">{editingId ? 'Editar processo' : 'Novo processo'}</h3>
-              <p>{editingId ? 'Atualize o cadastro e o contexto operacional do processo.' : 'Escolha entre processo novo ou processo ja em andamento antes de concluir o cadastro.'}</p>
-            </div>
-            <button type="button" className="icon-action" onClick={() => { setShowForm(false); resetFormState('novo'); }} aria-label="Fechar cadastro de processo">
-              <X size={16} aria-hidden="true" />
-            </button>
-            {!editingId && (
-              <div className="process-entry-switch" role="tablist" aria-label="Tipo de cadastro do processo">
-                <button
-                  type="button"
-                  className={`process-entry-chip${entryMode === 'novo' ? ' is-active' : ''}`}
-                  onClick={() => resetFormState('novo')}
-                  aria-pressed={entryMode === 'novo'}
-                >
-                  Processo novo
-                </button>
-                <button
-                  type="button"
-                  className={`process-entry-chip${entryMode === 'andamento' ? ' is-active' : ''}`}
-                  onClick={() => resetFormState('andamento')}
-                  aria-pressed={entryMode === 'andamento'}
-                >
-                  Ja em andamento
-                </button>
-              </div>
-            )}
-          </div>
-          <form onSubmit={handleSubmit}>
-            {entryMode === 'andamento' && !editingId && (
-              <div className="process-lookup-panel">
-                <label htmlFor="process-number">
-                  Numero do processo
-                  <div className="filter-input-wrap">
-                    {lookupLoading ? <Loader2 size={15} className="spin" aria-hidden="true" /> : <Search size={15} aria-hidden="true" />}
-                    <input
-                      id="process-number"
-                      type="text"
-                      value={formData.processNumber}
-                      onChange={(event) => setFormData((prev) => ({ ...prev, processNumber: event.target.value }))}
-                      placeholder="Digite o numero do processo"
-                    />
-                  </div>
-                </label>
-                <p className="lookup-helper">Ao digitar o numero, a tela consulta os dados disponiveis para pre-preencher o processo.</p>
-                {lookupError && <p className="lookup-feedback lookup-feedback-error">{lookupError}</p>}
-                {lookupInfo?.alreadyRegistered && (
-                  <div className="lookup-feedback lookup-feedback-warning">
-                    <span>Esse processo ja esta cadastrado na carteira.</span>
-                    {lookupInfo.existingId ? (
-                      <button type="button" className="btn-ghost" onClick={() => openProcessDetail(lookupInfo.existingId!)}>Abrir processo existente</button>
-                    ) : null}
-                  </div>
-                )}
-                {lookupInfo && !lookupInfo.alreadyRegistered && !lookupError && (
-                  <p className="lookup-feedback lookup-feedback-success">Dados localizados. Revise o cadastro antes de salvar.</p>
-                )}
-              </div>
-            )}
-            <div className="form-grid">
-              <label htmlFor="process-title">
-                Titulo
-                <input
-                  id="process-title"
-                  type="text"
-                  value={formData.title}
-                  onChange={(event) => setFormData((prev) => ({ ...prev, title: event.target.value }))}
-                  placeholder="Ex: Revisional de contrato"
-                  disabled={entryMode === 'andamento' && !editingId && !processLookupReady}
-                />
-              </label>
-              {editingId && (
-                <label htmlFor="process-number-edit">
-                  Numero do processo
-                  <input
-                    id="process-number-edit"
-                    type="text"
-                    value={formData.processNumber}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, processNumber: event.target.value }))}
-                    placeholder="Opcional"
-                  />
-                </label>
-              )}
-              <label htmlFor="process-client">
-                Cliente
-                <div className="client-search-field">
-                  <input
-                    id="process-client"
-                    type="search"
-                    value={formData.client}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, client: event.target.value }))}
-                    onKeyDown={(event) => {
-                      if (!isClientSuggestionOpen) return;
-
-                      if (event.key === 'ArrowDown') {
-                        event.preventDefault();
-                        setClientSuggestionIndex((prev) => (
-                          prev < clientSuggestions.length - 1 ? prev + 1 : 0
-                        ));
-                        return;
-                      }
-
-                      if (event.key === 'ArrowUp') {
-                        event.preventDefault();
-                        setClientSuggestionIndex((prev) => (
-                          prev > 0 ? prev - 1 : clientSuggestions.length - 1
-                        ));
-                        return;
-                      }
-
-                      if (event.key === 'Enter' && clientSuggestionIndex >= 0) {
-                        event.preventDefault();
-                        const selectedClient = clientSuggestions[clientSuggestionIndex];
-                        if (!selectedClient) return;
-                        setFormData((prev) => ({ ...prev, client: selectedClient }));
-                        setClientSuggestionIndex(-1);
-                        return;
-                      }
-
-                      if (event.key === 'Escape') {
-                        setClientSuggestionIndex(-1);
-                      }
-                    }}
-                    placeholder="Busque cliente por nome"
-                    aria-expanded={isClientSuggestionOpen}
-                    aria-controls="process-client-suggestions"
-                    disabled={entryMode === 'andamento' && !editingId && !processLookupReady}
-                  />
-                  {isClientSuggestionOpen && (
-                    <div
-                      id="process-client-suggestions"
-                      className="client-suggestion-list"
-                      role="listbox"
-                      aria-label="Sugestoes de clientes"
-                    >
-                      {clientSuggestions.map((client, index) => (
-                        <button
-                          key={client}
-                          type="button"
-                          role="option"
-                          aria-selected={clientSuggestionIndex === index}
-                          className={`client-suggestion-item${clientSuggestionIndex === index ? ' is-active' : ''}`}
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => {
-                            setFormData((prev) => ({ ...prev, client }));
-                            setClientSuggestionIndex(-1);
-                          }}
-                        >
-                          {client}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+            <div className="process-form-head">
+              <div className="process-form-title-group">
+                <div className="process-form-title-icon" aria-hidden="true">
+                  {editingId ? <FolderOpen size={18} /> : <FilePlus2 size={18} />}
                 </div>
-                <small className="client-field-helper">
-                  Vincule o processo a um cliente ja conhecido ou siga para Clientes se precisar cadastrar um novo.
-                </small>
-                {showClientShortcut && (
+                <div>
+                  <p className="process-form-eyebrow">Cadastro operacional</p>
+                  <h3 id="process-form-title">{editingId ? 'Editar processo' : 'Novo processo'}</h3>
+                  <p>{editingId ? 'Atualize o cadastro e o contexto operacional do processo.' : 'Escolha entre processo novo ou processo ja em andamento antes de concluir o cadastro.'}</p>
+                </div>
+              </div>
+              <button type="button" className="icon-action" onClick={() => { setShowForm(false); resetFormState('novo'); }} aria-label="Fechar cadastro de processo">
+                <X size={16} aria-hidden="true" />
+              </button>
+              {!editingId && (
+                <div className="process-entry-switch" role="tablist" aria-label="Tipo de cadastro do processo">
                   <button
                     type="button"
-                    className="btn-ghost client-shortcut-btn"
-                    onClick={() => {
-                      trackEvent('meus_processos_go_to_client_register');
-                      navigate('/clientes');
-                    }}
+                    className={`process-entry-chip${entryMode === 'novo' ? ' is-active' : ''}`}
+                    onClick={() => resetFormState('novo')}
+                    aria-pressed={entryMode === 'novo'}
                   >
-                    Cliente nao encontrado. Cadastrar em Clientes
+                    <Plus size={14} aria-hidden="true" />
+                    Processo novo
                   </button>
-                )}
-              </label>
-              <label htmlFor="process-phase">
-                Fase
-                <select
-                  id="process-phase"
-                  value={formData.phase}
-                  onChange={(event) => setFormData((prev) => ({ ...prev, phase: event.target.value }))}
-                  disabled={entryMode === 'andamento' && !editingId && !processLookupReady}
-                >
-                  {PHASES.map((phase) => (
-                    <option key={phase} value={phase}>{phase}</option>
-                  ))}
-                </select>
-              </label>
-              <label htmlFor="process-status">
-                Status
-                <select
-                  id="process-status"
-                  value={formData.status}
-                  onChange={(event) => setFormData((prev) => ({ ...prev, status: event.target.value }))}
-                  disabled={entryMode === 'andamento' && !editingId && !processLookupReady}
-                >
-                  <option value="ativo">Ativo</option>
-                  <option value="pausado">Pausado</option>
-                  <option value="concluido">Concluido</option>
-                </select>
-              </label>
+                  <button
+                    type="button"
+                    className={`process-entry-chip${entryMode === 'andamento' ? ' is-active' : ''}`}
+                    onClick={() => resetFormState('andamento')}
+                    aria-pressed={entryMode === 'andamento'}
+                  >
+                    <Search size={14} aria-hidden="true" />
+                    Ja em andamento
+                  </button>
+                </div>
+              )}
             </div>
-            <div className="form-actions">
-              <button type="submit" className="btn-primary">
-                <FilePlus2 size={16} aria-hidden="true" />
-                {editingId ? 'Atualizar' : 'Criar'}
-              </button>
-              <button type="button" className="btn-secondary" onClick={() => { setShowForm(false); resetFormState('novo'); }}>
-                Cancelar
-              </button>
-            </div>
-          </form>
+            <form onSubmit={handleSubmit} className="process-form-layout">
+              <section className="process-form-context" aria-label="Resumo do modo de cadastro">
+                <div className="process-form-context-item">
+                  <span>{editingId ? 'Modo' : 'Entrada'}</span>
+                  <strong>{editingId ? 'Edicao de cadastro' : entryMode === 'novo' ? 'Processo novo' : 'Processo em andamento'}</strong>
+                </div>
+                <div className="process-form-context-item">
+                  <span>Cliente</span>
+                  <strong>{formData.client || 'Definir no cadastro'}</strong>
+                </div>
+                <div className="process-form-context-item">
+                  <span>Status inicial</span>
+                  <strong>{formData.status || 'Ativo'}</strong>
+                </div>
+              </section>
+
+              {entryMode === 'andamento' && !editingId && (
+                <section className="process-form-section process-lookup-panel" aria-label="Busca por numero do processo">
+                  <div className="process-form-section-head">
+                    <div>
+                      <p className="process-form-section-eyebrow">Consulta inicial</p>
+                      <h4>Buscar processo existente</h4>
+                    </div>
+                    <span className="process-form-section-badge">Preenchimento assistido</span>
+                  </div>
+                  <label htmlFor="process-number">
+                    Numero do processo
+                    <div className="filter-input-wrap">
+                      {lookupLoading ? <Loader2 size={15} className="spin" aria-hidden="true" /> : <Search size={15} aria-hidden="true" />}
+                      <input
+                        id="process-number"
+                        type="text"
+                        value={formData.processNumber}
+                        onChange={(event) => setFormData((prev) => ({ ...prev, processNumber: event.target.value }))}
+                        placeholder="Digite o numero do processo"
+                      />
+                    </div>
+                  </label>
+                  <p className="lookup-helper">Ao digitar o numero, a tela consulta os dados disponiveis para pre-preencher o processo.</p>
+                  {lookupError && <p className="lookup-feedback lookup-feedback-error">{lookupError}</p>}
+                  {lookupInfo?.alreadyRegistered && (
+                    <div className="lookup-feedback lookup-feedback-warning">
+                      <span>Esse processo ja esta cadastrado na carteira.</span>
+                      {lookupInfo.existingId ? (
+                        <button type="button" className="btn-ghost" onClick={() => openProcessDetail(lookupInfo.existingId!)}>Abrir processo existente</button>
+                      ) : null}
+                    </div>
+                  )}
+                  {lookupInfo && !lookupInfo.alreadyRegistered && !lookupError && (
+                    <p className="lookup-feedback lookup-feedback-success">Dados localizados. Revise o cadastro antes de salvar.</p>
+                  )}
+                </section>
+              )}
+
+              <section className="process-form-section" aria-label="Dados do processo">
+                <div className="process-form-section-head">
+                  <div>
+                    <p className="process-form-section-eyebrow">Cadastro principal</p>
+                    <h4>Dados do processo</h4>
+                  </div>
+                  {!processLookupReady && entryMode === 'andamento' && !editingId ? (
+                    <span className="process-form-section-badge is-muted">Preencha o numero para liberar os campos</span>
+                  ) : (
+                    <span className="process-form-section-badge">Campos prontos para edicao</span>
+                  )}
+                </div>
+                <div className="form-grid">
+                  <label htmlFor="process-title">
+                    Titulo
+                    <input
+                      id="process-title"
+                      type="text"
+                      value={formData.title}
+                      onChange={(event) => setFormData((prev) => ({ ...prev, title: event.target.value }))}
+                      placeholder="Ex: Revisional de contrato"
+                      disabled={entryMode === 'andamento' && !editingId && !processLookupReady}
+                    />
+                  </label>
+                  {editingId && (
+                    <label htmlFor="process-number-edit">
+                      Numero do processo
+                      <input
+                        id="process-number-edit"
+                        type="text"
+                        value={formData.processNumber}
+                        onChange={(event) => setFormData((prev) => ({ ...prev, processNumber: event.target.value }))}
+                        placeholder="Opcional"
+                      />
+                    </label>
+                  )}
+                  <label htmlFor="process-client">
+                    Cliente
+                    <div className="client-search-field">
+                      <input
+                        id="process-client"
+                        type="search"
+                        value={formData.client}
+                        onChange={(event) => setFormData((prev) => ({ ...prev, client: event.target.value }))}
+                        onKeyDown={(event) => {
+                          if (!isClientSuggestionOpen) return;
+
+                          if (event.key === 'ArrowDown') {
+                            event.preventDefault();
+                            setClientSuggestionIndex((prev) => (
+                              prev < clientSuggestions.length - 1 ? prev + 1 : 0
+                            ));
+                            return;
+                          }
+
+                          if (event.key === 'ArrowUp') {
+                            event.preventDefault();
+                            setClientSuggestionIndex((prev) => (
+                              prev > 0 ? prev - 1 : clientSuggestions.length - 1
+                            ));
+                            return;
+                          }
+
+                          if (event.key === 'Enter' && clientSuggestionIndex >= 0) {
+                            event.preventDefault();
+                            const selectedClient = clientSuggestions[clientSuggestionIndex];
+                            if (!selectedClient) return;
+                            setFormData((prev) => ({ ...prev, client: selectedClient }));
+                            setClientSuggestionIndex(-1);
+                            return;
+                          }
+
+                          if (event.key === 'Escape') {
+                            setClientSuggestionIndex(-1);
+                          }
+                        }}
+                        placeholder="Busque cliente por nome"
+                        aria-expanded={isClientSuggestionOpen}
+                        aria-controls="process-client-suggestions"
+                        disabled={entryMode === 'andamento' && !editingId && !processLookupReady}
+                      />
+                      {isClientSuggestionOpen && (
+                        <div
+                          id="process-client-suggestions"
+                          className="client-suggestion-list"
+                          role="listbox"
+                          aria-label="Sugestoes de clientes"
+                        >
+                          {clientSuggestions.map((client, index) => (
+                            <button
+                              key={client}
+                              type="button"
+                              role="option"
+                              aria-selected={clientSuggestionIndex === index}
+                              className={`client-suggestion-item${clientSuggestionIndex === index ? ' is-active' : ''}`}
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => {
+                                setFormData((prev) => ({ ...prev, client }));
+                                setClientSuggestionIndex(-1);
+                              }}
+                            >
+                              {client}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <small className="client-field-helper">
+                      Vincule o processo a um cliente ja conhecido ou siga para Clientes se precisar cadastrar um novo.
+                    </small>
+                    {showClientShortcut && (
+                      <button
+                        type="button"
+                        className="btn-ghost client-shortcut-btn"
+                        onClick={() => {
+                          trackEvent('meus_processos_go_to_client_register');
+                          navigate('/clientes');
+                        }}
+                      >
+                        Cliente nao encontrado. Cadastrar em Clientes
+                      </button>
+                    )}
+                  </label>
+                  <label htmlFor="process-phase">
+                    Fase
+                    <select
+                      id="process-phase"
+                      value={formData.phase}
+                      onChange={(event) => setFormData((prev) => ({ ...prev, phase: event.target.value }))}
+                      disabled={entryMode === 'andamento' && !editingId && !processLookupReady}
+                    >
+                      {PHASES.map((phase) => (
+                        <option key={phase} value={phase}>{phase}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label htmlFor="process-status">
+                    Status
+                    <select
+                      id="process-status"
+                      value={formData.status}
+                      onChange={(event) => setFormData((prev) => ({ ...prev, status: event.target.value }))}
+                      disabled={entryMode === 'andamento' && !editingId && !processLookupReady}
+                    >
+                      <option value="ativo">Ativo</option>
+                      <option value="pausado">Pausado</option>
+                      <option value="concluido">Concluido</option>
+                    </select>
+                  </label>
+                </div>
+              </section>
+
+              <div className="form-actions">
+                <p className="form-actions-note">O processo entra na carteira com os dados salvos e fica disponivel para detalhe, prazos e andamentos.</p>
+                <button type="submit" className="btn-primary">
+                  <FilePlus2 size={16} aria-hidden="true" />
+                  {editingId ? 'Atualizar processo' : 'Criar processo'}
+                </button>
+                <button type="button" className="btn-secondary" onClick={() => { setShowForm(false); resetFormState('novo'); }}>
+                  Cancelar
+                </button>
+              </div>
+            </form>
           </section>
         </div>
       )}
