@@ -1160,10 +1160,36 @@ export function Processes({ user }: ProcessesProps) {
           <div className="filters-head-meta">
             {hasActiveFilter && <span className="filters-active-pill">Filtros ativos</span>}
             <span className="filters-total-pill">{sortedProcesses.length} em exibicao</span>
+            <button
+              type="button"
+              className="btn-ghost btn-filter-viewmode"
+              onClick={() => setViewMode((prev) => (prev === 'table' ? 'kanban' : 'table'))}
+            >
+              <KanbanSquare size={14} aria-hidden="true" />
+              {viewMode === 'table' ? 'Ver Kanban' : 'Ver Tabela'}
+            </button>
             <button type="button" className="btn-ghost btn-filter-density" onClick={toggleFiltersDensity}>
               <Filter size={14} aria-hidden="true" />
               {isFiltersCompact ? 'Mais filtros' : 'Ocultar filtros extras'}
             </button>
+          </div>
+        </div>
+
+        <div className="filters-insights" aria-label="Resumo dos filtros">
+          <div className="filters-insight-card">
+            <span>Filtros ativos</span>
+            <strong>{activeFilterChips.length}</strong>
+            <small>{hasActiveFilter ? 'A carteira está refinada' : 'Nenhum recorte aplicado'}</small>
+          </div>
+          <div className="filters-insight-card">
+            <span>Visualizacao</span>
+            <strong>{viewMode === 'table' ? 'Tabela operacional' : 'Kanban operacional'}</strong>
+            <small>{viewMode === 'table' ? 'Leitura comparativa por linha' : 'Leitura por estágio de execução'}</small>
+          </div>
+          <div className="filters-insight-card">
+            <span>Ordenacao</span>
+            <strong>{sortBy === 'nextDeadline' ? 'Próximo prazo' : sortBy === 'priority' ? 'Prioridade' : 'Última movimentação'}</strong>
+            <small>{sortDirection === 'asc' ? 'Crescente' : 'Decrescente'}</small>
           </div>
         </div>
 
@@ -1228,7 +1254,6 @@ export function Processes({ user }: ProcessesProps) {
           <div className="filter-actions filter-cascade-item">
             <button type="button" className="btn-ghost btn-filter-clear" onClick={clearFilters}><Filter size={14} aria-hidden="true" />Limpar filtros</button>
             <button type="button" className="btn-ghost" onClick={saveCurrentFilter}><Save size={14} aria-hidden="true" />Salvar filtro</button>
-            <button type="button" className="btn-ghost" onClick={() => setViewMode((prev) => (prev === 'table' ? 'kanban' : 'table'))}><KanbanSquare size={14} aria-hidden="true" />{viewMode === 'table' ? 'Tabela / Kanban' : 'Kanban / Tabela'}</button>
           </div>
         </div>
 
