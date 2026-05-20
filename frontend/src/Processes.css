@@ -944,6 +944,13 @@
 
 .processes-table-summary {
   display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.processes-table-summary-main {
+  display: flex;
   align-items: baseline;
   gap: var(--space-2);
 }
@@ -956,6 +963,26 @@
 .processes-table-summary span {
   font-size: var(--font-size-xs);
   color: var(--neutral-600);
+}
+
+.processes-table-summary-pills {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.processes-table-pill {
+  min-height: 26px;
+  border-radius: var(--radius-full);
+  padding: 0 var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  background: color-mix(in srgb, var(--white) 86%, var(--brand-50));
+  border: 1px solid color-mix(in srgb, var(--neutral-200) 84%, var(--brand-200));
+  color: var(--neutral-700);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
 }
 
 .processes-table-controls {
@@ -1487,12 +1514,36 @@
   justify-content: space-between;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--neutral-100);
+  background: linear-gradient(180deg, var(--white) 0%, var(--neutral-50) 100%);
 }
 
 .my-processes-pagination span {
   font-size: var(--font-size-xs);
   color: var(--neutral-600);
   font-weight: var(--font-weight-semibold);
+}
+
+.my-processes-pagination-summary {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.my-processes-pagination-summary strong {
+  font-size: var(--font-size-sm);
+  color: var(--neutral-900);
+}
+
+.my-processes-pagination-current {
+  min-height: 28px;
+  border-radius: var(--radius-full);
+  padding: 0 var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--neutral-200);
+  background: var(--white);
 }
 
 .my-processes-kanban {

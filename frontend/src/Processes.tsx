@@ -1289,8 +1289,14 @@ export function Processes({ user }: ProcessesProps) {
         <section className="my-processes-table-wrapper" aria-label="Tabela de processos">
           <div className="processes-table-toolbar">
             <div className="processes-table-summary">
-              <strong>{sortedProcesses.length}</strong>
-              <span>processo(s) na carteira atual</span>
+              <div className="processes-table-summary-main">
+                <strong>{sortedProcesses.length}</strong>
+                <span>processo(s) na carteira atual</span>
+              </div>
+              <div className="processes-table-summary-pills" aria-label="Resumo de paginação">
+                <span className="processes-table-pill">Página {currentPage} de {totalPages}</span>
+                <span className="processes-table-pill">Até {itemsPerPage} por página</span>
+              </div>
             </div>
             <div className="processes-table-controls">
               <div className="density-toggle" role="group" aria-label="Densidade da tabela">
@@ -1479,6 +1485,10 @@ export function Processes({ user }: ProcessesProps) {
 
           {totalPages > 1 && (
             <div className="my-processes-pagination">
+              <div className="my-processes-pagination-summary">
+                <strong>{Math.min((currentPage - 1) * itemsPerPage + 1, sortedProcesses.length)}–{Math.min(currentPage * itemsPerPage, sortedProcesses.length)}</strong>
+                <span>de {sortedProcesses.length} processos visíveis</span>
+              </div>
               <button
                 type="button"
                 className="btn-secondary"
@@ -1488,7 +1498,7 @@ export function Processes({ user }: ProcessesProps) {
                 <ChevronLeft size={14} aria-hidden="true" />
                 Anterior
               </button>
-              <span>Pagina {currentPage} de {totalPages}</span>
+              <span className="my-processes-pagination-current">Pagina {currentPage} de {totalPages}</span>
               <button
                 type="button"
                 className="btn-secondary"
