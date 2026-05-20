@@ -1397,16 +1397,25 @@
 }
 
 .icon-action {
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   border-radius: var(--radius-md);
   border: 1px solid var(--neutral-200);
   background: var(--white);
-  color: var(--neutral-600);
+  color: var(--neutral-700);
+  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  flex-shrink: 0;
+}
+
+.icon-action svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+  stroke: currentColor;
 }
 
 .icon-action:hover {
