@@ -352,6 +352,15 @@
   gap: 12px;
 }
 
+/* Quando nenhum item está selecionado, o aside some e o main ocupa a largura toda */
+.crm-workspace--no-selection {
+  grid-template-columns: 1fr;
+}
+
+.crm-workspace--no-selection .crm-drawer {
+  display: none;
+}
+
 .crm-main {
   min-width: 0;
   overflow: hidden;

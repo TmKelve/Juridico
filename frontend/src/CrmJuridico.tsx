@@ -1061,7 +1061,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
         })}
       </section>
 
-      <section className="crm-workspace">
+      <section className={`crm-workspace${(tab === 'leads' ? !selectedLead : !selectedOpportunity) ? ' crm-workspace--no-selection' : ''}`}>
         <div className="crm-main">
           <section className="crm-executive-strip">
             {executiveStrip.map((item) => {
@@ -1521,7 +1521,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                   </section>
                 ) : null}
               </>
-            ) : <div className="crm-empty">Selecione um lead para ver o detalhe.</div>
+            ) : null
           ) : selectedOpportunity ? (
             <>
               <div className="crm-drawer__intro">
@@ -1935,7 +1935,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                 </div>
               </div>
             </>
-          ) : <div className="crm-empty">Selecione uma oportunidade para ver o detalhe.</div>}
+          ) : null}
         </aside>
       </section>
 
