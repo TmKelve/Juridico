@@ -2,10 +2,12 @@ import { useEffect, useEffectEvent, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
+  Bell,
   Calendar,
   CalendarPlus,
   CheckCircle2,
   ClipboardList,
+  Clock,
   Download,
   ExternalLink,
   Filter,
@@ -19,6 +21,7 @@ import {
   RefreshCw,
   Save,
   Search,
+  TriangleAlert,
   User,
   X,
 } from 'lucide-react';
@@ -228,19 +231,19 @@ function PriorityDot({ priority }: { priority: Priority }) {
   );
 }
 
-function CanalIcon({ canal }: { canal: Canal }) {
+function CanalIcon({ canal, hideLabel = false }: { canal: Canal; hideLabel?: boolean }) {
   const icons: Record<Canal, React.ReactNode> = {
-    whatsapp:   <MessageSquare size={13} />,
-    telefone:   <Phone size={13} />,
-    email:      <Mail size={13} />,
-    presencial: <User size={13} />,
-    portal:     <Globe size={13} />,
-    interno:    <Inbox size={13} />,
+    whatsapp:   <MessageSquare size={12} />,
+    telefone:   <Phone size={12} />,
+    email:      <Mail size={12} />,
+    presencial: <User size={12} />,
+    portal:     <Globe size={12} />,
+    interno:    <Inbox size={12} />,
   };
   return (
     <span className={`atend-canal-chip atend-canal--${canal}`} aria-label={`Canal: ${CANAL_LABEL[canal]}`}>
       {icons[canal]}
-      <span>{CANAL_LABEL[canal]}</span>
+      {!hideLabel && <span>{CANAL_LABEL[canal]}</span>}
     </span>
   );
 }
@@ -584,11 +587,19 @@ export function Atendimentos({ user }: AtendimentosProps) {
           {formatDateTime(item.dataHora)}
         </td>
         <td className="atend-td-responsavel">{item.responsavel}</td>
+        <td className="atend-td-priority">
+          <span className={`atend-priority-pill atend-priority-pill--${item.priority}`}>
+            <PriorityDot priority={item.priority} />
+            {item.priority === 'alta' ? 'Alta' : item.priority === 'media' ? 'Média' : 'Baixa'}
+          </span>
+        </td>
         <td><StatusBadge status={item.status} /></td>
         <td className="atend-td-next">
           {item.proximoPasso
             ? <span className="atend-next-step">{item.proximoPasso}</span>
-            : <span className="atend-next-step atend-next-step--empty" aria-label="Sem próximo passo definido">—</span>
+            : <span className="atend-next-step atend-next-step--empty" aria-label="Sem próximo passo definido">
+                <TriangleAlert size={11} /> Definir
+              </span>
           }
         </td>
         <td
@@ -702,49 +713,56 @@ export function Atendimentos({ user }: AtendimentosProps) {
 
       {/* ── KPI Cards ───────────────────────────────────────────── */}
       <div className="atend-kpis" aria-label="Indicadores de atendimento">
-        <button type="button" className="atend-kpi-card atend-kpi-card--button" onClick={() => applyPresetFilter('hoje')}>
-          <p>Atendimentos hoje</p>
+        <button
+          type="button"
+          className="atend-kpi-card atend-kpi-card--button"
+          onClick={() => applyPresetFilter('hoje')}
+          aria-pressed={filters.period === 'hoje' && !filters.pendingRetorno && !filters.status}
+        >
+          <div className="atend-kpi-top"><p>Atendimentos hoje</p><Clock size={15} className="atend-kpi-icon" /></div>
           <strong>{loading ? '—' : kpis.hoje}</strong>
         </button>
         <button
           type="button"
           className="atend-kpi-card atend-kpi-card--warning atend-kpi-card--button"
           onClick={() => applyPresetFilter('retornos')}
+          aria-pressed={!!filters.pendingRetorno}
         >
-          <p>Retornos operacionais</p>
+          <div className="atend-kpi-top"><p>Retornos operacionais</p><Bell size={15} className="atend-kpi-icon atend-kpi-icon--warning" /></div>
           <strong>{loading ? '—' : retornosOperacionais}</strong>
         </button>
         <button
           type="button"
           className="atend-kpi-card atend-kpi-card--danger atend-kpi-card--button"
           onClick={() => applyPresetFilter('sem_resposta')}
+          aria-pressed={filters.status === 'sem_resposta'}
         >
-          <p>Clientes sem resposta</p>
+          <div className="atend-kpi-top"><p>Sem resposta</p><TriangleAlert size={15} className="atend-kpi-icon atend-kpi-icon--danger" /></div>
           <strong>{loading ? '—' : atendimentosSemResposta}</strong>
         </button>
         <button
           type="button"
           className="atend-kpi-card atend-kpi-card--button"
           onClick={() => applyPresetFilter('semana')}
+          aria-pressed={filters.period === 'semana'}
         >
-          <p>Interações na semana</p>
+          <div className="atend-kpi-top"><p>Interações na semana</p><Calendar size={15} className="atend-kpi-icon" /></div>
           <strong>{loading ? '—' : kpis.semana}</strong>
         </button>
-      </div>
-
-      <div className="atend-operational-strip" aria-label="Resumo operacional de atendimento">
-        <div className="atend-operational-pill atend-operational-pill--critical">
-          <span>Processos críticos</span>
+        <div className="atend-kpi-card atend-kpi-card--critical-static">
+          <div className="atend-kpi-top"><p>Processos críticos</p><TriangleAlert size={15} className="atend-kpi-icon atend-kpi-icon--danger" /></div>
           <strong>{loading ? '—' : processosCriticos}</strong>
         </div>
-        <div className="atend-operational-pill">
-          <span>Retornos pendentes</span>
+        <div className="atend-kpi-card">
+          <div className="atend-kpi-top"><p>Retornos pendentes</p><Bell size={15} className="atend-kpi-icon" /></div>
           <strong>{loading ? '—' : kpis.pendentes}</strong>
         </div>
-        <div className="atend-operational-note">
-          <AlertTriangle size={14} aria-hidden="true" />
-          <span>Use a visualização de conversa para tratar clientes sem resposta antes de abrir novos registros.</span>
-        </div>
+      </div>
+
+      {/* Dica operacional compacta */}
+      <div className="atend-op-hint" role="note">
+        <AlertTriangle size={13} aria-hidden="true" />
+        <span>Trate clientes sem resposta na visualização <strong>Conversa</strong> antes de abrir novos registros.</span>
       </div>
 
       {/* ── Filters ─────────────────────────────────────────────── */}
@@ -965,6 +983,7 @@ export function Atendimentos({ user }: AtendimentosProps) {
                       <th scope="col">Assunto / Resumo</th>
                       <th scope="col">Data</th>
                       <th scope="col">Responsável</th>
+                      <th scope="col">Prioridade</th>
                       <th scope="col">Status</th>
                       <th scope="col">Próximo passo</th>
                       <th scope="col"><span className="sr-only">Ações</span></th>
@@ -1172,35 +1191,59 @@ export function Atendimentos({ user }: AtendimentosProps) {
             </div>
 
             <div className="atend-drawer-actions">
+              {/* Ação primária */}
               <button
                 className="btn-primary"
                 onClick={() => markResolved(selectedItem.id)}
                 aria-label="Marcar este atendimento como resolvido"
                 disabled={selectedItem.status === 'resolvido'}
               >
-                <CheckCircle2 size={13} /> Marcar resolvido
+                <CheckCircle2 size={14} />
+                {selectedItem.status === 'resolvido' ? 'Já resolvido' : 'Marcar como resolvido'}
               </button>
-              <button
-                className="btn-secondary"
-                onClick={() => scheduleReturn(selectedItem.id)}
-                aria-label="Agendar retorno para este cliente"
-              >
-                <CalendarPlus size={13} /> Agendar retorno
-              </button>
-              <button
-                className="btn-secondary"
-                onClick={() => createTask(selectedItem.id)}
-                aria-label="Criar tarefa a partir deste atendimento"
-              >
-                <ClipboardList size={13} /> Criar tarefa
-              </button>
-              <button
-                className="btn-ghost"
-                onClick={() => navigate(`/processos/${selectedItem.processId}`)}
-                aria-label={`Abrir processo ${selectedItem.processLabel}`}
-              >
-                <ExternalLink size={13} /> Abrir processo
-              </button>
+
+              {/* Ações secundárias */}
+              <div className="atend-drawer-secondary-actions">
+                <button
+                  className="btn-secondary"
+                  onClick={() => scheduleReturn(selectedItem.id)}
+                  aria-label="Agendar retorno para este cliente"
+                >
+                  <CalendarPlus size={13} /> Agendar retorno
+                </button>
+                <button
+                  className="btn-secondary"
+                  onClick={() => createTask(selectedItem.id)}
+                  aria-label="Criar tarefa a partir deste atendimento"
+                >
+                  <ClipboardList size={13} /> Criar tarefa
+                </button>
+              </div>
+
+              {/* Links de navegação */}
+              <div className="atend-drawer-links">
+                <button
+                  className="btn-ghost"
+                  onClick={() => navigate(`/processos/${selectedItem.processId}`)}
+                  aria-label={`Abrir processo ${selectedItem.processLabel}`}
+                >
+                  <ExternalLink size={12} /> Processo
+                </button>
+                <button
+                  className="btn-ghost"
+                  onClick={() => navigate('/tarefas')}
+                  aria-label="Ver todas as tarefas deste cliente"
+                >
+                  <ExternalLink size={12} /> Tarefas
+                </button>
+                <button
+                  className="btn-ghost"
+                  onClick={() => navigate('/clientes')}
+                  aria-label="Abrir ficha do cliente"
+                >
+                  <ExternalLink size={12} /> Cliente
+                </button>
+              </div>
             </div>
           </aside>
         </>
