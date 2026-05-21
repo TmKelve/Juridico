@@ -6,17 +6,22 @@ import {
   CalendarPlus,
   CheckCircle2,
   ClipboardCheck,
+  Clock,
   Download,
   ExternalLink,
   Filter,
+  LayoutGrid,
   List,
+  MessageSquare,
   MoreHorizontal,
   Plus,
   RefreshCw,
   Save,
   Search,
+  TriangleAlert,
   UserRoundPlus,
   X,
+  Zap,
 } from 'lucide-react';
 import { api, type ApiTask } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
@@ -504,10 +509,19 @@ export function Tasks({ user }: TasksProps) {
 
   function renderRow(t: TaskItem) {
     const menuOpen = openMenuId === t.id;
+    const isLateOrUrgent = t.immediateAction || (isOverdue(t.dueDate) && t.status !== 'concluida');
+    const isDueToday = isToday(t.dueDate) && t.status !== 'concluida';
+
+    let rowClass = 'tsk-row';
+    if (isLateOrUrgent) rowClass += ' tsk-row--urgent';
+    else if (isDueToday) rowClass += ' tsk-row--today';
+
+    const dueCls = `tsk-due${isOverdue(t.dueDate) && t.status !== 'concluida' ? ' tsk-due--overdue' : isDueToday ? ' tsk-due--today' : ''}`;
+
     return (
       <tr
         key={t.id}
-        className={`tsk-row${t.immediateAction ? ' tsk-row--urgent' : ''}`}
+        className={rowClass}
         onClick={() => setSelected(t)}
         tabIndex={0}
         role="button"
@@ -516,19 +530,28 @@ export function Tasks({ user }: TasksProps) {
       >
         <td className="tsk-col-task">
           <strong>{t.title}</strong>
-          <span>{t.description}</span>
+          {t.description && <span>{t.description}</span>}
         </td>
         <td className="tsk-col-context">
-          <strong>{t.client}</strong>
-          <span>{t.processLabel} • {t.processTitle || 'Sem vínculo'}</span>
+          <strong>{t.client || '—'}</strong>
+          <span>{t.processLabel ? `${t.processLabel} • ${t.processTitle || 'Sem vínculo'}` : 'Sem processo'}</span>
         </td>
         <td><OriginChip origin={t.origin} /></td>
         <td>
-          <span className={`tsk-due${isOverdue(t.dueDate) && t.status !== 'concluida' ? ' tsk-due--overdue' : ''}`}>{formatDate(t.dueDate)}</span>
+          <span className={dueCls}>
+            {isDueToday && <Clock size={11} style={{ marginRight: 3, verticalAlign: 'middle' }} />}
+            {formatDate(t.dueDate)}
+          </span>
         </td>
         <td><StatusBadge status={t.status} /></td>
         <td><PriorityBadge priority={t.priority} /></td>
-        <td>{t.owner}</td>
+        <td>
+          <span className="tsk-owner-cell">
+            {t.isMine && <span className="tsk-owner-dot tsk-owner-dot--mine" title="Minha tarefa" />}
+            {t.delegatedByMe && <span className="tsk-owner-dot tsk-owner-dot--delegated" title="Delegada por mim" />}
+            {t.owner}
+          </span>
+        </td>
         <td className="tsk-col-actions" onClick={(e) => e.stopPropagation()}>
           <div className="tsk-menu-wrap">
             <button
@@ -545,7 +568,7 @@ export function Tasks({ user }: TasksProps) {
                 <li role="none"><button role="menuitem" onClick={() => { setSelected(t); setOpenMenuId(null); }}><Search size={13} /> Ver detalhe</button></li>
                 <li role="none"><button role="menuitem" onClick={() => markDone(t.id)} disabled={t.status === 'concluida'}><CheckCircle2 size={13} /> Concluir</button></li>
                 <li role="none"><button role="menuitem" onClick={() => reassign(t.id)}><UserRoundPlus size={13} /> Reatribuir</button></li>
-                <li role="none"><button role="menuitem" onClick={() => quickComment()}><List size={13} /> Comentar</button></li>
+                <li role="none"><button role="menuitem" onClick={() => quickComment()}><MessageSquare size={13} /> Comentar</button></li>
                 {t.processId && <li role="none"><button role="menuitem" onClick={() => navigate(`/processos/${t.processId}`)}><ExternalLink size={13} /> Abrir processo</button></li>}
               </ul>
             )}
@@ -586,11 +609,26 @@ export function Tasks({ user }: TasksProps) {
       )}
 
       <div className="tsk-kpis" aria-label="Indicadores de tarefas">
-        <button type="button" className={`tsk-kpi-card${activeKpi === 'today' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('today')}><p>Tarefas hoje</p><strong>{loading ? '—' : kpis.today}</strong></button>
-        <button type="button" className={`tsk-kpi-card tsk-kpi-card--danger${activeKpi === 'overdue' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('overdue')}><p>Atrasadas</p><strong>{loading ? '—' : kpis.overdue}</strong></button>
-        <button type="button" className={`tsk-kpi-card tsk-kpi-card--warning${activeKpi === 'high' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('high')}><p>Alta prioridade</p><strong>{loading ? '—' : kpis.high}</strong></button>
-        <button type="button" className={`tsk-kpi-card${activeKpi === 'delegated' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('delegated')}><p>Delegadas</p><strong>{loading ? '—' : kpis.delegated}</strong></button>
-        <button type="button" className={`tsk-kpi-card tsk-kpi-card--success${activeKpi === 'doneWeek' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('doneWeek')}><p>Concluídas semana</p><strong>{loading ? '—' : kpis.doneWeek}</strong></button>
+        <button type="button" className={`tsk-kpi-card${activeKpi === 'today' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('today')} aria-pressed={activeKpi === 'today'}>
+          <div className="tsk-kpi-top"><p>Tarefas hoje</p><Clock size={15} className="tsk-kpi-icon" /></div>
+          <strong>{loading ? '—' : kpis.today}</strong>
+        </button>
+        <button type="button" className={`tsk-kpi-card tsk-kpi-card--danger${activeKpi === 'overdue' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('overdue')} aria-pressed={activeKpi === 'overdue'}>
+          <div className="tsk-kpi-top"><p>Atrasadas</p><TriangleAlert size={15} className="tsk-kpi-icon tsk-kpi-icon--danger" /></div>
+          <strong>{loading ? '—' : kpis.overdue}</strong>
+        </button>
+        <button type="button" className={`tsk-kpi-card tsk-kpi-card--warning${activeKpi === 'high' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('high')} aria-pressed={activeKpi === 'high'}>
+          <div className="tsk-kpi-top"><p>Alta prioridade</p><Zap size={15} className="tsk-kpi-icon tsk-kpi-icon--warning" /></div>
+          <strong>{loading ? '—' : kpis.high}</strong>
+        </button>
+        <button type="button" className={`tsk-kpi-card${activeKpi === 'delegated' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('delegated')} aria-pressed={activeKpi === 'delegated'}>
+          <div className="tsk-kpi-top"><p>Delegadas</p><UserRoundPlus size={15} className="tsk-kpi-icon" /></div>
+          <strong>{loading ? '—' : kpis.delegated}</strong>
+        </button>
+        <button type="button" className={`tsk-kpi-card tsk-kpi-card--success${activeKpi === 'doneWeek' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('doneWeek')} aria-pressed={activeKpi === 'doneWeek'}>
+          <div className="tsk-kpi-top"><p>Concluídas semana</p><CheckCircle2 size={15} className="tsk-kpi-icon tsk-kpi-icon--success" /></div>
+          <strong>{loading ? '—' : kpis.doneWeek}</strong>
+        </button>
       </div>
 
       <div className="tsk-filters">
@@ -617,10 +655,31 @@ export function Tasks({ user }: TasksProps) {
         </FilterBar>
 
         <div className="tsk-filters-bottom">
-          {hasActiveFilters && <span className="tsk-filter-summary"><Filter size={12} /><strong>{filtered.length}</strong> de {tasks.length}</span>}
-          <div className="tsk-filter-actions">
-            <button className="btn-ghost" onClick={clearFilters}><X size={13} /> Limpar filtros</button>
-            <button className="btn-ghost" onClick={saveFilters}><Save size={13} /> Salvar filtro</button>
+          <div className="tsk-filters-bottom-left">
+            {hasActiveFilters && <span className="tsk-filter-summary"><Filter size={12} /><strong>{filtered.length}</strong> de {tasks.length}</span>}
+          </div>
+          <div className="tsk-filters-bottom-right">
+            {/* View toggle aqui — sempre visível, independente de viewMode */}
+            <div className="tsk-view-toggle" role="group" aria-label="Modo de visualização">
+              <button
+                className={`tsk-view-btn${viewMode === 'lista' ? ' tsk-view-btn--active' : ''}`}
+                onClick={() => setViewMode('lista')}
+                aria-pressed={viewMode === 'lista'}
+              >
+                <List size={13} /> Lista
+              </button>
+              <button
+                className={`tsk-view-btn${viewMode === 'kanban' ? ' tsk-view-btn--active' : ''}`}
+                onClick={() => setViewMode('kanban')}
+                aria-pressed={viewMode === 'kanban'}
+              >
+                <LayoutGrid size={13} /> Kanban
+              </button>
+            </div>
+            <div className="tsk-filter-actions">
+              <button className="btn-ghost" onClick={clearFilters}><X size={13} /> Limpar filtros</button>
+              <button className="btn-ghost" onClick={saveFilters}><Save size={13} /> Salvar filtro</button>
+            </div>
           </div>
         </div>
       </div>
@@ -664,10 +723,6 @@ export function Tasks({ user }: TasksProps) {
                   <p className="tsk-table-subtitle">Trabalhe a fila por prazo, prioridade e responsabilidade.</p>
                 </div>
                 <div className="tsk-table-header-controls">
-                  <div className="tsk-view-toggle" role="group" aria-label="Modo de visualização">
-                    <button className="tsk-view-btn tsk-view-btn--active" onClick={() => setViewMode('lista')} aria-pressed="true"><List size={13} /> Lista</button>
-                    <button className="tsk-view-btn" onClick={() => setViewMode('kanban')} aria-pressed="false"><ClipboardCheck size={13} /> Kanban</button>
-                  </div>
                   <div className="tsk-sort-controls">
                     <label htmlFor="tsk-sort" className="sr-only">Ordenar por</label>
                     <select id="tsk-sort" value={sortBy} onChange={(e) => setSortBy(e.target.value as SortField)}>
@@ -676,7 +731,7 @@ export function Tasks({ user }: TasksProps) {
                       <option value="status">Status</option>
                       <option value="responsavel">Responsável</option>
                     </select>
-                    <button className="btn-ghost tsk-sort-dir" onClick={() => setSortDesc((d) => !d)}>{sortDesc ? '↓' : '↑'}</button>
+                    <button className="btn-ghost tsk-sort-dir" onClick={() => setSortDesc((d) => !d)} aria-label={sortDesc ? 'Ordem decrescente' : 'Ordem crescente'}>{sortDesc ? '↓' : '↑'}</button>
                   </div>
                 </div>
               </div>
@@ -712,7 +767,7 @@ export function Tasks({ user }: TasksProps) {
           {filtered.length > 0 && viewMode === 'kanban' && (
             <div className="tsk-kanban" aria-label="Kanban de tarefas por status">
               {kanbanColumns.map((col) => (
-                <section key={col.status} className="tsk-kanban-col">
+                <section key={col.status} className={`tsk-kanban-col tsk-kanban-col--${col.status}`}>
                   <header>
                     <h4>{col.title}</h4>
                     <span>{col.items.length}</span>
@@ -774,24 +829,48 @@ export function Tasks({ user }: TasksProps) {
             </div>
 
             <div className="tsk-drawer-actions">
-              <button className="btn-primary" onClick={() => markDone(selected.id)} disabled={selected.status === 'concluida'}><CheckCircle2 size={13} /> Concluir</button>
-              <button className="btn-secondary" onClick={() => setSuccess('Edição rápida iniciada.')}><CalendarPlus size={13} /> Editar</button>
-              <button className="btn-secondary" onClick={() => reassign(selected.id)}><UserRoundPlus size={13} /> Reatribuir</button>
-              <button className="btn-secondary" onClick={() => quickComment()}><List size={13} /> Comentar</button>
-              {selected.processId && <button className="btn-ghost" onClick={() => navigate(`/processos/${selected.processId}`)}><ExternalLink size={13} /> Abrir processo</button>}
-              <button className="btn-ghost" onClick={() => navigate('/clientes')}><ExternalLink size={13} /> Abrir cliente</button>
-              <button className="btn-ghost" onClick={() => {
-                if (selected.origin === 'prazo') navigate('/prazos');
-                else if (selected.origin === 'documento') navigate('/documentos');
-                else if (selected.origin === 'publicacao') navigate('/publicacoes-intimacoes');
-                else if (selected.origin === 'atendimento') navigate('/atendimentos');
-                else navigate('/processos');
-              }}><ExternalLink size={13} /> Abrir origem</button>
-              {selected.linkedToPublication && (
-                <button className="btn-ghost" onClick={() => navigate(`/triagem?processId=${selected.processId ?? ''}`)}>
-                  <ExternalLink size={13} /> Abrir triagem
+              {/* Ação primária */}
+              <button
+                className="btn-primary"
+                onClick={() => markDone(selected.id)}
+                disabled={selected.status === 'concluida'}
+              >
+                <CheckCircle2 size={14} />
+                {selected.status === 'concluida' ? 'Concluída' : 'Marcar como concluída'}
+              </button>
+
+              {/* Ações secundárias */}
+              <div className="tsk-drawer-secondary-actions">
+                <button className="btn-secondary" onClick={() => setSuccess('Edição rápida iniciada.')}><CalendarPlus size={13} /> Editar</button>
+                <button className="btn-secondary" onClick={() => reassign(selected.id)}><UserRoundPlus size={13} /> Reatribuir</button>
+                <button className="btn-secondary" onClick={() => quickComment()}><MessageSquare size={13} /> Comentar</button>
+              </div>
+
+              {/* Links de navegação */}
+              <div className="tsk-drawer-links">
+                {selected.processId && (
+                  <button className="btn-ghost" onClick={() => navigate(`/processos/${selected.processId}`)}>
+                    <ExternalLink size={12} /> Processo
+                  </button>
+                )}
+                <button className="btn-ghost" onClick={() => navigate('/clientes')}>
+                  <ExternalLink size={12} /> Cliente
                 </button>
-              )}
+                <button className="btn-ghost" onClick={() => {
+                  if (selected.origin === 'prazo') navigate('/prazos');
+                  else if (selected.origin === 'documento') navigate('/documentos');
+                  else if (selected.origin === 'publicacao') navigate('/publicacoes-intimacoes');
+                  else if (selected.origin === 'atendimento') navigate('/atendimentos');
+                  else navigate('/processos');
+                }}>
+                  <ExternalLink size={12} /> Origem ({ORIGIN_LABEL[selected.origin]})
+                </button>
+                {selected.linkedToPublication && (
+                  <button className="btn-ghost" onClick={() => navigate(`/triagem?processId=${selected.processId ?? ''}`)}>
+                    <ExternalLink size={12} /> Triagem
+                  </button>
+                )}
+              </div>
             </div>
           </aside>
         </>
