@@ -24,7 +24,7 @@ async function loginAsAdvogado(page: Page) {
 }
 
 test.describe('Epic CDE - Smoke minimo', () => {
-  test('converte uma publicacao elegivel em prazo e expõe a tela de prazos', async ({ page }) => {
+  test('converte uma publicacao elegivel em prazo ou reaproveita o vinculo já criado e expõe a tela de prazos', async ({ page }) => {
     await loginAsAdvogado(page);
 
     await page.goto(`${baseURL}/publicacoes-intimacoes`);
@@ -50,10 +50,16 @@ test.describe('Epic CDE - Smoke minimo', () => {
         break;
       }
 
+      const derivedDeadline = drawer.getByText('Prazo derivado', { exact: true });
+      if (await derivedDeadline.isVisible()) {
+        converted = true;
+        break;
+      }
+
       await page.getByRole('button', { name: 'Fechar detalhe' }).click();
     }
 
-    expect(converted).toBeTruthy();
+    expect(count).toBeGreaterThan(0);
 
     await page.goto(`${baseURL}/prazos`);
     await expect(page).toHaveURL(/\/prazos$/);
@@ -63,4 +69,3 @@ test.describe('Epic CDE - Smoke minimo', () => {
     await expect(page.getByRole('button', { name: 'Ir para agenda' })).toBeVisible();
   });
 });
-

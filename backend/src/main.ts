@@ -36,6 +36,13 @@ import { buildTemplatePayload } from './templates.contract';
 import { classifyTriageItem } from './triage-ai.provider';
 import { buildTriageDecisionPayload, buildTriageItemPayload } from './triage.contract';
 import { resolveTriageTarget } from './triage.matcher';
+import { registerFinanceRoutes } from './finance/http/register-finance-routes';
+import { listFinancePermissions } from './authz/finance/permissions';
+import { FinanceAuditService, PrismaFinanceAuditRepository } from './finance/shared/audit';
+import { PrismaFinanceCollectionsRepository } from './finance/collections/finance-collections.service';
+import { FinanceCollectionDispatchJob } from './jobs/finance/finance-collection-dispatch.job';
+import { MockFinanceTransport } from './jobs/finance/mock-finance-transport';
+import { registerFinanceSchedulers } from './shared/scheduler/finance-scheduler-registry';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -146,15 +153,19 @@ function buildAllowedOrigins(primaryOrigin: string) {
   if (!isProduction) {
     try {
       const parsed = new URL(primaryOrigin);
-      const alternateHost = parsed.hostname === 'localhost'
-        ? '127.0.0.1'
+      const hosts = parsed.hostname === 'localhost'
+        ? ['localhost', '127.0.0.1']
         : parsed.hostname === '127.0.0.1'
-          ? 'localhost'
-          : null;
+          ? ['127.0.0.1', 'localhost']
+          : [parsed.hostname];
+      const ports = new Set([parsed.port || '', '5173', '4173']);
 
-      if (alternateHost) {
-        parsed.hostname = alternateHost;
-        allowed.add(parsed.toString().replace(/\/$/, ''));
+      for (const host of hosts) {
+        for (const port of ports) {
+          parsed.hostname = host;
+          parsed.port = port;
+          allowed.add(parsed.toString().replace(/\/$/, ''));
+        }
       }
     } catch {
       // Keep the primary origin only when parsing fails.
@@ -2312,6 +2323,42 @@ async function seedData() {
       },
     });
 
+    const crmOpportunityCount = await prisma.crmOpportunity.count();
+    if (crmOpportunityCount === 0) {
+      const referenceProcess = await prisma.process.findFirst({
+        where: { processNumber: '10024567820265020001' },
+        include: {
+          clientRecord: true,
+          owner: { select: { email: true } },
+        },
+      });
+
+      const nextContactAt = new Date();
+      nextContactAt.setDate(nextContactAt.getDate() + 2);
+      nextContactAt.setHours(10, 30, 0, 0);
+
+      await prisma.crmOpportunity.create({
+        data: {
+          clientId: referenceProcess?.clientId ?? referenceProcess?.clientRecord?.id ?? null,
+          cpf: referenceProcess?.clientRecord?.cpfCnpj ?? '12345678900',
+          personName: 'Tom Kelve Santos de Medeiros',
+          source: 'triagem',
+          status: 'negociacao',
+          responsible: getResponsibleLabel(referenceProcess?.owner?.email) ?? 'advogado',
+          summary: 'Oportunidade priorizada para validar conversão operacional, vínculo de processo existente e documentos comerciais.',
+          nextContactAt,
+          contactEvents: {
+            create: {
+              kind: 'follow_up',
+              summary: 'Contato inicial qualificado e pronto para revisão comercial no smoke.',
+              createdBy: getResponsibleLabel(referenceProcess?.owner?.email) ?? 'advogado',
+              createdAt: new Date(),
+            },
+          },
+        },
+      });
+    }
+
     await prisma.publicationSourceJob.update({
       where: { id: sourceJob.id },
       data: {
@@ -2332,6 +2379,7 @@ scheduleCnjCollector();
 scheduleCpfCollector();
 scheduleDiarioCollector();
 scheduleOabCollector();
+const financeSchedulerRegistry = bootstrapFinanceSchedulers();
 
 function getUserFromReq(req: express.Request): UserToken | null {
   const token = getAuthToken(req);
@@ -5129,9 +5177,9 @@ app.get('/permissions', (req, res) => {
   if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
 
   const perms: Record<'ADM' | 'ADV' | 'FIN', string[]> = {
-    ADM: ['processes:*', 'users:*', 'finance:*', 'dashboard:*'],
+    ADM: ['processes:*', 'users:*', 'dashboard:*', ...listFinancePermissions('ADM')],
     ADV: ['processes:read,write', 'documents:read,write', 'clients:read'],
-    FIN: ['finance:read,write', 'clients:read']
+    FIN: ['clients:read', ...listFinancePermissions('FIN')]
   };
 
   res.json(perms[decoded.role as 'ADM' | 'ADV' | 'FIN'] || []);
@@ -6010,6 +6058,13 @@ app.post('/triage/jobs/:id/reprocess', async (req, res) => {
   }
 });
 
+registerFinanceRoutes({
+  app,
+  prisma,
+  getUserFromReq,
+  devMockEnabled,
+});
+
 app.get('/', (req, res) => {
   res.send({ message: 'SaaS Jurídico API v1' });
 });
@@ -6017,3 +6072,42 @@ app.get('/', (req, res) => {
 app.listen(port, () => {
   console.log(`Backend rodando em http://localhost:${port}`);
 });
+
+function bootstrapFinanceSchedulers() {
+  const enabled = process.env.FINANCE_SCHEDULER_ENABLED === '1';
+  const auditService = new FinanceAuditService(new PrismaFinanceAuditRepository(prisma as any));
+  const collectionsRepository = new PrismaFinanceCollectionsRepository(prisma as any);
+  const dispatchJob = new FinanceCollectionDispatchJob({
+    repository: collectionsRepository,
+    auditService,
+    transport: new MockFinanceTransport(),
+    resolveDestination: async (schedule) => {
+      const clientEmail = schedule?.entry?.clientRecord?.email;
+      const clientPhone = schedule?.entry?.clientRecord?.phone;
+      return schedule.channel === 'email'
+        ? clientEmail || 'financeiro@cliente.local'
+        : clientPhone || '+5500000000000';
+    },
+  });
+
+  const registry = registerFinanceSchedulers({
+    disabled: !enabled,
+    collections: {
+      onTick: async () => {
+        await dispatchJob.runDueSchedules({
+          now: new Date().toISOString(),
+          actor: { source: 'system', role: 'FIN', email: 'scheduler@lexora.local' },
+        });
+      },
+    },
+  });
+
+  const plans = registry.armAll(new Date());
+  if (plans.collections.enabled) {
+    console.log(`[finance] Scheduler armado para ${plans.collections.nextRunAt}`);
+  } else {
+    console.log('[finance] Scheduler desabilitado (defina FINANCE_SCHEDULER_ENABLED=1 para ativar)');
+  }
+
+  return registry;
+}

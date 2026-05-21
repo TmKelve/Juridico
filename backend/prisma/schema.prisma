@@ -37,6 +37,7 @@ model Client {
   triageItems TriageItem[]
   crmLeads CrmLead[]
   crmOpportunities CrmOpportunity[]
+  financeEntries FinanceEntry[]
 }
 
 model Process {
@@ -59,6 +60,7 @@ model Process {
   publications Publication[]
   publicationEvents PublicationEvent[]
   triageItems TriageItem[]
+  financeEntries FinanceEntry[]
 }
 
 model Publication {
@@ -457,4 +459,192 @@ model Template {
   createdBy        String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+}
+
+model FinanceCategory {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique
+  label       String
+  type        String
+  active      Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  entries     FinanceEntry[]
+}
+
+model FinanceEntry {
+  id                Int             @id @default(autoincrement())
+  type              String
+  status            String          @default("open")
+  description       String
+  amountCents       Int
+  settledAmountCents Int            @default(0)
+  currency          String          @default("BRL")
+  dueDate           DateTime
+  settlementDate    DateTime?
+  paymentMethod     String?
+  referenceNumber   String?
+  clientId          Int?
+  clientRecord      Client?         @relation(fields: [clientId], references: [id])
+  processId         Int?
+  process           Process?        @relation(fields: [processId], references: [id])
+  categoryCode      String
+  category          FinanceCategory @relation(fields: [categoryCode], references: [code])
+  responsibleUserId Int?
+  notes             String?
+  externalRef       String?
+  createdBy         String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  charges           FinanceCharge[]
+  reconciliationMatches FinanceReconciliationMatch[]
+  collectionSchedules FinanceCollectionSchedule[]
+
+  @@index([type, status, dueDate])
+  @@index([clientId, status])
+  @@index([processId, status])
+}
+
+model FinanceCharge {
+  id              Int      @id @default(autoincrement())
+  entryId         Int
+  entry           FinanceEntry @relation(fields: [entryId], references: [id])
+  method          String
+  status          String   @default("draft")
+  provider        String   @default("mock")
+  externalId      String   @unique
+  paymentUrl      String?
+  pixCode         String?
+  boletoBarcode   String?
+  expiresAt       DateTime?
+  paidAt          DateTime?
+  amountCents     Int
+  recipientEmail  String?
+  recipientPhone  String?
+  providerPayload Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  events          FinanceChargeEvent[]
+
+  @@index([entryId, status])
+}
+
+model FinanceChargeEvent {
+  id            Int      @id @default(autoincrement())
+  chargeId      Int
+  charge        FinanceCharge @relation(fields: [chargeId], references: [id])
+  providerEventId String?
+  eventType     String
+  status        String
+  payload       Json
+  occurredAt    DateTime
+  createdAt     DateTime @default(now())
+
+  @@unique([chargeId, providerEventId], name: "charge_provider_event_unique")
+}
+
+model FinanceReconciliationRun {
+  id            Int      @id @default(autoincrement())
+  referenceDate DateTime
+  status        String   @default("pending")
+  source        String   @default("manual")
+  importedLines Int      @default(0)
+  matchedLines  Int      @default(0)
+  unmatchedLines Int     @default(0)
+  summaryJson   Json
+  createdBy     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  matches       FinanceReconciliationMatch[]
+}
+
+model FinanceReconciliationMatch {
+  id            Int      @id @default(autoincrement())
+  runId         Int
+  run           FinanceReconciliationRun @relation(fields: [runId], references: [id])
+  entryId       Int?
+  entry         FinanceEntry? @relation(fields: [entryId], references: [id])
+  externalId    String
+  status        String   @default("pending")
+  occurredAt    DateTime
+  amountCents   Int
+  description   String
+  matchedAt     DateTime?
+  metadata      Json
+  createdAt     DateTime @default(now())
+
+  @@index([runId, status])
+  @@index([entryId, status])
+}
+
+model FinanceCollectionSchedule {
+  id              Int      @id @default(autoincrement())
+  entryId         Int
+  entry           FinanceEntry @relation(fields: [entryId], references: [id])
+  channel         String
+  cadenceDays     Int
+  maxAttempts     Int
+  startsAt        DateTime
+  nextRunAt       DateTime
+  active          Boolean  @default(true)
+  lastAttemptAt   DateTime?
+  status          String   @default("scheduled")
+  templateCode    String?
+  createdBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  attempts        FinanceCollectionAttempt[]
+}
+
+model FinanceCollectionAttempt {
+  id            Int      @id @default(autoincrement())
+  scheduleId    Int
+  schedule      FinanceCollectionSchedule @relation(fields: [scheduleId], references: [id])
+  attemptNumber Int
+  status        String   @default("scheduled")
+  channel       String
+  destination   String?
+  message       String
+  providerPayload Json
+  sentAt        DateTime?
+  errorMessage  String?
+  createdAt     DateTime @default(now())
+
+  @@unique([scheduleId, attemptNumber], name: "collection_schedule_attempt_unique")
+}
+
+model FinanceAuditEvent {
+  id             String   @id
+  scope          String
+  entityType     String
+  entityId       String?
+  action         String
+  status         String
+  summary        String
+  details        Json
+  actor          Json
+  occurredAt     DateTime
+  correlationId  String?
+  idempotencyKey String?
+  createdAt      DateTime @default(now())
+
+  @@index([scope, occurredAt])
+  @@index([entityType, entityId])
+}
+
+model FinanceIdempotencyRequest {
+  id           Int      @id @default(autoincrement())
+  key          String
+  scope        String
+  entityType   String
+  entityId     String?
+  action       String
+  payloadHash  String
+  responseCode Int
+  responseBody Json
+  auditEventId String?
+  createdAt    DateTime @default(now())
+
+  @@unique([scope, key], name: "finance_scope_key")
 }

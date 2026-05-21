@@ -1,0 +1,262 @@
+{
+  "epic": "Epic B - Financeiro Real",
+  "version": "2026-05-21",
+  "compatibility": {
+    "preserveExistingRoutes": true,
+    "preserveExistingContracts": true,
+    "additiveOnly": true
+  },
+  "entities": [
+    "financeEntry",
+    "financeCharge",
+    "financeReconciliationRun",
+    "financeCollectionSchedule",
+    "financeAuditEvent"
+  ],
+  "contracts": {
+    "finance.entry.create": {
+      "input": {
+        "type": "receivable|payable",
+        "description": "string",
+        "amountCents": "number",
+        "currency": "BRL",
+        "dueDate": "YYYY-MM-DD",
+        "clientId": "number|null",
+        "processId": "number|null",
+        "categoryCode": "string",
+        "responsibleUserId": "number|null",
+        "notes": "string|null",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "entry": "financeEntry",
+        "auditEvent": "financeAuditEvent",
+        "idempotency": "created|replayed"
+      },
+      "errors": [
+        "FIN_ENTRY_INVALID",
+        "FIN_CATEGORY_NOT_FOUND",
+        "FIN_CLIENT_NOT_FOUND",
+        "FIN_PROCESS_NOT_FOUND",
+        "IDEMPOTENCY_CONFLICT"
+      ],
+      "idempotency": {
+        "scope": "finance.entry.create",
+        "dedupeBy": [
+          "scope",
+          "idempotencyKey"
+        ]
+      }
+    },
+    "finance.entry.updateStatus": {
+      "input": {
+        "entryId": "number",
+        "status": "open|overdue|paid|cancelled|partially_paid|reconciled",
+        "settlementDate": "YYYY-MM-DD|null",
+        "paymentMethod": "manual|pix|boleto|link|bank_transfer|cash|null",
+        "notes": "string|null",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "entry": "financeEntry",
+        "auditEvent": "financeAuditEvent"
+      },
+      "errors": [
+        "FIN_ENTRY_NOT_FOUND",
+        "FIN_STATUS_TRANSITION_INVALID",
+        "IDEMPOTENCY_CONFLICT"
+      ],
+      "idempotency": {
+        "scope": "finance.entry.updateStatus",
+        "dedupeBy": [
+          "scope",
+          "idempotencyKey"
+        ]
+      }
+    },
+    "finance.billing.generate": {
+      "input": {
+        "entryId": "number",
+        "method": "boleto|pix|payment_link",
+        "expiresAt": "ISO-8601|null",
+        "recipientEmail": "string|null",
+        "recipientPhone": "string|null",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "charge": "financeCharge",
+        "entry": "financeEntry",
+        "auditEvent": "financeAuditEvent"
+      },
+      "errors": [
+        "FIN_ENTRY_NOT_FOUND",
+        "FIN_ENTRY_NOT_CHARGEABLE",
+        "FIN_CHARGE_DUPLICATE",
+        "IDEMPOTENCY_CONFLICT"
+      ],
+      "idempotency": {
+        "scope": "finance.billing.generate",
+        "dedupeBy": [
+          "scope",
+          "idempotencyKey"
+        ]
+      }
+    },
+    "finance.billing.webhookUpdate": {
+      "input": {
+        "provider": "mock",
+        "providerEventId": "string",
+        "chargeExternalId": "string",
+        "status": "pending|paid|failed|cancelled|expired",
+        "paidAt": "ISO-8601|null",
+        "amountPaidCents": "number|null",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "charge": "financeCharge",
+        "entry": "financeEntry|null",
+        "auditEvent": "financeAuditEvent"
+      },
+      "errors": [
+        "FIN_CHARGE_NOT_FOUND",
+        "FIN_WEBHOOK_INVALID",
+        "IDEMPOTENCY_CONFLICT"
+      ],
+      "idempotency": {
+        "scope": "finance.billing.webhookUpdate",
+        "dedupeBy": [
+          "scope",
+          "providerEventId"
+        ]
+      }
+    },
+    "finance.reconciliation.run": {
+      "input": {
+        "referenceDate": "YYYY-MM-DD",
+        "lines": [
+          {
+            "externalId": "string",
+            "occurredAt": "ISO-8601",
+            "amountCents": "number",
+            "description": "string"
+          }
+        ],
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "run": "financeReconciliationRun",
+        "matches": "financeReconciliationMatch[]",
+        "auditEvent": "financeAuditEvent"
+      },
+      "errors": [
+        "FIN_RECONCILIATION_INVALID",
+        "IDEMPOTENCY_CONFLICT"
+      ],
+      "idempotency": {
+        "scope": "finance.reconciliation.run",
+        "dedupeBy": [
+          "scope",
+          "idempotencyKey"
+        ]
+      }
+    },
+    "finance.collections.schedule": {
+      "input": {
+        "entryId": "number",
+        "channel": "email|whatsapp|sms",
+        "cadenceDays": "number",
+        "maxAttempts": "number",
+        "startsAt": "ISO-8601",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "schedule": "financeCollectionSchedule",
+        "auditEvent": "financeAuditEvent"
+      },
+      "errors": [
+        "FIN_ENTRY_NOT_FOUND",
+        "FIN_COLLECTION_INVALID",
+        "IDEMPOTENCY_CONFLICT"
+      ],
+      "idempotency": {
+        "scope": "finance.collections.schedule",
+        "dedupeBy": [
+          "scope",
+          "idempotencyKey"
+        ]
+      }
+    },
+    "finance.report.cashflow": {
+      "input": {
+        "from": "YYYY-MM-DD",
+        "to": "YYYY-MM-DD",
+        "groupBy": "day|week|month"
+      },
+      "output": {
+        "totals": "object",
+        "series": "array"
+      },
+      "errors": [
+        "FIN_REPORT_INVALID_RANGE"
+      ],
+      "idempotency": {
+        "scope": "read-only"
+      }
+    },
+    "finance.report.aging": {
+      "input": {
+        "referenceDate": "YYYY-MM-DD",
+        "bucketMode": "default_4"
+      },
+      "output": {
+        "referenceDate": "YYYY-MM-DD",
+        "buckets": "array",
+        "summary": "object"
+      },
+      "errors": [
+        "FIN_REPORT_INVALID_RANGE"
+      ],
+      "idempotency": {
+        "scope": "read-only"
+      }
+    },
+    "finance.audit.event": {
+      "input": {
+        "scope": "string",
+        "entityType": "entry|charge|reconciliation|collection|report|permission",
+        "entityId": "number|string|null",
+        "action": "string",
+        "status": "success|warning|error",
+        "details": "object",
+        "actor": "object",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "auditEvent": "financeAuditEvent"
+      },
+      "errors": [
+        "FIN_AUDIT_INVALID"
+      ],
+      "idempotency": {
+        "scope": "append-only"
+      }
+    }
+  },
+  "errorCodes": [
+    "FIN_ENTRY_INVALID",
+    "FIN_ENTRY_NOT_FOUND",
+    "FIN_ENTRY_NOT_CHARGEABLE",
+    "FIN_STATUS_TRANSITION_INVALID",
+    "FIN_CATEGORY_NOT_FOUND",
+    "FIN_CLIENT_NOT_FOUND",
+    "FIN_PROCESS_NOT_FOUND",
+    "FIN_CHARGE_DUPLICATE",
+    "FIN_CHARGE_NOT_FOUND",
+    "FIN_WEBHOOK_INVALID",
+    "FIN_RECONCILIATION_INVALID",
+    "FIN_COLLECTION_INVALID",
+    "FIN_REPORT_INVALID_RANGE",
+    "FIN_AUDIT_INVALID",
+    "IDEMPOTENCY_CONFLICT"
+  ]
+}

@@ -56,9 +56,10 @@ const navSections: NavSection[] = [
     title: 'GESTÃO',
     items: [
       {
-        kind: 'button',
+        kind: 'link',
         label: 'Financeiro',
         icon: Landmark,
+        to: '/financeiro',
         onClick: () => trackEvent('menu_financeiro_click'),
       },
     ],

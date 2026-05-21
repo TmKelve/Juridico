@@ -4,6 +4,8 @@ import { cn } from '@/lib/cn'
 import { productSurfaceBase } from './styles'
 
 interface ExecutiveCardProps extends HTMLAttributes<HTMLDivElement> {
+  /** Conteúdo de cabeçalho (ícone + eyebrow) — renderizado antes do título */
+  header?: ReactNode
   title: string
   description?: string
   value?: string
@@ -11,6 +13,7 @@ interface ExecutiveCardProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 export function ExecutiveCard({
+  header,
   title,
   description,
   value,
@@ -21,6 +24,7 @@ export function ExecutiveCard({
 }: ExecutiveCardProps) {
   return (
     <section className={cn(productSurfaceBase, 'p-5', className)} {...props}>
+      {header ? <div className="mb-3">{header}</div> : null}
       <div className="space-y-1">
         <h3 className="text-base font-semibold text-slate-900">{title}</h3>
         {description ? <p className="text-sm text-slate-500">{description}</p> : null}

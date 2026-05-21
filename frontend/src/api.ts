@@ -18,6 +18,112 @@ export interface ApiUser {
   role: string;
 }
 
+export type ApiFinancePermission =
+  | 'finance:view'
+  | 'finance:entry'
+  | 'finance:billing'
+  | 'finance:settlement'
+  | 'finance:reconciliation'
+  | 'finance:export';
+
+export interface ApiFinanceCategory {
+  code: string;
+  label: string;
+  type: 'receivable' | 'payable';
+  active: boolean;
+  sortOrder: number;
+}
+
+export interface ApiFinanceEntry {
+  id: number;
+  type: 'receivable' | 'payable';
+  status: 'open' | 'overdue' | 'paid' | 'cancelled' | 'partially_paid' | 'reconciled';
+  description: string;
+  amountCents: number;
+  settledAmountCents: number;
+  dueDate: string;
+  settlementDate: string | null;
+  paymentMethod: 'manual' | 'pix' | 'boleto' | 'link' | 'bank_transfer' | 'cash' | null;
+  currency: string;
+  clientId: number | null;
+  processId: number | null;
+  categoryCode: string;
+  categoryLabel: string;
+  responsibleUserId: number | null;
+  chargeStatus: 'draft' | 'pending' | 'paid' | 'failed' | 'cancelled' | 'expired' | null;
+  billingMethod: 'boleto' | 'pix' | 'payment_link' | null;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiFinanceCharge {
+  id: number;
+  entryId: number;
+  method: 'boleto' | 'pix' | 'payment_link';
+  status: 'draft' | 'pending' | 'paid' | 'failed' | 'cancelled' | 'expired';
+  provider: string;
+  externalId: string;
+  paymentUrl: string | null;
+  pixCode: string | null;
+  boletoBarcode: string | null;
+  expiresAt: string | null;
+  paidAt: string | null;
+  amountCents: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiFinanceAuditEvent {
+  id: string;
+  scope: string;
+  entityType: 'entry' | 'charge' | 'reconciliation' | 'collection' | 'report' | 'permission';
+  entityId: string | null;
+  action: string;
+  status: 'success' | 'warning' | 'error';
+  summary: string;
+  details: Record<string, unknown>;
+  occurredAt: string;
+  createdAt: string;
+}
+
+export interface ApiFinanceAgingBucket {
+  label: '0-30' | '31-60' | '61-90' | '90+';
+  count: number;
+  amountCents: number;
+}
+
+export interface ApiFinanceAgingReport {
+  referenceDate: string;
+  buckets: ApiFinanceAgingBucket[];
+  summary: {
+    totalCount: number;
+    totalAmountCents: number;
+  };
+  indicators: {
+    totalReceivablesCents: number;
+    overdueAmountCents: number;
+    overdueCount: number;
+    currentAmountCents: number;
+    oldestDaysPastDue: number;
+    overdueRatePercent: number;
+  };
+}
+
+export interface ApiFinanceCashflowReport {
+  totals: {
+    inflowCents: number;
+    outflowCents: number;
+    netCents: number;
+  };
+  series: Array<{
+    date: string;
+    inflowCents: number;
+    outflowCents: number;
+    netCents: number;
+  }>;
+}
+
 export interface ApiProcess {
   id: number;
   title: string;
@@ -514,7 +620,7 @@ export const api = {
     apiClient<MeResponse>('/me'),
 
   getPermissions: () =>
-    apiClient('/permissions'),
+    apiClient<string[]>('/permissions'),
 
   getUsers: () =>
     apiClient<ApiUser[]>('/users'),
@@ -561,6 +667,102 @@ export const api = {
 
   getHome: () =>
     apiClient<{ profile: string; home: { menu: string[]; cards: string[] } }>('/home'),
+
+  getFinanceCategories: (type?: 'receivable' | 'payable') =>
+    apiClient<ApiFinanceCategory[]>(type ? `/finance/categories?type=${type}` : '/finance/categories'),
+
+  getFinanceEntries: (filters?: { type?: 'receivable' | 'payable'; status?: ApiFinanceEntry['status'] }) => {
+    const params = new URLSearchParams();
+    if (filters?.type) params.set('type', filters.type);
+    if (filters?.status) params.set('status', filters.status);
+    const query = params.toString();
+    return apiClient<ApiFinanceEntry[]>(query ? `/finance/entries?${query}` : '/finance/entries');
+  },
+
+  createFinanceEntry: (data: {
+    type: 'receivable' | 'payable';
+    description: string;
+    amountCents: number;
+    dueDate: string;
+    clientId?: number | null;
+    processId?: number | null;
+    categoryCode: string;
+    responsibleUserId?: number | null;
+    notes?: string | null;
+    idempotencyKey?: string | null;
+  }) =>
+    apiClient<{ entry: ApiFinanceEntry }>('/finance/entries', {
+      method: 'POST',
+      body: data,
+    }),
+
+  settleFinanceEntry: (id: number, data: {
+    settlementDate: string;
+    paymentMethod: NonNullable<ApiFinanceEntry['paymentMethod']>;
+    notes?: string | null;
+    idempotencyKey?: string | null;
+  }) =>
+    apiClient<{ entry: ApiFinanceEntry }>(`/finance/entries/${id}/settle`, {
+      method: 'POST',
+      body: data,
+    }),
+
+  generateFinanceBilling: (data: {
+    entryId: number;
+    method: ApiFinanceCharge['method'];
+    expiresAt?: string | null;
+    recipientEmail?: string | null;
+    recipientPhone?: string | null;
+    idempotencyKey?: string | null;
+  }) =>
+    apiClient<{ charge: ApiFinanceCharge; entry: ApiFinanceEntry }>('/finance/billing/generate', {
+      method: 'POST',
+      body: data,
+    }),
+
+  runFinanceReconciliation: (data: {
+    referenceDate: string;
+    lines: Array<{ externalId: string; occurredAt: string; amountCents: number; description: string }>;
+    idempotencyKey?: string | null;
+  }) =>
+    apiClient('/finance/reconciliation/run', {
+      method: 'POST',
+      body: data,
+    }),
+
+  scheduleFinanceCollection: (data: {
+    entryId: number;
+    channel: 'email' | 'whatsapp' | 'sms';
+    cadenceDays: number;
+    maxAttempts: number;
+    startsAt: string;
+    idempotencyKey?: string | null;
+  }) =>
+    apiClient('/finance/collections/schedule', {
+      method: 'POST',
+      body: data,
+    }),
+
+  getFinanceCashflow: (filters: { from: string; to: string; groupBy?: 'day' | 'week' | 'month' }) => {
+    const params = new URLSearchParams({
+      from: filters.from,
+      to: filters.to,
+      groupBy: filters.groupBy ?? 'month',
+    });
+    return apiClient<ApiFinanceCashflowReport>(`/finance/reports/cashflow?${params.toString()}`);
+  },
+
+  getFinanceAging: (referenceDate: string) =>
+    apiClient<ApiFinanceAgingReport>(`/finance/reports/aging?referenceDate=${encodeURIComponent(referenceDate)}`),
+
+  getFinanceAudit: (filters?: { entityType?: string; entityId?: string; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (filters?.entityType) params.set('entityType', filters.entityType);
+    if (filters?.entityId) params.set('entityId', filters.entityId);
+    if (typeof filters?.limit === 'number') params.set('limit', String(filters.limit));
+    const query = params.toString();
+    return apiClient<ApiFinanceAuditEvent[]>(query ? `/finance/audit?${query}` : '/finance/audit');
+  },
 
   getProcesses: () =>
     apiClient<ApiProcess[]>('/processes'),

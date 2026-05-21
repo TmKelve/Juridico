@@ -21,6 +21,7 @@ const Clients = lazy(() => import('./Clients').then((module) => ({ default: modu
 const CrmJuridico = lazy(() => import('./CrmJuridico').then((module) => ({ default: module.CrmJuridico })))
 const Publications = lazy(() => import('./Publications').then((module) => ({ default: module.Publications })))
 const Triagem = lazy(() => import('./Triagem').then((module) => ({ default: module.Triagem })))
+const Financeiro = lazy(() => import('./Financeiro').then((module) => ({ default: module.Financeiro })))
 
 // Initialize monitoring on app load
 initMonitoring()
@@ -125,6 +126,14 @@ function getPageMeta(pathname: string, role: string) {
       title: 'CRM Jurídico',
       subtitle: 'Acompanhe leads, oportunidades derivadas da triagem e conduza o relacionamento comercial com contexto jurídico.',
       badge: 'Relacionamento',
+    }
+  }
+
+  if (pathname === '/financeiro') {
+    return {
+      title: 'Financeiro',
+      subtitle: 'Controle contas, cobranças, baixas, inadimplência e conciliação com visão operacional contínua.',
+      badge: 'Financeiro',
     }
   }
 
@@ -320,6 +329,7 @@ function AppShell({
               <Route path="/atendimentos" element={<Atendimentos user={user} />} />
               <Route path="/clientes" element={<Clients user={user} />} />
               <Route path="/crm-juridico" element={<CrmJuridico user={user} />} />
+              <Route path="/financeiro" element={<Financeiro user={user} />} />
               <Route path="/publicacoes-intimacoes" element={<Publications user={user} />} />
               <Route path="/triagem" element={<Triagem user={user} />} />
               <Route

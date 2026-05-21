@@ -30,7 +30,7 @@ export function KpiCard({
     <section className={cn(productSurfaceBase, 'p-4', className)} {...props}>
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm text-slate-500">{label}</p>
-        {icon ? <div className="text-slate-500">{icon}</div> : null}
+        {icon ? <div>{icon}</div> : null}
       </div>
       <div className="mt-2 flex items-end gap-2">
         <p className="text-2xl font-semibold text-slate-900">{value}</p>

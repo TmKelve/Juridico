@@ -1,3 +1,10 @@
+/* ─── Reset de margem global em h3/h4 dentro do CRM (tokens.css seta 12px) ─── */
+.crm-page h3,
+.crm-page h4 {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
 .crm-page {
   display: grid;
   gap: 12px;
@@ -853,6 +860,50 @@
   font-size: 13px;
   color: #334155;
   font-weight: 500;
+}
+
+/* Stack wrapper que engloba meta row + footer row */
+.crm-card__footer-stack {
+  display: grid;
+  gap: 0;
+}
+
+/* Meta row acima do footer: "1 triagem · Sem responsável" */
+.crm-card__footer-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 0 4px;
+  flex-wrap: wrap;
+}
+
+.crm-card__meta-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  cursor: pointer;
+  transition: color 150ms ease;
+}
+
+.crm-card__meta-link:hover {
+  color: #334155;
+}
+
+.crm-card__meta-link--warn {
+  color: #d97706;
+}
+
+.crm-card__meta-link--warn:hover {
+  color: #b45309;
+}
+
+.crm-card__meta-sep {
+  color: #cbd5e1;
+  font-size: 11px;
+  line-height: 1;
 }
 
 .crm-card__footer {

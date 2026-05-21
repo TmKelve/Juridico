@@ -1072,6 +1072,15 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                   className={`crm-executive-card crm-executive-card--${item.tone}`}
                   title={item.title}
                   description={item.body}
+                  header={(
+                    <div className="crm-executive-card__top">
+                      <span className={`crm-executive-card__icon crm-executive-card__icon--${item.tone}`}>
+                        <StripIcon size={16} />
+                      </span>
+                      <span className="crm-executive-card__label">{item.eyebrow}</span>
+                      {item.badge ? <span className="crm-chip crm-chip--warning">{item.badge}</span> : null}
+                    </div>
+                  )}
                   footer={(
                     <Button
                       variant="ghost"
@@ -1090,15 +1099,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                       <ChevronRight size={14} />
                     </Button>
                   )}
-                >
-                  <div className="crm-executive-card__top">
-                    <span className={`crm-executive-card__icon crm-executive-card__icon--${item.tone}`}>
-                      <StripIcon size={16} />
-                    </span>
-                    <span className="crm-executive-card__label">{item.eyebrow}</span>
-                    {item.badge ? <span className="crm-chip crm-chip--warning">{item.badge}</span> : null}
-                  </div>
-                </ExecutiveCard>
+                />
               );
             })}
           </section>
@@ -1276,34 +1277,62 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                             key={item.id}
                             className={`crm-card crm-card--opportunity ${selectedOpportunity?.id === item.id ? 'is-selected' : ''}`}
                             title={item.personName}
-                            account={`${formatSourceLabel(item.source)} · ${item.responsible || 'Sem responsável'}`}
+                            account={formatSourceLabel(item.source)}
+                            accountSub={item.responsible || 'Sem responsável'}
+                            accountSubClass={item.responsible ? 'text-slate-500' : 'text-amber-600 font-semibold'}
                             value={getSummaryPreview(item.summary)}
-                            status="info"
-                            statusLabel={OPPORTUNITY_STAGE_LABELS[item.status as keyof typeof OPPORTUNITY_STAGE_LABELS] ?? item.status}
+                            badges={(
+                              <>
+                                <span className="crm-chip crm-chip--blue">
+                                  {OPPORTUNITY_STAGE_LABELS[item.status as keyof typeof OPPORTUNITY_STAGE_LABELS] ?? item.status}
+                                </span>
+                                {!item.responsible ? (
+                                  <span className="crm-chip crm-chip--warning">Sem responsável</span>
+                                ) : null}
+                                {item.hasCriticalTriage ? (
+                                  <span className="crm-chip crm-chip--neutral">Triagem crítica</span>
+                                ) : null}
+                              </>
+                            )}
                             priority={getNextContactState(item.nextContactAt) === 'overdue' ? 'urgent' : getNextContactState(item.nextContactAt) === 'today' ? 'high' : 'medium'}
                             onClick={() => setSelectedOpportunity(item)}
                             footer={(
-                              <div className="crm-card__footer">
-                                <span className={`crm-next-contact crm-next-contact--${getNextContactState(item.nextContactAt)}`}>{getNextContactText(item.nextContactAt)}</span>
-                                {item.convertedProcessId ? (
-                                  <button
-                                    className="btn-ghost"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      navigate(`/processos/${item.convertedProcessId}`);
-                                    }}
-                                  >
-                                    Abrir processo
-                                  </button>
+                              <div className="crm-card__footer-stack">
+                                {(item.triageCount > 0 || !item.responsible) ? (
+                                  <div className="crm-card__footer-meta">
+                                    {item.triageCount > 0 ? (
+                                      <span className="crm-card__meta-link">
+                                        {item.triageCount} triagem
+                                      </span>
+                                    ) : null}
+                                    {item.triageCount > 0 && !item.responsible ? <span className="crm-card__meta-sep">·</span> : null}
+                                    {!item.responsible ? (
+                                      <span className="crm-card__meta-link crm-card__meta-link--warn">Sem responsável</span>
+                                    ) : null}
+                                  </div>
                                 ) : null}
-                                <select
-                                  value={item.status}
-                                  aria-label={`Alterar etapa de ${item.personName}`}
-                                  onChange={(event) => void updateOpportunityStatus(item, event.target.value)}
-                                  onClick={(event) => event.stopPropagation()}
-                                >
-                                  {OPPORTUNITY_STATUS.map((status) => <option key={status} value={status}>{OPPORTUNITY_STAGE_LABELS[status]}</option>)}
-                                </select>
+                                <div className="crm-card__footer">
+                                  <span className={`crm-next-contact crm-next-contact--${getNextContactState(item.nextContactAt)}`}>{getNextContactText(item.nextContactAt)}</span>
+                                  {item.convertedProcessId ? (
+                                    <button
+                                      className="btn-ghost"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        navigate(`/processos/${item.convertedProcessId}`);
+                                      }}
+                                    >
+                                      Abrir processo
+                                    </button>
+                                  ) : null}
+                                  <select
+                                    value={item.status}
+                                    aria-label={`Alterar etapa de ${item.personName}`}
+                                    onChange={(event) => void updateOpportunityStatus(item, event.target.value)}
+                                    onClick={(event) => event.stopPropagation()}
+                                  >
+                                    {OPPORTUNITY_STATUS.map((status) => <option key={status} value={status}>{OPPORTUNITY_STAGE_LABELS[status]}</option>)}
+                                  </select>
+                                </div>
                               </div>
                             )}
                           />

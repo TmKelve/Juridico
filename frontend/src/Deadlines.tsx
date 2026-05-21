@@ -777,7 +777,7 @@ export function Deadlines({ user }: DeadlinesProps) {
 
           <div className="deadline-contract-note">
             <strong>Contrato esperado</strong>
-            <p>A conclusão em massa já usa `deadlines.bulkAction`. A sincronização de agenda ainda depende de `createAgendaEvent` até consolidarmos o vínculo prazo ↔ agenda no contrato principal.</p>
+            <p>A conclusão em massa já usa `deadlines.bulkAction`. A sincronização de agenda ainda depende de `createAgendaEvent` até consolidarmos o vinculo prazo ↔ agenda no contrato principal.</p>
           </div>
         </aside>
       </section>
