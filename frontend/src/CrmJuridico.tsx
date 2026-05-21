@@ -853,8 +853,8 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
         eyebrow: 'Prioridades',
         title: `${closingOpportunities} oportunidades em fase de fechamento`,
         body: `${missingResponsible} oportunidades sem responsável definido.`,
-        tone: 'warning',
-        badge: 'Atenção',
+        tone: (closingOpportunities > 0 || missingResponsible > 0) ? 'warning' : 'success',
+        badge: (closingOpportunities > 0 || missingResponsible > 0) ? 'Atenção' : undefined,
         icon: Flag,
         linkLabel: 'Ver prioridades',
       },
@@ -1257,7 +1257,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
             <div className="crm-board-scroll">
               <div className="crm-board">
                 {opportunitiesByStage.map((column) => (
-                  <KanbanColumn key={column.status} className="crm-column" title={column.label} count={column.items.length}>
+                  <KanbanColumn key={column.status} className={`crm-column crm-column--${column.status}`} title={column.label} count={column.items.length}>
                     <div className="crm-column__body">
                       {column.items.length === 0 ? (
                         (() => {

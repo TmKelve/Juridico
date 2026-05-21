@@ -8,8 +8,7 @@
 .crm-page {
   display: grid;
   gap: 12px;
-  width: min(100%, 1680px);
-  margin: 0 auto;
+  width: 100%;
   padding: 20px;
   background:
     linear-gradient(180deg, rgba(245, 248, 251, 0.92), rgba(247, 249, 251, 1) 240px),
@@ -623,10 +622,19 @@
   flex: 0 0 280px;
   padding: 10px;
   border: 1px solid var(--neutral-200, #dbe2ea);
+  border-top-width: 3px;
   border-radius: 12px;
   background: #f8fafc;
   flex-shrink: 0;
 }
+
+/* Stage-based top border colors */
+.crm-column--acao_recomendada { border-top-color: #94a3b8; }
+.crm-column--em_contato       { border-top-color: #3b82f6; }
+.crm-column--proposta_enviada { border-top-color: #6366f1; }
+.crm-column--negociacao       { border-top-color: #f59e0b; }
+.crm-column--ganha            { border-top-color: #22c55e; }
+.crm-column--perdida          { border-top-color: #ef4444; }
 
 .crm-column__header strong,
 .crm-column__header span {
@@ -1041,6 +1049,12 @@
 .crm-next-contact {
   font-size: 12px;
   font-weight: 700;
+}
+
+.crm-next-contact--none {
+  color: #94a3b8;
+  font-weight: 500;
+  font-style: italic;
 }
 
 .crm-next-contact--overdue {
