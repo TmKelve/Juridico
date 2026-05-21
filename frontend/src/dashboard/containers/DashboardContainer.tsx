@@ -87,10 +87,15 @@ export function DashboardContainer({ user }: DashboardContainerProps) {
       subtitle: subtitleByProfile[profile] || 'Acompanhe a fila operacional e ataque o que exige ação primeiro.',
       dateLabel: longDate.charAt(0).toUpperCase() + longDate.slice(1),
       summary: `Você tem ${agendaToday} compromisso(s) no dia, ${todayCount} item(ns) para atuar hoje e ${overdueCount} atraso(s) exigindo correção.`,
+      pulse: [
+        { label: 'Urgências', value: overdueCount, tone: overdueCount > 0 ? 'error' : 'success' },
+        { label: 'Atuação hoje', value: todayCount, tone: todayCount > 0 ? 'warning' : 'neutral' },
+        { label: 'Agenda', value: agendaToday, tone: 'info' as const },
+      ],
       insights: [
         { text: `${todayCount} itens exigem atuação hoje`, tone: todayCount > 0 ? 'warning' : 'neutral' },
         { text: `${overdueCount} atraso(s) pedem correção imediata`, tone: overdueCount > 0 ? 'error' : 'success' },
-        { text: `${pausedCount} processo(s) estão avançando`, tone: pausedCount > 0 ? 'warning' : 'success' },
+        { text: `${pausedCount} processo(s) estão em atenção`, tone: pausedCount > 0 ? 'warning' : 'success' },
         { text: `${agendaToday} compromissos no dia`, tone: 'info' },
       ],
     };
@@ -217,7 +222,22 @@ export function DashboardContainer({ user }: DashboardContainerProps) {
               </div>
 
               <div className="dashboard-hero-right">
-                <div className="dashboard-hero-actions">
+                <div className="dashboard-hero-pulse-card" aria-label="Pulso operacional">
+                  <div className="dashboard-hero-pulse-head">
+                    <span className="dashboard-hero-pulse-kicker">Pulso operacional</span>
+                    <strong>{hero.summary}</strong>
+                  </div>
+                  <div className="dashboard-hero-pulse-grid">
+                    {hero.pulse.map((item) => (
+                      <div key={item.label} className={`dashboard-hero-pulse-stat dashboard-hero-pulse-stat--${item.tone}`}>
+                        <span>{item.label}</span>
+                        <strong>{item.value}</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="dashboard-hero-actions" aria-label="Ações principais">
                   <button className="btn-secondary btn-compact" onClick={() => onShortcutClick('ver_agenda')}>
                     <CalendarDays size={16} aria-hidden="true" />
                     Ver Agenda

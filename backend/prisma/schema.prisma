@@ -170,22 +170,23 @@ model CrmLead {
 }
 
 model CrmOpportunity {
-  id             Int      @id @default(autoincrement())
-  clientId       Int?
-  clientRecord   Client?  @relation(fields: [clientId], references: [id])
-  convertedProcessId Int?
-  cpf            String?
-  personName     String
-  source         String
-  status         String   @default("acao_recomendada")
-  responsible    String?
-  summary        String
-  lastContactAt  DateTime?
-  nextContactAt  DateTime?
-  contactEvents  CrmContactEvent[]
-  triageItems    TriageItem[]
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                  Int                              @id @default(autoincrement())
+  clientId            Int?
+  clientRecord        Client?                          @relation(fields: [clientId], references: [id])
+  convertedProcessId  Int?
+  cpf                 String?
+  personName          String
+  source              String
+  status              String                           @default("acao_recomendada")
+  responsible         String?
+  summary             String
+  lastContactAt       DateTime?
+  nextContactAt       DateTime?
+  contactEvents       CrmContactEvent[]
+  documentAttachments CrmOpportunityDocumentAttachment[]
+  triageItems         TriageItem[]
+  createdAt           DateTime                         @default(now())
+  updatedAt           DateTime                         @updatedAt
 }
 
 model CrmContactEvent {
@@ -198,6 +199,60 @@ model CrmContactEvent {
   summary          String
   createdBy        String?
   createdAt        DateTime        @default(now())
+}
+
+model CrmOpportunityDocumentAttachment {
+  id                Int            @id @default(autoincrement())
+  crmOpportunityId  Int
+  crmOpportunity    CrmOpportunity @relation(fields: [crmOpportunityId], references: [id])
+  documentId        Int?
+  document          Documento?     @relation(fields: [documentId], references: [id])
+  titleSnapshot     String
+  category          String         @default("Checklist")
+  status            String         @default("ativo")
+  mimeType          String         @default("application/octet-stream")
+  previewUrl        String?
+  requiredChecklist Boolean        @default(false)
+  pendingForAdvance Boolean        @default(false)
+  uploadedAt        DateTime       @default(now())
+  responsible       String?
+  createdBy         String?
+  externalDocumentId String?
+  metadata          Json
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+}
+
+model CrmAuditEvent {
+  id             String   @id
+  scope          String
+  entityType     String
+  entityId       Int?
+  action         String
+  status         String
+  summary        String
+  details        Json
+  actor          Json
+  occurredAt     DateTime
+  correlationId  String?
+  idempotencyKey String?
+  createdAt      DateTime @default(now())
+}
+
+model CrmIdempotencyRequest {
+  id           Int      @id @default(autoincrement())
+  key          String
+  scope        String
+  entityType   String
+  entityId     Int?
+  action       String
+  payloadHash  String
+  responseCode Int
+  responseBody Json
+  auditEventId String?
+  createdAt    DateTime @default(now())
+
+  @@unique([scope, key], name: "scope_key")
 }
 
 model TriageItem {
@@ -258,21 +313,27 @@ model Andamento {
 }
 
 model Prazo {
-  id          Int      @id @default(autoincrement())
-  processId   Int
-  process     Process  @relation(fields: [processId], references: [id])
-  title       String
-  dueDate     DateTime
-  status      String   @default("aberto")
-  priority    String   @default("media")
-  origin      String   @default("interno")
-  responsible String?
-  legalArea   String?
-  notes       String?
-  completedAt DateTime?
-  createdBy   String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                      Int         @id @default(autoincrement())
+  processId               Int
+  process                 Process     @relation(fields: [processId], references: [id])
+  title                   String
+  dueDate                 DateTime
+  status                  String      @default("aberto")
+  priority                String      @default("media")
+  origin                  String      @default("interno")
+  responsible             String?
+  legalArea               String?
+  notes                   String?
+  publicationId           Int?
+  agendaEventId           Int?        @unique
+  agendaEvent             AgendaEvent? @relation(fields: [agendaEventId], references: [id])
+  agendaSyncStatus        String?     @default("missing")
+  completedAt             DateTime?
+  completedBy             String?
+  completionJustification String?
+  createdBy               String?
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
 }
 
 model Documento {
@@ -295,6 +356,7 @@ model Documento {
   createdBy         String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+  crmOpportunityAttachments CrmOpportunityDocumentAttachment[]
 }
 
 model Atendimento {
@@ -369,6 +431,7 @@ model AgendaEvent {
   createdBy         String
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
+  deadline          Prazo?
 }
 
 model Template {

@@ -9,7 +9,7 @@ interface CriticalAlertsWidgetProps {
 
 export function CriticalAlertsWidget({ items }: CriticalAlertsWidgetProps) {
   return (
-    <SectionCard title="Alertas Críticos">
+    <SectionCard title="Alertas Críticos" meta={`${items.length} alerta(s)`}>
       {items.length > 0 ? (
         <ul className="rail-widget-list">
           {items.map((alert) => (

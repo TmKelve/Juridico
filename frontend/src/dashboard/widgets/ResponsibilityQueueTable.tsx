@@ -57,6 +57,19 @@ export function ResponsibilityQueueTable({
         {selectedPhase && <span className="phase-chip">Fase: {selectedPhase}</span>}
       </div>
 
+      <div className="queue-snapshot" aria-label="Resumo da fila">
+        <div className="queue-snapshot-card">
+          <span className="queue-snapshot-label">Em destaque</span>
+          <strong>{highlights.length}</strong>
+          <small>prioridades com ação imediata</small>
+        </div>
+        <div className="queue-snapshot-card">
+          <span className="queue-snapshot-label">Na fila detalhada</span>
+          <strong>{remaining.length > 0 ? remaining.length : items.length}</strong>
+          <small>itens para varredura completa</small>
+        </div>
+      </div>
+
       {highlights.length > 0 && (
         <section className="priority-stack" aria-label="Itens prioritários">
           {highlights.map((row) => (
@@ -137,6 +150,9 @@ export function ResponsibilityQueueTable({
                   <td className="queue-title">
                     <div>#{row.id} • {row.title}</div>
                     <small>{row.pendingSummary}</small>
+                    <span className="queue-mobile-meta">
+                      {row.client} • {row.owner} • {row.phase}
+                    </span>
                   </td>
                   <td>
                     <div className="queue-context-cell">

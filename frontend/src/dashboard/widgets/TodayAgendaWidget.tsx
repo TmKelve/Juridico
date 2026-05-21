@@ -10,7 +10,7 @@ interface TodayAgendaWidgetProps {
 
 export function TodayAgendaWidget({ items }: TodayAgendaWidgetProps) {
   return (
-    <SectionCard title="Agenda de Hoje">
+    <SectionCard title="Agenda de Hoje" meta={`${items.length} compromisso(s)`}>
       {items.length > 0 ? (
         <ul className="agenda-timeline-list">
           {items.map((item) => (

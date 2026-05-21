@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   Briefcase,
   CheckCircle2,
+  CheckSquare,
   Clock3,
   ExternalLink,
   FileClock,
@@ -83,6 +84,7 @@ function formatDateInput(date: Date) {
 
 export function Triagem({ user }: TriagemProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [items, setItems] = useState<ApiTriageItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -95,6 +97,8 @@ export function Triagem({ user }: TriagemProps) {
   const [jobs, setJobs] = useState<ApiTriageJob[]>([]);
   const [jobsLoading, setJobsLoading] = useState(false);
   const [runningSource, setRunningSource] = useState<string>('');
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [discardReason, setDiscardReason] = useState<string>('duplicada');
   const [decisionNote, setDecisionNote] = useState('');
   const [assistDraft, setAssistDraft] = useState({
@@ -121,6 +125,17 @@ export function Triagem({ user }: TriagemProps) {
     const timer = setTimeout(() => setSuccess(''), 3000);
     return () => clearTimeout(timer);
   }, [success]);
+
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [tab, statusFilter, search]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const processId = params.get('processId');
+    if (!processId) return;
+    setSearch(processId);
+  }, [location.search]);
 
   async function loadItems() {
     setLoading(true);
@@ -286,6 +301,25 @@ export function Triagem({ user }: TriagemProps) {
     setRunningSource('');
   }
 
+  async function runFullCycle() {
+    setBatchRunning(true);
+    setError('');
+
+    for (const source of ['cnj', 'cpf', 'diario', 'oab'] as const) {
+      const response = await api.runTriageJob(source);
+      if (response.status !== 201 && response.status !== 200) {
+        setBatchRunning(false);
+        setError(response.error || `Não foi possível executar a coleta ${SOURCE_LABEL[source]}.`);
+        return;
+      }
+    }
+
+    await Promise.all([loadJobs(), loadItems()]);
+    setBatchRunning(false);
+    setSuccess('Ciclo completo de ingestão executado com sucesso.');
+    trackEvent('triage_job_run_all', {});
+  }
+
   const filteredItems = useMemo(() => {
     const normalized = search.trim().toLowerCase();
     return items.filter((item) => {
@@ -344,6 +378,85 @@ export function Triagem({ user }: TriagemProps) {
 
   const activeCount = filteredItems.length;
   const latestJobs = jobs.slice(0, 4);
+  const selectedItems = filteredItems.filter((item) => selectedIds.includes(item.id));
+  const allVisibleSelected = activeCount > 0 && filteredItems.every((item) => selectedIds.includes(item.id));
+
+  function toggleSelected(itemId: number) {
+    setSelectedIds((prev) => (
+      prev.includes(itemId)
+        ? prev.filter((id) => id !== itemId)
+        : [...prev, itemId]
+    ));
+  }
+
+  function toggleSelectAllVisible() {
+    setSelectedIds((prev) => {
+      if (allVisibleSelected) {
+        return prev.filter((id) => !filteredItems.some((item) => item.id === id));
+      }
+
+      const next = new Set(prev);
+      filteredItems.forEach((item) => next.add(item.id));
+      return Array.from(next);
+    });
+  }
+
+  async function runBatchDecision(decisionType: 'confirmado' | 'descartado' | 'revisao_manual') {
+    if (!selectedIds.length) {
+      setError('Selecione pelo menos um item para decisão em lote.');
+      return;
+    }
+
+    setBatchRunning(true);
+    setError('');
+    let successCount = 0;
+    let failureCount = 0;
+
+    for (const item of selectedItems) {
+      const body: Parameters<typeof api.decideTriageItem>[1] = { decisionType };
+
+      if (decisionType === 'descartado') {
+        body.decisionReason = discardReason;
+        body.decisionNote = decisionNote;
+      }
+
+      if (decisionType === 'revisao_manual') {
+        body.decisionReason = 'Requer leitura humana adicional';
+        body.decisionNote = decisionNote;
+      }
+
+      if (decisionType === 'confirmado') {
+        const assist = buildAssistDraft(item, user.email);
+        body.deadlineTitle = assist.deadlineTitle;
+        body.dueDate = assist.dueDate;
+        body.deadlinePriority = assist.deadlinePriority as 'baixa' | 'media' | 'alta';
+        body.taskTitle = assist.taskTitle;
+        body.taskDueDate = assist.taskDueDate;
+        body.taskPriority = assist.taskPriority as 'baixa' | 'media' | 'alta' | 'critica';
+        body.taskOwner = assist.taskOwner;
+        body.taskDescription = assist.taskDescription;
+        body.crmPersonName = assist.crmPersonName;
+        body.crmSummary = assist.crmSummary;
+      }
+
+      const response = await api.decideTriageItem(item.id, body);
+      if (response.status === 200 && response.data) {
+        successCount += 1;
+        setItems((prev) => prev.map((entry) => (entry.id === item.id ? response.data!.item : entry)));
+        if (selected?.id === item.id) {
+          setSelected(response.data.item);
+        }
+      } else {
+        failureCount += 1;
+      }
+    }
+
+    setBatchRunning(false);
+    setSelectedIds([]);
+    await Promise.all([loadJobs(), loadItems()]);
+    setSuccess(`Lote concluído: ${successCount} item(ns) tratados${failureCount ? `, ${failureCount} falha(s)` : ''}.`);
+    trackEvent('triage_batch_decision', { decisionType, successCount, failureCount });
+  }
 
   function openRelatedPublication(item: ApiTriageItem) {
     const params = new URLSearchParams();
@@ -411,6 +524,14 @@ export function Triagem({ user }: TriagemProps) {
             <h3>Últimos ciclos de coleta</h3>
           </div>
           <div className="triage-ops__actions">
+            <Button
+              variant="outline"
+              onClick={() => void runFullCycle()}
+              disabled={batchRunning}
+            >
+              {batchRunning ? <LoaderCircle size={14} className="triage-spin" /> : <RefreshCw size={14} />}
+              Rodar ciclo completo
+            </Button>
             {(['cnj', 'cpf', 'diario', 'oab'] as const).map((source) => (
               <Button
                 key={source}
@@ -562,6 +683,30 @@ export function Triagem({ user }: TriagemProps) {
             <small>Ordenação implícita por risco e recência.</small>
           </div>
 
+          <div className="triage-list-header">
+            <div>
+              <strong>{selectedItems.length}</strong> selecionado(s)
+            </div>
+            <div className="triage-ops__actions">
+              <Button variant="outline" onClick={toggleSelectAllVisible}>
+                <CheckSquare size={14} />
+                {allVisibleSelected ? 'Limpar visíveis' : 'Selecionar visíveis'}
+              </Button>
+              <Button onClick={() => void runBatchDecision('confirmado')} disabled={!selectedItems.length || batchRunning}>
+                <CheckCircle2 size={14} />
+                Confirmar lote
+              </Button>
+              <Button variant="outline" onClick={() => void runBatchDecision('revisao_manual')} disabled={!selectedItems.length || batchRunning}>
+                <UserRoundSearch size={14} />
+                Revisão em lote
+              </Button>
+              <Button variant="outline" onClick={() => void runBatchDecision('descartado')} disabled={!selectedItems.length || batchRunning}>
+                <X size={14} />
+                Descartar lote
+              </Button>
+            </div>
+          </div>
+
           {loading ? (
             <div className="triage-empty">Carregando fila de triagem...</div>
           ) : filteredItems.length === 0 ? (
@@ -576,6 +721,14 @@ export function Triagem({ user }: TriagemProps) {
                 >
                   <div className="triage-card__header">
                     <div className="triage-card__source">
+                      <label className="pub-checkline" onClick={(event) => event.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(item.id)}
+                          onChange={() => toggleSelected(item.id)}
+                          aria-label={`Selecionar item ${item.id} para lote`}
+                        />
+                      </label>
                       <span className={`triage-source triage-source--${item.capture.sourceType}`}>{item.sourceLabel}</span>
                       <span className={`triage-confidence triage-confidence--${item.aiConfidenceBand}`}>{CONFIDENCE_LABEL[item.aiConfidenceBand]}</span>
                       <span className="triage-action-chip">{ACTION_LABEL[item.suggestedAction]}</span>

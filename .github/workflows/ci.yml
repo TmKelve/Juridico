@@ -62,6 +62,10 @@ jobs:
         run: npm run build
         working-directory: frontend
 
+      - name: Validate Epic CDE docs and seed
+        run: node --test backend/tests/epic-cde.docs.test.cjs backend/tests/epic-cde.seed.test.cjs
+        working-directory: .
+
       - name: Apply Prisma migrations
         run: npm run prisma:migrate:deploy
         working-directory: backend
@@ -102,6 +106,10 @@ jobs:
 
       - name: Run smoke tests
         run: npm run test:smoke
+        working-directory: frontend
+
+      - name: Run Epic CDE smoke tests
+        run: npx playwright test epic-cde.smoke.test.ts
         working-directory: frontend
 
       - name: Upload Playwright artifacts

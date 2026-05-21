@@ -920,6 +920,12 @@
   border-color: #cbd5e1;
 }
 
+.crm-chip--danger {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
 .crm-card__warning {
   color: #92400e;
   font-weight: 700;
@@ -1222,6 +1228,44 @@
   gap: 10px;
   flex-wrap: wrap;
   align-items: center;
+}
+
+.crm-inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #475569;
+}
+
+.crm-inline-check input {
+  width: 16px;
+  height: 16px;
+}
+
+.crm-stacked-list {
+  display: grid;
+  gap: 8px;
+}
+
+.crm-stacked-item {
+  padding: 12px;
+  border: 1px solid var(--neutral-200, #dbe2ea);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.crm-stacked-item__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.crm-stacked-item p,
+.crm-stacked-item small {
+  margin: 4px 0 0;
+  display: block;
 }
 
 .crm-panel small {

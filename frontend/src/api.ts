@@ -158,7 +158,18 @@ export interface ApiDeadline {
   owner: string;
   area: string;
   notes: string;
+  publicationId?: number | null;
+  agendaEventId?: number | null;
+  agendaSyncStatus?: string;
   completedAt: string | null;
+  completedBy?: string;
+  completionJustification?: string;
+  risk?: {
+    level: 'baixo' | 'normal' | 'atencao' | 'critico';
+    score: number;
+    reasons: Array<{ code: string; weight: number; message: string }>;
+    computedAt: string;
+  };
 }
 
 export interface ApiDocument {
@@ -372,6 +383,39 @@ export interface ApiCrmOpportunity {
   updatedAt: string;
 }
 
+export interface ApiCrmOpportunityDocument {
+  id: number;
+  opportunityId: number;
+  documentId: number | null;
+  title: string;
+  category: string;
+  status: string;
+  mimeType: string;
+  previewUrl: string | null;
+  requiredChecklist: boolean;
+  pendingForAdvance: boolean;
+  uploadedAt: string;
+  responsible: string;
+  createdBy: string;
+  externalDocumentId: string | null;
+}
+
+export interface ApiAuditEvent {
+  id: string;
+  scope: string;
+  entityType: string;
+  entityId: number | null;
+  action: string;
+  status: string;
+  summary: string;
+  details: Record<string, unknown>;
+  actor: Record<string, unknown>;
+  occurredAt: string;
+  correlationId: string | null;
+  idempotencyKey: string | null;
+  createdAt: string;
+}
+
 interface LoginResponse {
   user: ApiUser;
 }
@@ -582,6 +626,7 @@ export const api = {
     origin: 'publicacao' | 'audiencia' | 'interno' | 'cliente';
     responsible: string;
     notes: string;
+    completionJustification: string;
   }>) =>
     apiClient<ApiDeadline>(`/deadlines/${id}`, { method: 'PUT', body: data }),
 
@@ -927,6 +972,54 @@ export const api = {
   addCrmOpportunityContactEvent: (id: number, data: { kind?: string; summary: string; nextContactAt?: string | null }) =>
     apiClient<ApiCrmOpportunity>(`/crm/opportunities/${id}/contact-events`, { method: 'POST', body: data }),
 
+  linkCrmOpportunityProcess: (id: number, data: {
+    processId: number;
+    confirmLink: boolean;
+    summary?: string;
+  }) =>
+    apiClient<{
+      opportunity: ApiCrmOpportunity;
+      process: {
+        id: number;
+        title: string;
+        processNumber: string;
+        phase: string;
+        status: string;
+        clientId: number | null;
+        client: string;
+      };
+      outcome: 'linked' | 'already_linked';
+      idempotent: boolean;
+    }>(`/crm/opportunities/${id}/link-process`, { method: 'POST', body: data }),
+
+  getCrmOpportunityDocuments: (id: number) =>
+    apiClient<ApiCrmOpportunityDocument[]>(`/crm/opportunities/${id}/documents`),
+
+  attachCrmOpportunityDocument: (id: number, data: {
+    title: string;
+    description?: string;
+    category?: string;
+    mimeType?: string;
+    previewUrl?: string;
+    responsible?: string;
+    origin?: string;
+    uploadedAt?: string;
+    requiredChecklist?: boolean;
+    pendingForAdvance?: boolean;
+    externalDocumentId?: string;
+  }) =>
+    apiClient<{
+      mode: 'created' | 'replayed';
+      idempotencyKey: string | null;
+      data: {
+        document: ApiCrmOpportunityDocument;
+        auditEvent: ApiAuditEvent;
+      };
+    }>(`/crm/opportunities/${id}/documents`, { method: 'POST', body: data }),
+
+  getCrmOpportunityAudit: (id: number) =>
+    apiClient<ApiAuditEvent[]>(`/crm/opportunities/${id}/audit`),
+
   updateTriageItem: (id: number, data: Partial<{
     status: ApiTriageItem['status'];
     postponeUntil: string | null;
@@ -950,6 +1043,22 @@ export const api = {
     taskDescription?: string;
     crmPersonName?: string;
     crmSummary?: string;
-  }) =>
+    }) =>
     apiClient<{ item: ApiTriageItem; decision: ApiTriageDecision }>(`/triage/${id}/decision`, { method: 'POST', body: data }),
+
+  bulkDeadlineAction: (data: {
+    action:
+      | { type: 'complete'; deadlineIds: number[]; reason?: string | null }
+      | { type: 'reopen'; deadlineIds: number[]; reason?: string | null }
+      | { type: 'reprioritize'; deadlineIds: number[]; priority: string }
+      | { type: 'reassign'; deadlineIds: number[]; responsible: string }
+      | { type: 'reschedule'; deadlineIds: number[]; dueDate: string };
+  }) =>
+    apiClient<{
+      summary: { requested: number; updated: number; skipped: number; failed: number };
+      items: Array<{ deadlineId: number; status: 'updated' | 'skipped' | 'failed'; reason?: string; deadline: ApiDeadline | null }>;
+      auditEvents: Array<Record<string, unknown>>;
+      agendaEvents: Array<Record<string, unknown>>;
+      idempotency: { key: string; status: 'completed' | 'replayed'; replayed: boolean };
+    }>('/deadlines/bulk-action', { method: 'POST', body: data }),
 };

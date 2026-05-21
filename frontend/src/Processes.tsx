@@ -745,6 +745,25 @@ export function Processes({ user }: ProcessesProps) {
   const emptyWithFilter = !loading && !error && enrichedProcesses.length > 0 && sortedProcesses.length === 0;
   const selectedProcessPrimaryAction = selectedProcess ? getPrimaryDrawerAction(selectedProcess) : null;
   const selectedProcessDueContext = selectedProcess ? formatDueContext(selectedProcess.nextDeadlineAt) : null;
+  const visibleCriticalCount = sortedProcesses.filter((process) => dayDiff(process.nextDeadlineAt, new Date()) <= 1).length;
+  const visiblePendingDocsCount = sortedProcesses.filter((process) => process.pendingDocuments > 0).length;
+  const visibleFutureHearingsCount = sortedProcesses.filter((process) => process.hasFutureHearing).length;
+  const focusProcess = sortedProcesses.find((process) => dayDiff(process.nextDeadlineAt, new Date()) <= 1)
+    ?? sortedProcesses.find((process) => process.pendingDocuments > 0)
+    ?? sortedProcesses[0]
+    ?? null;
+  const portfolioHealthTone = visibleCriticalCount > 0 ? 'critical' : visiblePendingDocsCount > 0 ? 'attention' : 'stable';
+  const portfolioHealthLabel = visibleCriticalCount > 0
+    ? `${visibleCriticalCount} prazo(s) exigem prioridade imediata.`
+    : visiblePendingDocsCount > 0
+      ? `${visiblePendingDocsCount} processo(s) pedem liberação documental.`
+      : 'Carteira sem urgência imediata neste recorte.';
+  const headerSummaryItems = [
+    { label: 'Em exibição', value: sortedProcesses.length, tone: 'neutral' },
+    { label: 'Críticos hoje', value: visibleCriticalCount, tone: visibleCriticalCount > 0 ? 'critical' : 'neutral' },
+    { label: 'Docs pendentes', value: visiblePendingDocsCount, tone: visiblePendingDocsCount > 0 ? 'attention' : 'neutral' },
+    { label: 'Audiências futuras', value: visibleFutureHearingsCount, tone: visibleFutureHearingsCount > 0 ? 'info' : 'neutral' },
+  ] as const;
 
   function openProcessDetail(processId: number) {
     setSelectedProcess(null);
@@ -826,37 +845,81 @@ export function Processes({ user }: ProcessesProps) {
   return (
     <section className="my-processes-page" aria-label="Meus processos">
       <header className="my-processes-header">
-        <div>
+        <div className="my-processes-header-main">
           <p className="my-processes-eyebrow">Operacao juridica</p>
           <h2>Carteira e prioridades</h2>
           <p className="my-processes-subtitle">
             Visualize sua carteira, priorize urgencias e avance cada caso com contexto rapido.
           </p>
+          <div className="my-processes-header-summary" aria-label="Pulso da carteira">
+            {headerSummaryItems.map((item) => (
+              <div key={item.label} className="my-processes-header-summary-card" data-tone={item.tone}>
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+              </div>
+            ))}
+          </div>
+          <div className="my-processes-header-status" data-tone={portfolioHealthTone}>
+            <span className="my-processes-header-status-label">Pulso da carteira</span>
+            <strong>{portfolioHealthLabel}</strong>
+            <small>
+              {hasActiveFilter
+                ? 'Os números consideram apenas o recorte filtrado atual.'
+                : 'Os números refletem toda a carteira disponível para este perfil.'}
+            </small>
+          </div>
         </div>
-        <div className="my-processes-header-actions">
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={() => {
-              resetFormState('novo');
-              setShowForm(true);
-            }}
-          >
-            <Plus size={16} aria-hidden="true" />
-            Novo Processo
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => setViewMode((prev) => (prev === 'table' ? 'kanban' : 'table'))}
-          >
-            <KanbanSquare size={16} aria-hidden="true" />
-            {viewMode === 'table' ? 'Ver Kanban' : 'Ver Tabela'}
-          </button>
-          <button type="button" className="btn-secondary" onClick={exportCsv}>
-            <Download size={16} aria-hidden="true" />
-            Exportar
-          </button>
+        <div className="my-processes-header-side">
+          <div className="my-processes-header-actions">
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => {
+                resetFormState('novo');
+                setShowForm(true);
+              }}
+            >
+              <Plus size={16} aria-hidden="true" />
+              Novo Processo
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setViewMode((prev) => (prev === 'table' ? 'kanban' : 'table'))}
+            >
+              <KanbanSquare size={16} aria-hidden="true" />
+              {viewMode === 'table' ? 'Ver Kanban' : 'Ver Tabela'}
+            </button>
+            <button type="button" className="btn-secondary" onClick={exportCsv}>
+              <Download size={16} aria-hidden="true" />
+              Exportar
+            </button>
+          </div>
+          <aside className="my-processes-focus-card" aria-label="Foco operacional">
+            <span className="my-processes-focus-card-eyebrow">Foco do turno</span>
+            {focusProcess ? (
+              <>
+                <strong>{focusProcess.client}</strong>
+                <p>{focusProcess.title}</p>
+                <small>{focusProcess.nextStep}</small>
+                <div className="my-processes-focus-card-meta">
+                  <span className={`deadline-context deadline-context--${formatDueContext(focusProcess.nextDeadlineAt).tone}`}>
+                    {formatDueContext(focusProcess.nextDeadlineAt).label}
+                  </span>
+                  {renderPriorityBadge(focusProcess.priority)}
+                </div>
+                <button type="button" className="btn-secondary my-processes-focus-card-action" onClick={() => setSelectedProcess(focusProcess)}>
+                  <Eye size={14} aria-hidden="true" />
+                  Abrir foco
+                </button>
+              </>
+            ) : (
+              <>
+                <strong>Nenhum foco aberto</strong>
+                <p>Crie ou ajuste filtros para definir a próxima frente operacional.</p>
+              </>
+            )}
+          </aside>
         </div>
       </header>
 
@@ -1207,6 +1270,24 @@ export function Processes({ user }: ProcessesProps) {
           ))}
         </div>
 
+        <div className="filters-priority-strip" aria-label="Leitura operacional do recorte">
+          <div className="filters-priority-strip-card" data-tone={visibleCriticalCount > 0 ? 'critical' : 'neutral'}>
+            <span>Recorte crítico</span>
+            <strong>{visibleCriticalCount}</strong>
+            <small>{visibleCriticalCount > 0 ? 'prazo(s) até amanhã' : 'sem prazo imediato'}</small>
+          </div>
+          <div className="filters-priority-strip-card" data-tone={visiblePendingDocsCount > 0 ? 'attention' : 'neutral'}>
+            <span>Dependência de documentos</span>
+            <strong>{visiblePendingDocsCount}</strong>
+            <small>{visiblePendingDocsCount > 0 ? 'processo(s) aguardando envio' : 'sem bloqueio documental'}</small>
+          </div>
+          <div className="filters-priority-strip-card" data-tone="info">
+            <span>Modo atual</span>
+            <strong>{viewMode === 'table' ? 'Tabela' : 'Kanban'}</strong>
+            <small>{densityMode === 'compact' ? 'leitura compacta' : 'leitura confortável'}</small>
+          </div>
+        </div>
+
         <div className="filters-top-row filter-row-card">
           <label htmlFor="filter-query" className="filter-field filter-field-search filter-cascade-item">
             <span>Busca</span>
@@ -1309,7 +1390,7 @@ export function Processes({ user }: ProcessesProps) {
               </div>
               <label htmlFor="filter-sort">
                 Ordenação
-                <select id="filter-sort" value={sortBy} onChange={(event) => setSortBy(event.target.value as SortField)}>
+                <select id="table-sort" value={sortBy} onChange={(event) => setSortBy(event.target.value as SortField)}>
                   <option value="nextDeadline">Próximo prazo</option>
                   <option value="priority">Prioridade</option>
                   <option value="lastMovement">Última movimentação</option>

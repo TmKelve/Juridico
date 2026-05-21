@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Save,
   Search,
+  ShieldCheck,
   X,
 } from 'lucide-react';
 import { api, type ApiPublication } from './api';
@@ -497,6 +498,9 @@ export function Publications({ user }: PublicationsProps) {
         <div className="pub-header-actions">
           <Button onClick={loadData} aria-label="Atualizar publicações">
             <RefreshCw size={14} /> Atualizar
+          </Button>
+          <Button variant="outline" onClick={() => navigate('/triagem')} aria-label="Abrir fila de triagem">
+            <ShieldCheck size={14} /> Abrir triagem
           </Button>
           <Button
             variant="outline"

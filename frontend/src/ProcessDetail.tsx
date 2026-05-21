@@ -284,6 +284,37 @@ export function ProcessDetail({ user }: ProcessDetailProps) {
 
   const timeline = useMemo(() => (processData ? sampleTimeline(processData) : []), [processData]);
   const rightRail = useMemo(() => (processData ? sampleRightRail(processData) : null), [processData]);
+  const pendingTimelineCount = useMemo(() => timeline.filter((event) => event.pending).length, [timeline]);
+  const latestTimelineEvent = timeline[timeline.length - 1] ?? null;
+  const nextDeadlineItem = rightRail?.prazos[0] ?? null;
+  const pendingDocItem = rightRail?.docs[0] ?? null;
+  const rightRailCount = (rightRail?.prazos.length ?? 0)
+    + (rightRail?.tarefas.length ?? 0)
+    + (rightRail?.docs.length ?? 0)
+    + (rightRail?.pubs.length ?? 0)
+    + (rightRail?.interacoes.length ?? 0)
+    + (rightRail?.alertas.length ?? 0);
+  const commandTone = nextDeadlineItem ? 'critical' : pendingDocItem ? 'attention' : 'stable';
+  const commandTitle = nextDeadlineItem
+    ? nextDeadlineItem.title
+    : pendingDocItem
+      ? pendingDocItem.title
+      : 'Acompanhar a timeline principal';
+  const commandDescription = nextDeadlineItem
+    ? `Priorize esta frente antes das demais rotinas. ${nextDeadlineItem.meta}.`
+    : pendingDocItem
+      ? `Existe uma dependência documental aberta. ${pendingDocItem.meta}.`
+      : 'O caso está estável neste momento e pode seguir em acompanhamento controlado.';
+  const headSummaryItems = useMemo(() => {
+    if (!processData) return [];
+
+    return [
+      { label: 'Pendências abertas', value: pendingTimelineCount, tone: pendingTimelineCount > 0 ? 'critical' : 'neutral' },
+      { label: 'Itens contextuais', value: rightRailCount, tone: rightRailCount > 0 ? 'info' : 'neutral' },
+      { label: 'Responsável', value: processData.owner?.email?.split('@')[0] || user.email.split('@')[0], tone: 'neutral' },
+      { label: 'Última marca', value: latestTimelineEvent ? formatDate(new Date(latestTimelineEvent.date)) : 'Sem registro', tone: 'neutral' },
+    ] as const;
+  }, [latestTimelineEvent, pendingTimelineCount, processData, rightRailCount, user.email]);
 
   const quickFacts = useMemo<QuickFact[]>(() => {
     if (!processData) return [];
@@ -345,6 +376,18 @@ export function ProcessDetail({ user }: ProcessDetailProps) {
       comentarios: byType('comentario'),
     };
   }, [timeline]);
+
+  const tabCounters = useMemo<Record<DetailTab, number>>(() => ({
+    visao_geral: timeline.length,
+    andamentos: tabItems.andamentos.length,
+    prazos: tabItems.prazos.length,
+    audiencias: tabItems.audiencias.length,
+    documentos: tabItems.documentos.length,
+    tarefas: tabItems.tarefas.length,
+    publicacoes: tabItems.publicacoes.length,
+    atendimento: tabItems.atendimento.length,
+    comentarios: tabItems.comentarios.length,
+  }), [tabItems, timeline.length]);
 
   function currentTabList() {
     if (activeTab === 'visao_geral') return timeline;
@@ -424,6 +467,15 @@ export function ProcessDetail({ user }: ProcessDetailProps) {
             </div>
           </div>
 
+          <div className="process-head-summary" aria-label="Pulso do processo">
+            {headSummaryItems.map((item) => (
+              <div key={item.label} className="process-head-summary-card" data-tone={item.tone}>
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+              </div>
+            ))}
+          </div>
+
           <div className="process-head-meta">
             <span><Landmark size={15} aria-hidden="true" />Area juridica: Civel Empresarial</span>
             <span><Flag size={15} aria-hidden="true" />Fase atual: {processData.phase}</span>
@@ -439,6 +491,16 @@ export function ProcessDetail({ user }: ProcessDetailProps) {
         </div>
 
         <div className="process-head-actions">
+          <aside className="process-command-card" data-tone={commandTone} aria-label="Comando operacional">
+            <span className="process-command-card-eyebrow">Próxima melhor ação</span>
+            <strong>{commandTitle}</strong>
+            <p>{commandDescription}</p>
+            <small>
+              {latestTimelineEvent
+                ? `Último registro: ${labelOfEvent(latestTimelineEvent.type)} em ${formatDate(new Date(latestTimelineEvent.date))}.`
+                : 'Sem registros recentes na timeline.'}
+            </small>
+          </aside>
           <button className="btn-primary" aria-label="Registrar andamento" onClick={() => setOpenModal('andamento')}><PlusCircle size={16} aria-hidden="true" />Registrar andamento</button>
           <button className="btn-secondary" aria-label="Criar prazo" onClick={() => setOpenModal('prazo')}><CalendarDays size={16} aria-hidden="true" />Criar prazo</button>
           <button className="btn-secondary" aria-label="Registrar documento" onClick={() => setOpenModal('documento')}><FileText size={16} aria-hidden="true" />Registrar documento</button>
@@ -472,7 +534,8 @@ export function ProcessDetail({ user }: ProcessDetailProps) {
             onClick={() => setActiveTab(tab.key)}
             aria-pressed={activeTab === tab.key}
           >
-            {tab.label}
+            <span>{tab.label}</span>
+            <small>{tabCounters[tab.key]}</small>
           </button>
         ))}
       </nav>
@@ -494,6 +557,19 @@ export function ProcessDetail({ user }: ProcessDetailProps) {
 
         <main className="process-center-column">
           <SectionCard title="Timeline Unificada" meta="Eixo central do caso">
+            <div className="timeline-toolbar" aria-label="Resumo da timeline">
+              <div className="timeline-toolbar-summary">
+                <span className="timeline-toolbar-label">Visão atual</span>
+                <strong>{activeTab === 'visao_geral' ? 'Linha do tempo completa' : TAB_LABELS.find((tab) => tab.key === activeTab)?.label}</strong>
+                <small>{tabList.length} registro(s) nesta leitura</small>
+              </div>
+              <div className="timeline-toolbar-pills">
+                <span className="timeline-toolbar-pill">Pendentes: {pendingTimelineCount}</span>
+                {latestTimelineEvent && (
+                  <span className="timeline-toolbar-pill">Último evento: {labelOfEvent(latestTimelineEvent.type)}</span>
+                )}
+              </div>
+            </div>
             {tabList.length > 0 ? (
               <ul className="process-timeline">
                 {tabList.map((event) => (
@@ -535,6 +611,20 @@ export function ProcessDetail({ user }: ProcessDetailProps) {
 
         <aside className="process-right-column">
           <SectionCard title="Pendencias e Proximos Passos" meta="Acao imediata">
+            <div className="right-rail-overview">
+              <div className="right-rail-overview-card" data-tone="critical">
+                <span>Alertas</span>
+                <strong>{rightRail?.alertas.length ?? 0}</strong>
+              </div>
+              <div className="right-rail-overview-card" data-tone="attention">
+                <span>Prazos</span>
+                <strong>{rightRail?.prazos.length ?? 0}</strong>
+              </div>
+              <div className="right-rail-overview-card" data-tone="info">
+                <span>Tarefas e docs</span>
+                <strong>{(rightRail?.tarefas.length ?? 0) + (rightRail?.docs.length ?? 0)}</strong>
+              </div>
+            </div>
             <div className="right-rail-block">
               <h4>Proximos prazos</h4>
               <ul>

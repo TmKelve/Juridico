@@ -359,6 +359,24 @@ export function Documents({ user }: DocumentsProps) {
 
   const emptyWithoutData = !loading && !error && documents.length === 0;
   const emptyWithFilter = !loading && !error && documents.length > 0 && sortedDocuments.length === 0;
+  const visiblePendingCount = sortedDocuments.filter((doc) => doc.status === 'pendente').length;
+  const visibleValidationCount = sortedDocuments.filter((doc) => doc.status === 'aguardando_validacao').length;
+  const visibleChecklistGapCount = sortedDocuments.filter((doc) => doc.requiredChecklist && doc.status !== 'validado').length;
+  const focusDocument = sortedDocuments.find((doc) => doc.status === 'pendente')
+    ?? sortedDocuments.find((doc) => doc.status === 'aguardando_validacao')
+    ?? sortedDocuments[0]
+    ?? null;
+  const focusTone = focusDocument?.status === 'pendente'
+    ? 'warning'
+    : focusDocument?.status === 'aguardando_validacao'
+      ? 'info'
+      : 'neutral';
+  const headerSummaryItems = [
+    { label: 'Em exibição', value: sortedDocuments.length, tone: 'neutral' },
+    { label: 'Pendentes', value: visiblePendingCount, tone: visiblePendingCount > 0 ? 'warning' : 'neutral' },
+    { label: 'Em validação', value: visibleValidationCount, tone: visibleValidationCount > 0 ? 'info' : 'neutral' },
+    { label: 'Checklist aberto', value: visibleChecklistGapCount, tone: visibleChecklistGapCount > 0 ? 'danger' : 'neutral' },
+  ] as const;
 
   function statusBadge(status: DocumentStatus) {
     const labels: Record<DocumentStatus, string> = {
@@ -402,26 +420,42 @@ export function Documents({ user }: DocumentsProps) {
   return (
     <section className="documents-page" aria-label="Documentos">
       <header className="documents-header-card">
-        <div>
+        <div className="documents-header-main">
           <p className="documents-eyebrow">Gestao documental</p>
           <h2>Documentos</h2>
           <p className="documents-subtitle">
             Organize, valide e versione os documentos da sua carteira com rastreabilidade e foco operacional.
           </p>
+          <div className="documents-header-summary" aria-label="Pulso documental">
+            {headerSummaryItems.map((item) => (
+              <div key={item.label} className="documents-header-summary-card" data-tone={item.tone}>
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+              </div>
+            ))}
+          </div>
         </div>
-        <div className="documents-header-actions">
-          <button className="btn-primary" onClick={uploadDocumentMock} aria-label="Upload de documento">
-            <Upload size={16} aria-hidden="true" />
-            Upload de Documento
-          </button>
-          <button className="btn-secondary" onClick={requestDocumentMock} aria-label="Solicitar documento">
-            <FileUp size={16} aria-hidden="true" />
-            Solicitar Documento
-          </button>
-          <button className="btn-secondary" onClick={() => exportCsv(sortedDocuments)} aria-label="Exportar documentos">
-            <Download size={16} aria-hidden="true" />
-            Exportar
-          </button>
+        <div className="documents-header-side">
+          <div className="documents-header-actions">
+            <button className="btn-primary" onClick={uploadDocumentMock} aria-label="Upload de documento">
+              <Upload size={16} aria-hidden="true" />
+              Upload de Documento
+            </button>
+            <button className="btn-secondary" onClick={requestDocumentMock} aria-label="Solicitar documento">
+              <FileUp size={16} aria-hidden="true" />
+              Solicitar Documento
+            </button>
+            <button className="btn-secondary" onClick={() => exportCsv(sortedDocuments)} aria-label="Exportar documentos">
+              <Download size={16} aria-hidden="true" />
+              Exportar
+            </button>
+          </div>
+          <aside className="documents-focus-card" data-tone={focusTone} aria-label="Foco documental">
+            <span className="documents-focus-card-eyebrow">Próxima melhor ação</span>
+            <strong>{focusDocument ? focusDocument.name : 'Nenhum documento focal'}</strong>
+            <p>{focusDocument ? `${focusDocument.processTitle} · ${focusDocument.client}` : 'Use os filtros para abrir o documento mais urgente do recorte.'}</p>
+            <small>{focusDocument ? `v${focusDocument.version} · ${formatDate(focusDocument.uploadedAt)} · ${focusDocument.origin}` : 'Sem item focal no momento.'}</small>
+          </aside>
         </div>
       </header>
 
@@ -462,6 +496,24 @@ export function Documents({ user }: DocumentsProps) {
           <button className={`status-shortcut ${filters.status === 'validado' ? 'is-active' : ''}`} onClick={() => updateFilter('status', 'validado')}>
             Validados
           </button>
+        </div>
+
+        <div className="documents-priority-strip" aria-label="Leitura do recorte documental">
+          <div className="documents-priority-card" data-tone={visiblePendingCount > 0 ? 'warning' : 'neutral'}>
+            <span>Pendência aberta</span>
+            <strong>{visiblePendingCount}</strong>
+            <small>{visiblePendingCount > 0 ? 'documento(s) aguardando ação' : 'sem pendência imediata'}</small>
+          </div>
+          <div className="documents-priority-card" data-tone={visibleValidationCount > 0 ? 'info' : 'neutral'}>
+            <span>Fila de validação</span>
+            <strong>{visibleValidationCount}</strong>
+            <small>{visibleValidationCount > 0 ? 'itens em revisão' : 'sem documento em validação'}</small>
+          </div>
+          <div className="documents-priority-card" data-tone={visibleChecklistGapCount > 0 ? 'danger' : 'neutral'}>
+            <span>Checklist incompleto</span>
+            <strong>{visibleChecklistGapCount}</strong>
+            <small>{visibleChecklistGapCount > 0 ? 'gaps de entrega no recorte' : 'checklist coberto'}</small>
+          </div>
         </div>
 
         <div className="documents-filters-grid-top">
@@ -740,6 +792,75 @@ export function Documents({ user }: DocumentsProps) {
               ))}
             </tbody>
           </table>
+
+          <div className="documents-mobile-list" aria-label="Lista mobile de documentos">
+            {pagedDocuments.map((doc) => (
+              <article key={`mobile-${doc.id}`} className="document-mobile-card">
+                <button
+                  type="button"
+                  className="document-mobile-main"
+                  onClick={() => {
+                    setSelectedDocument(doc);
+                    setOpenMenuId(null);
+                  }}
+                  aria-label={`Abrir detalhe do documento ${doc.name}`}
+                >
+                  <span className="document-mobile-kicker">{doc.processLabel}</span>
+                  <strong>{doc.name}</strong>
+                  <span>{doc.processTitle} · {doc.client}</span>
+                </button>
+
+                <div className="document-mobile-badges">
+                  {statusBadge(doc.status)}
+                  <span className={`doc-badge version ${doc.isLatestVersion ? 'latest' : 'history'}`}>
+                    {doc.isLatestVersion ? 'Versão atual' : `v${doc.version}`}
+                  </span>
+                </div>
+
+                <dl className="document-mobile-grid">
+                  <div>
+                    <dt>Categoria</dt>
+                    <dd>
+                      <strong>{doc.category}</strong>
+                      <span>{doc.origin}</span>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Data</dt>
+                    <dd>
+                      <strong>{formatDate(doc.uploadedAt)}</strong>
+                      <span>{doc.requiredChecklist ? 'vinculado a checklist' : 'fora de checklist'}</span>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Versão</dt>
+                    <dd>
+                      <strong>v{doc.version}</strong>
+                      <span>{doc.isLatestVersion ? 'mais recente' : 'histórica'}</span>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Status</dt>
+                    <dd>
+                      <strong>{doc.status.replaceAll('_', ' ')}</strong>
+                      <span>{doc.notes ? 'com observação' : 'sem observação'}</span>
+                    </dd>
+                  </div>
+                </dl>
+
+                <div className="document-mobile-actions">
+                  <button className="btn-primary" onClick={() => setSelectedDocument(doc)}>
+                    <Eye size={14} aria-hidden="true" />
+                    Detalhe
+                  </button>
+                  <button className="btn-secondary" onClick={() => navigate(`/processos/${doc.processId}`)}>
+                    <FolderOpen size={14} aria-hidden="true" />
+                    Processo
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
 
           {pageCount > 1 && (
             <div className="documents-pagination">

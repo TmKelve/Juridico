@@ -31,7 +31,14 @@ import {
 } from 'lucide-react';
 import { DrawerSection, EmptyState, ExecutiveCard, FilterBar, KanbanColumn, KpiCard, OpportunityCard, PageHeader, Timeline } from './components/product';
 import { Button, Tabs, TabsContent, TabsList, TabsTrigger, Textarea } from './components/ui';
-import { api, type ApiCrmLead, type ApiCrmOpportunity } from './api';
+import {
+  api,
+  type ApiAuditEvent,
+  type ApiCrmLead,
+  type ApiCrmOpportunity,
+  type ApiCrmOpportunityDocument,
+  type ApiProcess,
+} from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import './CrmJuridico.css';
 
@@ -42,6 +49,8 @@ interface CrmJuridicoProps {
 type TabKey = 'leads' | 'opportunities';
 type DrawerTabKey = 'overview' | 'history' | 'commercial' | 'documents' | 'process';
 type NextActionTone = 'neutral' | 'warning' | 'success';
+type OpportunityDocumentsState = Record<number, ApiCrmOpportunityDocument[]>;
+type OpportunityAuditState = Record<number, ApiAuditEvent[]>;
 
 const LEAD_STATUS = ['novo', 'qualificado', 'contatado', 'convertido', 'perdido'] as const;
 const OPPORTUNITY_STATUS = ['acao_recomendada', 'em_contato', 'proposta_enviada', 'negociacao', 'ganha', 'perdida'] as const;
@@ -124,6 +133,24 @@ function getNextContactText(nextContactAt: string | null) {
 function getSummaryPreview(summary: string) {
   if (summary.length <= 120) return summary;
   return `${summary.slice(0, 117)}...`;
+}
+
+function getAuditTone(status: string) {
+  if (status === 'failed') return 'crm-chip crm-chip--danger';
+  if (status === 'replayed') return 'crm-chip crm-chip--neutral';
+  return 'crm-chip crm-chip--blue';
+}
+
+function getAuditActor(event: ApiAuditEvent) {
+  const email = typeof event.actor?.['email'] === 'string' ? event.actor['email'] : '';
+  const source = typeof event.actor?.['source'] === 'string' ? event.actor['source'] : '';
+  return email || source || 'Sistema';
+}
+
+function buildOpportunityDocumentContext(documents: ApiCrmOpportunityDocument[]) {
+  const required = documents.filter((item) => item.requiredChecklist).length;
+  const pending = documents.filter((item) => item.pendingForAdvance).length;
+  return { required, pending };
 }
 
 function formatSourceLabel(source: string) {
@@ -221,12 +248,28 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
   const [showOpportunityConversion, setShowOpportunityConversion] = useState(false);
   const [showConvertConfirmDialog, setShowConvertConfirmDialog] = useState(false);
   const [showNewOpportunityDialog, setShowNewOpportunityDialog] = useState(false);
+  const [opportunityDocuments, setOpportunityDocuments] = useState<OpportunityDocumentsState>({});
+  const [opportunityAudit, setOpportunityAudit] = useState<OpportunityAuditState>({});
+  const [availableProcesses, setAvailableProcesses] = useState<ApiProcess[]>([]);
+  const [drawerLoading, setDrawerLoading] = useState(false);
   const [conversionForm, setConversionForm] = useState({
     clientName: '',
     processTitle: '',
     processNumber: '',
     processPhase: 'Inicial',
     processStatus: 'Ativo',
+  });
+  const [linkProcessForm, setLinkProcessForm] = useState({
+    processId: '',
+    summary: '',
+  });
+  const [documentForm, setDocumentForm] = useState({
+    title: '',
+    category: 'Checklist',
+    responsible: '',
+    previewUrl: '',
+    requiredChecklist: false,
+    pendingForAdvance: false,
   });
   const [newOpportunityForm, setNewOpportunityForm] = useState({
     personName: '',
@@ -253,6 +296,16 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     setDrawerTab('overview');
   }, [tab, selectedLead, selectedOpportunity]);
 
+  useEffect(() => {
+    if (!selectedOpportunity) return;
+    setDocumentForm((prev) => ({
+      ...prev,
+      responsible: selectedOpportunity.responsible || user.email,
+      title: prev.title || `Documento comercial - ${selectedOpportunity.personName}`,
+    }));
+    void loadOpportunitySupportData(selectedOpportunity.id);
+  }, [selectedOpportunity, user.email]);
+
   async function loadData() {
     setLoading(true);
     setError('');
@@ -276,6 +329,49 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     }
   }
 
+  async function loadOpportunitySupportData(opportunityId: number) {
+    setDrawerLoading(true);
+    try {
+      const [documentsRes, auditRes, processesRes] = await Promise.all([
+        api.getCrmOpportunityDocuments(opportunityId),
+        api.getCrmOpportunityAudit(opportunityId),
+        api.getProcesses(),
+      ]);
+
+      if (documentsRes.status === 200 && Array.isArray(documentsRes.data)) {
+        setOpportunityDocuments((prev) => ({ ...prev, [opportunityId]: documentsRes.data }));
+      }
+
+      if (auditRes.status === 200 && Array.isArray(auditRes.data)) {
+        setOpportunityAudit((prev) => ({ ...prev, [opportunityId]: auditRes.data }));
+      }
+
+      if (processesRes.status === 200 && Array.isArray(processesRes.data)) {
+        setAvailableProcesses(processesRes.data);
+      }
+
+      if (documentsRes.status !== 200) {
+        throw new Error(documentsRes.error || 'Não foi possível carregar os documentos da oportunidade.');
+      }
+      if (auditRes.status !== 200) {
+        throw new Error(auditRes.error || 'Não foi possível carregar a auditoria da oportunidade.');
+      }
+      if (processesRes.status !== 200) {
+        throw new Error(processesRes.error || 'Não foi possível carregar os processos disponíveis.');
+      }
+    } catch (err) {
+      setError((err as Error).message || 'Erro ao carregar o drawer da oportunidade.');
+      captureException(err as Error, { context: 'crm_opportunity_drawer', opportunityId });
+    } finally {
+      setDrawerLoading(false);
+    }
+  }
+
+  function patchOpportunity(nextItem: ApiCrmOpportunity) {
+    setOpportunities((prev) => prev.map((entry) => entry.id === nextItem.id ? nextItem : entry));
+    setSelectedOpportunity((prev) => (prev?.id === nextItem.id ? nextItem : prev));
+  }
+
   async function updateLeadStatus(item: ApiCrmLead, status: string) {
     const response = await api.updateCrmLead(item.id, { status });
     if (response.status !== 200 || !response.data) {
@@ -293,8 +389,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
       setError(response.error || 'Não foi possível atualizar a oportunidade.');
       return;
     }
-    setOpportunities((prev) => prev.map((entry) => entry.id === item.id ? response.data as ApiCrmOpportunity : entry));
-    if (selectedOpportunity?.id === item.id) setSelectedOpportunity(response.data as ApiCrmOpportunity);
+    patchOpportunity(response.data as ApiCrmOpportunity);
     setSuccess('Oportunidade atualizada.');
   }
 
@@ -347,8 +442,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
       setError(response.error || 'Não foi possível atualizar a oportunidade.');
       return;
     }
-    setOpportunities((prev) => prev.map((entry) => entry.id === item.id ? response.data as ApiCrmOpportunity : entry));
-    setSelectedOpportunity(response.data as ApiCrmOpportunity);
+    patchOpportunity(response.data as ApiCrmOpportunity);
     setSuccess('Oportunidade atualizada.');
   }
 
@@ -412,11 +506,11 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
       setError(response.error || 'Não foi possível registrar o contato.');
       return;
     }
-    setOpportunities((prev) => prev.map((entry) => entry.id === item.id ? response.data as ApiCrmOpportunity : entry));
-    setSelectedOpportunity(response.data as ApiCrmOpportunity);
+    patchOpportunity(response.data as ApiCrmOpportunity);
     setContactNote('');
     setContactKind('contato');
     setNextContactDraft(formatDateTimeLocal((response.data as ApiCrmOpportunity).nextContactAt));
+    void loadOpportunitySupportData(item.id);
     setSuccess('Contato registrado.');
   }
 
@@ -436,9 +530,21 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
       processPhase: 'Inicial',
       processStatus: 'Ativo',
     });
+    setLinkProcessForm({
+      processId: selectedOpportunity.convertedProcessId ? String(selectedOpportunity.convertedProcessId) : '',
+      summary: '',
+    });
+    setDocumentForm({
+      title: `Documento comercial - ${selectedOpportunity.personName}`,
+      category: 'Checklist',
+      responsible: selectedOpportunity.responsible || user.email,
+      previewUrl: '',
+      requiredChecklist: false,
+      pendingForAdvance: false,
+    });
     setShowOpportunityConversion(false);
     setShowConvertConfirmDialog(false);
-  }, [selectedOpportunity]);
+  }, [selectedOpportunity, user.email]);
 
   const filteredLeads = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -575,11 +681,77 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
       setError(response.error || 'Não foi possível converter a oportunidade.');
       return;
     }
-    setOpportunities((prev) => prev.map((entry) => entry.id === item.id ? response.data!.opportunity : entry));
-    setSelectedOpportunity(response.data.opportunity);
+    patchOpportunity(response.data.opportunity);
     setShowOpportunityConversion(false);
     setShowConvertConfirmDialog(false);
+    void loadOpportunitySupportData(item.id);
     setSuccess(`Oportunidade convertida em cliente e processo #${response.data.process.id}.`);
+  }
+
+  async function linkOpportunityToExistingProcess(item: ApiCrmOpportunity) {
+    if (!linkProcessForm.processId) {
+      setError('Selecione um processo para vincular.');
+      return;
+    }
+
+    const response = await api.linkCrmOpportunityProcess(item.id, {
+      processId: Number(linkProcessForm.processId),
+      confirmLink: true,
+      summary: linkProcessForm.summary || undefined,
+    });
+
+    if ((response.status !== 201 && response.status !== 200) || !response.data) {
+      setError(response.error || 'Não foi possível vincular o processo existente.');
+      return;
+    }
+
+    patchOpportunity(response.data.opportunity);
+    setLinkProcessForm({
+      processId: String(response.data.process.id),
+      summary: '',
+    });
+    void loadOpportunitySupportData(item.id);
+    setSuccess(response.data.outcome === 'already_linked' ? 'Oportunidade já estava vinculada a este processo.' : `Processo #${response.data.process.id} vinculado com sucesso.`);
+  }
+
+  async function attachOpportunityDocument(item: ApiCrmOpportunity) {
+    if (!documentForm.title.trim()) {
+      setError('Informe o título do documento.');
+      return;
+    }
+
+    const response = await api.attachCrmOpportunityDocument(item.id, {
+      title: documentForm.title.trim(),
+      category: documentForm.category,
+      responsible: documentForm.responsible || item.responsible || user.email,
+      previewUrl: documentForm.previewUrl || undefined,
+      requiredChecklist: documentForm.requiredChecklist,
+      pendingForAdvance: documentForm.pendingForAdvance,
+      mimeType: 'application/pdf',
+    });
+
+    if (response.status !== 201 || !response.data) {
+      setError(response.error || 'Não foi possível anexar o documento.');
+      return;
+    }
+
+    setOpportunityDocuments((prev) => ({
+      ...prev,
+      [item.id]: [response.data.data.document, ...(prev[item.id] ?? [])],
+    }));
+    setOpportunityAudit((prev) => ({
+      ...prev,
+      [item.id]: [response.data.data.auditEvent, ...(prev[item.id] ?? [])],
+    }));
+    setDocumentForm({
+      title: `Documento comercial - ${item.personName}`,
+      category: documentForm.category,
+      responsible: item.responsible || user.email,
+      previewUrl: '',
+      requiredChecklist: false,
+      pendingForAdvance: false,
+    });
+    setSuccess('Documento anexado à oportunidade.');
   }
 
   async function createOpportunity() {
@@ -813,6 +985,27 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     selectedOpportunity?.responsible?.trim()
       && (selectedOpportunity.status !== 'em_contato' || selectedOpportunity.nextContactAt || nextContactDraft),
   );
+  const selectedOpportunityDocuments = useMemo(
+    () => (selectedOpportunity ? opportunityDocuments[selectedOpportunity.id] ?? [] : []),
+    [opportunityDocuments, selectedOpportunity],
+  );
+  const selectedOpportunityAuditEvents = useMemo(
+    () => (selectedOpportunity ? opportunityAudit[selectedOpportunity.id] ?? [] : []),
+    [opportunityAudit, selectedOpportunity],
+  );
+  const selectedOpportunityDocumentContext = useMemo(
+    () => buildOpportunityDocumentContext(selectedOpportunityDocuments),
+    [selectedOpportunityDocuments],
+  );
+  const processCandidates = useMemo(() => {
+    if (!selectedOpportunity) return availableProcesses;
+    const expectedClient = selectedOpportunity.client || selectedOpportunity.personName;
+    return availableProcesses.filter((process) => process.id === selectedOpportunity.convertedProcessId || process.client === expectedClient || !selectedOpportunity.client);
+  }, [availableProcesses, selectedOpportunity]);
+  const linkedProcess = useMemo(() => {
+    if (!selectedOpportunity?.convertedProcessId) return null;
+    return availableProcesses.find((process) => process.id === selectedOpportunity.convertedProcessId) ?? null;
+  }, [availableProcesses, selectedOpportunity?.convertedProcessId]);
 
   function buildProcessesContextUrl(item: ApiCrmOpportunity | ApiCrmLead) {
     const params = new URLSearchParams();
@@ -1381,7 +1574,8 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
               ) : null}
 
               {drawerTab === 'history' ? (
-                <DrawerSection title="Histórico" description="Eventos e marcos da oportunidade.">
+                <DrawerSection title="Histórico" description="Cadência comercial, contatos e trilha auditável da oportunidade.">
+                  {drawerLoading ? <p>Carregando trilha operacional...</p> : null}
                   <Timeline
                     items={getOpportunityTimeline(selectedOpportunity).map((event) => ({
                       id: event.key,
@@ -1390,6 +1584,25 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                       date: 'body' in event && event.body ? event.meta : undefined,
                     }))}
                   />
+                  <section className="crm-panel">
+                    <h4>Auditoria operacional</h4>
+                    {selectedOpportunityAuditEvents.length === 0 ? (
+                      <p>Nenhum evento auditável persistido ainda.</p>
+                    ) : (
+                      <div className="crm-stacked-list">
+                        {selectedOpportunityAuditEvents.map((event) => (
+                          <article key={event.id} className="crm-stacked-item">
+                            <div className="crm-stacked-item__top">
+                              <strong>{event.summary}</strong>
+                              <span className={getAuditTone(event.status)}>{event.status}</span>
+                            </div>
+                            <p>{event.action} · {event.scope}</p>
+                            <small>{formatDateTime(event.occurredAt)} · {getAuditActor(event)}</small>
+                          </article>
+                        ))}
+                      </div>
+                    )}
+                  </section>
                 </DrawerSection>
               ) : null}
 
@@ -1461,22 +1674,68 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
               {drawerTab === 'documents' ? (
                 <section className="crm-panel">
                   <h4>Documentos</h4>
-                  <div className="crm-empty crm-empty--compact">
-                    <div className="crm-empty__icon"><FileText size={18} /></div>
-                    <strong>Nenhum documento anexado</strong>
-                    <p>Adicione documentos para apoiar a qualificação da oportunidade.</p>
-                    <button
-                      className="btn-secondary"
-                      onClick={() => {
-                        if (selectedOpportunity?.convertedProcessId) {
-                          navigate(`/processos/${selectedOpportunity.convertedProcessId}`);
-                          return;
-                        }
-                        navigate(buildDocumentsContextUrl(selectedOpportunity));
-                      }}
-                    >
+                  <div className="crm-drawer__meta">
+                    <div><span>Anexados</span><strong>{selectedOpportunityDocuments.length}</strong></div>
+                    <div><span>Checklist obrigatório</span><strong>{selectedOpportunityDocumentContext.required}</strong></div>
+                    <div><span>Pendentes para avanço</span><strong>{selectedOpportunityDocumentContext.pending}</strong></div>
+                    <div><span>Responsável padrão</span><strong>{documentForm.responsible || selectedOpportunity.responsible || 'Não definido'}</strong></div>
+                  </div>
+                  {selectedOpportunityDocuments.length === 0 ? (
+                    <div className="crm-empty crm-empty--compact">
+                      <div className="crm-empty__icon"><FileText size={18} /></div>
+                      <strong>Nenhum documento anexado</strong>
+                      <p>Use o formulário abaixo para persistir anexos no drawer do CRM.</p>
+                    </div>
+                  ) : (
+                    <div className="crm-stacked-list">
+                      {selectedOpportunityDocuments.map((document) => (
+                        <article key={document.id} className="crm-stacked-item">
+                          <div className="crm-stacked-item__top">
+                            <strong>{document.title}</strong>
+                            <span className="crm-chip crm-chip--blue">{document.category}</span>
+                          </div>
+                          <p>{document.status} · {document.mimeType}</p>
+                          <small>{formatDateTime(document.uploadedAt)} · {document.responsible || document.createdBy || 'Equipe'}</small>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                  <div className="crm-conversion__form">
+                    <label className="crm-inline-field">
+                      <span>Título</span>
+                      <input value={documentForm.title} onChange={(event) => setDocumentForm((prev) => ({ ...prev, title: event.target.value }))} />
+                    </label>
+                    <label className="crm-inline-field">
+                      <span>Categoria</span>
+                      <select value={documentForm.category} onChange={(event) => setDocumentForm((prev) => ({ ...prev, category: event.target.value }))}>
+                        {['Checklist', 'Contrato', 'Prova', 'Financeiro', 'Peticao'].map((option) => <option key={option} value={option}>{option}</option>)}
+                      </select>
+                    </label>
+                    <label className="crm-inline-field">
+                      <span>Responsável</span>
+                      <input value={documentForm.responsible} onChange={(event) => setDocumentForm((prev) => ({ ...prev, responsible: event.target.value }))} placeholder="advogado@juridico.com" />
+                    </label>
+                    <label className="crm-inline-field crm-inline-field--full">
+                      <span>URL de pré-visualização</span>
+                      <input value={documentForm.previewUrl} onChange={(event) => setDocumentForm((prev) => ({ ...prev, previewUrl: event.target.value }))} placeholder="Opcional" />
+                    </label>
+                    <label className="crm-inline-check">
+                      <input type="checkbox" checked={documentForm.requiredChecklist} onChange={(event) => setDocumentForm((prev) => ({ ...prev, requiredChecklist: event.target.checked }))} />
+                      <span>Obrigatório para checklist comercial</span>
+                    </label>
+                    <label className="crm-inline-check">
+                      <input type="checkbox" checked={documentForm.pendingForAdvance} onChange={(event) => setDocumentForm((prev) => ({ ...prev, pendingForAdvance: event.target.checked }))} />
+                      <span>Bloqueia avanço enquanto pendente</span>
+                    </label>
+                  </div>
+                  <div className="crm-form-actions">
+                    <button className="btn-primary" onClick={() => void attachOpportunityDocument(selectedOpportunity)}>
+                      <Plus size={14} />
+                      Anexar no CRM
+                    </button>
+                    <button className="btn-secondary" onClick={() => navigate(buildDocumentsContextUrl(selectedOpportunity))}>
                       <FolderOpen size={14} />
-                      {selectedOpportunity?.convertedProcessId ? 'Abrir processo para documentos' : 'Adicionar documento'}
+                      Abrir central de documentos
                     </button>
                   </div>
                 </section>
@@ -1487,14 +1746,22 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                   {selectedOpportunity.convertedProcessId ? (
                     <>
                       <h4>Processo vinculado</h4>
-                      <p>Esta oportunidade já foi convertida e possui processo operacional criado.</p>
+                      <p>Esta oportunidade já foi convertida e possui processo operacional persistido.</p>
                     </>
                   ) : (
                     <>
                       <h4>Nenhum processo vinculado</h4>
-                      <p>Ao converter esta oportunidade, será possível criar ou vincular um processo existente.</p>
+                      <p>Use a vinculação direta para reaproveitar um processo existente ou prepare a conversão operacional completa.</p>
                     </>
                   )}
+                  {linkedProcess ? (
+                    <div className="crm-drawer__meta">
+                      <div><span>Processo</span><strong>#{linkedProcess.id}</strong></div>
+                      <div><span>Título</span><strong>{linkedProcess.title}</strong></div>
+                      <div><span>Número</span><strong>{linkedProcess.processNumber || '—'}</strong></div>
+                      <div><span>Fase</span><strong>{linkedProcess.phase}</strong></div>
+                    </div>
+                  ) : null}
                   {(selectedOpportunity.clientId || selectedOpportunity.convertedProcessId) ? (
                     <div className="crm-process-actions">
                       {selectedOpportunity.clientId ? (
@@ -1512,16 +1779,44 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                     </div>
                   ) : null}
                   {!selectedOpportunity.convertedProcessId ? (
-                    <div className="crm-process-actions">
-                      <button className="btn-secondary" onClick={() => navigate(buildProcessesContextUrl(selectedOpportunity))}>
-                        <FolderOpen size={14} />
-                        Vincular processo existente
-                      </button>
-                      <button className="btn-primary" onClick={() => setShowOpportunityConversion(true)}>
-                        <TrendingUp size={14} />
-                        Preparar conversão
-                      </button>
-                    </div>
+                    <>
+                      <div className="crm-conversion__form">
+                        <label className="crm-inline-field">
+                          <span>Processo existente</span>
+                          <select value={linkProcessForm.processId} onChange={(event) => setLinkProcessForm((prev) => ({ ...prev, processId: event.target.value }))}>
+                            <option value="">Selecionar processo</option>
+                            {processCandidates.map((process) => (
+                              <option key={process.id} value={process.id}>
+                                #{process.id} · {process.title}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="crm-inline-field crm-inline-field--full">
+                          <span>Resumo do vínculo</span>
+                          <Textarea
+                            value={linkProcessForm.summary}
+                            onChange={(event) => setLinkProcessForm((prev) => ({ ...prev, summary: event.target.value }))}
+                            placeholder="Explique por que este processo representa a oportunidade."
+                            rows={3}
+                          />
+                        </label>
+                      </div>
+                      <div className="crm-process-actions">
+                        <button className="btn-secondary" onClick={() => void linkOpportunityToExistingProcess(selectedOpportunity)}>
+                          <FolderOpen size={14} />
+                          Vincular processo existente
+                        </button>
+                        <button className="btn-secondary" onClick={() => navigate(buildProcessesContextUrl(selectedOpportunity))}>
+                          <FileSearch size={14} />
+                          Abrir lista de processos
+                        </button>
+                        <button className="btn-primary" onClick={() => setShowOpportunityConversion(true)}>
+                          <TrendingUp size={14} />
+                          Preparar conversão
+                        </button>
+                      </div>
+                    </>
                   ) : null}
                   {!showOpportunityConversion ? (
                     null

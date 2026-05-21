@@ -1,3 +1,6 @@
+import { matchPublicationDeterministically } from './publications/matching';
+import { toLegacyTriageClassification } from './publications/classification';
+
 export interface TriageAiInput {
   sourceType: string;
   normalizedText: string;
@@ -20,47 +23,51 @@ export interface TriageAiResult {
 type RemotePayload = Record<string, unknown>;
 
 function buildFallbackClassification(input: TriageAiInput): TriageAiResult {
-  const text = input.normalizedText.toLowerCase();
-  const hasDeadlineSignal = ['prazo', 'manifestação', 'manifestacao', 'sentença', 'sentenca', 'intimação', 'intimacao', 'sob pena', 'recurso']
-    .some((token) => text.includes(token));
-  const hasUrgencySignal = ['urgente', 'citação', 'citacao', 'liminar', 'audiência', 'audiencia']
-    .some((token) => text.includes(token));
-  const hasHistoricalRisk = (input.historicalEvents ?? []).some((event) => (event.riskLevel ?? '').toLowerCase() === 'critico');
+  const matching = matchPublicationDeterministically(
+    {
+      sourceType: input.sourceType,
+      normalizedText: input.normalizedText,
+      summary: input.normalizedText,
+      clientName: input.clientName ?? null,
+      processNumber: null,
+      cpfCnpj: null,
+      oabNumber: null,
+    },
+    input.processId
+      ? [{
+          id: input.processId,
+          processNumber: null,
+          clientId: input.clientId ?? null,
+          clientName: input.clientName ?? input.processTitle ?? null,
+          clientAliases: [],
+          active: true,
+        }]
+      : [],
+    input.clientId || input.hasExistingClient
+      ? [{
+          id: input.clientId ?? -1,
+          name: input.clientName ?? 'Cliente identificado',
+          aliases: [],
+          activeProcessId: input.processId ?? null,
+        }]
+      : [],
+  );
 
-  const queueType = hasDeadlineSignal || hasUrgencySignal || hasHistoricalRisk ? 'critica' : 'normal';
+  const fallback = toLegacyTriageClassification({
+    sourceType: input.sourceType,
+    summary: input.normalizedText,
+    normalizedText: input.normalizedText,
+    clientName: input.clientName ?? null,
+    matching: {
+      ...matching,
+      processId: input.processId ?? matching.processId,
+      clientId: input.clientId ?? matching.clientId,
+      matchStatus: input.processId ? 'matched' : input.clientId || input.hasExistingClient ? 'partial' : matching.matchStatus,
+      matchedBy: input.processId ? 'processNumber' : input.clientId || input.hasExistingClient ? 'clientName' : matching.matchedBy,
+    },
+  });
 
-  let suggestedAction: TriageAiResult['suggestedAction'] = 'criar_lead';
-  if (input.processId && hasDeadlineSignal) {
-    suggestedAction = 'criar_prazo';
-  } else if (input.processId) {
-    suggestedAction = 'criar_tarefa';
-  } else if (input.clientId || input.hasExistingClient) {
-    suggestedAction = 'criar_oportunidade';
-  }
-
-  const aiScoreRaw = queueType === 'critica'
-    ? hasDeadlineSignal && (hasUrgencySignal || hasHistoricalRisk) ? 0.93 : 0.84
-    : input.hasExistingClient ? 0.74 : 0.66;
-
-  const aiConfidenceBand: TriageAiResult['aiConfidenceBand'] =
-    aiScoreRaw >= 0.86 ? 'alta' : aiScoreRaw >= 0.72 ? 'media' : 'baixa';
-
-  const reasonParts = [
-    hasDeadlineSignal ? 'Texto com indício claro de prazo ou manifestação.' : null,
-    hasUrgencySignal ? 'Há sinal de urgência jurídica no conteúdo.' : null,
-    hasHistoricalRisk ? 'O histórico do processo já carrega evento crítico recente.' : null,
-    !input.processId && input.hasExistingClient ? 'Sem processo ativo vinculado; oportunidade recomendada no CRM.' : null,
-    !input.processId && !input.hasExistingClient ? 'Sem vínculo conhecido; lead recomendado para triagem comercial.' : null,
-    input.processId && !hasDeadlineSignal ? 'Há vínculo com processo ativo, mas sem prazo explícito; tarefa operacional sugerida.' : null,
-  ].filter(Boolean);
-
-  return {
-    queueType,
-    suggestedAction,
-    aiConfidenceBand,
-    aiScoreRaw,
-    suggestedReason: reasonParts.join(' ') || 'Classificação heurística aplicada com base no texto capturado e no contexto disponível.',
-  };
+  return fallback;
 }
 
 function normalizeRemoteClassification(payload: RemotePayload): TriageAiResult | null {

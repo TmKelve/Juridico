@@ -1,7 +1,7 @@
 ﻿import express from 'express';
 import cors from 'cors';
 import bcrypt from 'bcrypt';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { signUserToken, verifyToken, type UserToken } from './auth';
 import { buildAgendaPayload } from './agenda.contract';
 import { collectCnjPublications } from './cnj-publications.provider';
@@ -9,9 +9,27 @@ import { collectCpfPublications } from './cpf-publications.provider';
 import { collectDiarioPublications } from './diario-publications.provider';
 import { collectOabPublications } from './oab-publications.provider';
 import { buildCrmLeadPayload, buildCrmOpportunityPayload } from './crm.contract';
+import { CrmAuditService, createPrismaCrmAuditRepository } from './crm/audit';
+import { OpportunityContactHistoryService, createPrismaOpportunityContactHistoryRepository } from './crm/contact-history';
+import { CrmOpportunityConversionService } from './crm/conversion/opportunity-conversion.service';
+import { validateOpportunityConversionCommand } from './crm/conversion/opportunity-conversion.validators';
+import { createPrismaOpportunityConversionRepository } from './crm/conversion/prisma-opportunity-conversion.repository';
+import { OpportunityDocumentsService, createPrismaOpportunityDocumentsRepository } from './crm/documents';
+import { CrmContractError as CrmAuditContractError } from './crm/audit/crm-audit.validators';
+import { createPrismaLinkProcessRepository } from './crm/process-link/prisma-link-process.repository';
+import { CrmOpportunityProcessLinkService } from './crm/process-link/link-process.service';
+import { validateLinkProcessCommand } from './crm/process-link/link-process.validators';
+import { CrmContractError as CrmOpportunityContractError } from './crm/opportunities/crm-opportunity.types';
+import { DeadlineAuditService } from './deadlines/deadline-audit.service';
+import { DeadlineBulkActionService } from './deadlines/batch-actions/deadline-bulk-action.service';
+import { DeadlineRiskService } from './deadlines/deadline-risk.service';
+import { DeadlineDomainError } from './deadlines/deadline-errors';
+import { CreateDeadlineFromPublicationService } from './publications/deadline-automation/create-from-publication.service';
 import { buildDeadlinePayload } from './deadlines.contract';
 import { buildDocumentPayload } from './documents.contract';
 import { lookupExternalProcess } from './process-lookup.provider';
+import { createPublicationScheduler } from './shared/scheduler/publication-schedule';
+import { planTriageDecision } from './triage/decision-engine';
 import { buildPublicationPayload } from './publications.contract';
 import { buildTaskPayload } from './tasks.contract';
 import { buildTemplatePayload } from './templates.contract';
@@ -28,6 +46,9 @@ const prisma = new PrismaClient() as PrismaClient & {
   publicationSourceJob: any;
   crmLead: any;
   crmOpportunity: any;
+  crmAuditEvent: any;
+  crmIdempotencyRequest: any;
+  crmOpportunityDocumentAttachment: any;
   triageItem: any;
   triageDecision: any;
 };
@@ -35,6 +56,42 @@ const clientStore = prisma.client;
 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
 const isProduction = process.env.NODE_ENV === 'production';
 const authCookieName = 'Authorization';
+const devMockEnabled = !isProduction && process.env.LEXORA_DEV_MOCK !== '0';
+
+const devMockUsers = [
+  { id: 1, email: 'admin@juridico.com', password: '123456', role: 'ADM' },
+  { id: 2, email: 'advogado@juridico.com', password: '123456', role: 'ADV' },
+  { id: 3, email: 'financeiro@juridico.com', password: '123456', role: 'FIN' },
+  { id: 4, email: 'atendimento@juridico.com', password: '123456', role: 'ATD' },
+] as const;
+
+const devMockProcesses = [
+  { id: 3, title: 'Recuperacao de Credito Cliente Nexo', processNumber: '10024567820265020001', client: 'Cliente Nexo', phase: 'Recurso', status: 'pausado', ownerId: 1 },
+  { id: 1, title: 'Reclamatoria Trabalhista Cliente Atlas', processNumber: '50011234520263010022', client: 'Cliente Atlas', phase: 'Inicial', status: 'ativo', ownerId: 2 },
+  { id: 2, title: 'Execucao Contratual Cliente Prisma', processNumber: '70099887720264030015', client: 'Cliente Prisma', phase: 'Contestacao', status: 'ativo', ownerId: 1 },
+  { id: 4, title: 'Auditoria Societaria Grupo Solaris', processNumber: '90011223320265010088', client: 'Grupo Solaris', phase: 'Saneamento', status: 'ativo', ownerId: 1 },
+  { id: 5, title: 'Parecer Regulatorio Aurora', processNumber: '80044556620265010012', client: 'Aurora Capital', phase: 'Conhecimento', status: 'concluido', ownerId: 1 },
+  { id: 6, title: 'Mandado de Seguranca Cliente Boreal', processNumber: '60077889920265010055', client: 'Cliente Boreal', phase: 'Liminar', status: 'ativo', ownerId: 2 },
+  { id: 7, title: 'Defesa Administrativa Cliente Orbe', processNumber: '30055443320265010034', client: 'Cliente Orbe', phase: 'Administrativo', status: 'ativo', ownerId: 1 },
+] as const;
+
+const devMockDeadlines = [
+  { id: 101, processId: 1, title: 'Protocolar manifestação final', dueOffsetDays: 0, status: 'critico', priority: 'alta', origin: 'interno', notes: 'Validar anexos antes do protocolo.' },
+  { id: 102, processId: 1, title: 'Revisar documentos complementares', dueOffsetDays: 2, status: 'aberto', priority: 'media', origin: 'cliente', notes: 'Dependência de retorno do cliente.' },
+  { id: 103, processId: 2, title: 'Responder publicação recente', dueOffsetDays: -1, status: 'atrasado', priority: 'alta', origin: 'publicacao', notes: 'Prazo já extrapolado no monitor.' },
+  { id: 104, processId: 3, title: 'Organizar checklist de audiência', dueOffsetDays: 6, status: 'aberto', priority: 'baixa', origin: 'audiencia', notes: 'Conferir testemunhas e pauta.' },
+  { id: 105, processId: 6, title: 'Concluir minuta de petição', dueOffsetDays: 1, status: 'critico', priority: 'alta', origin: 'interno', notes: 'Aguardar revisão do responsável.' },
+  { id: 106, processId: 7, title: 'Atualizar cliente sobre andamento', dueOffsetDays: 9, status: 'concluido', priority: 'media', origin: 'cliente', notes: 'Contato realizado com sucesso.' },
+] as const;
+
+const devMockAgendaEvents = [
+  { id: 201, processId: 1, title: 'Audiência de instrução', type: 'audiencia', status: 'confirmado', priority: 'alta', dayOffset: 0, startTime: '10:00', endTime: '11:00', locationOrChannel: 'Fórum Trabalhista', origin: 'processo', notes: 'Levar documentos complementares.' },
+  { id: 202, processId: 1, title: 'Retorno ao cliente Atlas', type: 'retorno_agendado', status: 'agendado', priority: 'media', dayOffset: 0, startTime: '14:00', endTime: '14:30', locationOrChannel: 'Telefone', origin: 'atendimento', notes: 'Atualizar sobre estratégia.' },
+  { id: 203, processId: 2, title: 'Prazo de contestação', type: 'prazo_calendario', status: 'atencao', priority: 'alta', dayOffset: 1, startTime: '09:00', endTime: '10:00', locationOrChannel: 'Operação interna', origin: 'publicacao', notes: 'Prazo crítico em abertura.' },
+  { id: 204, processId: 6, title: 'Reunião com cliente Boreal', type: 'reuniao_cliente', status: 'agendado', priority: 'media', dayOffset: 2, startTime: '15:00', endTime: '16:00', locationOrChannel: 'Teams', origin: 'manual', notes: 'Revisar próximos passos.' },
+  { id: 205, processId: 7, title: 'Protocolo administrativo', type: 'protocolo', status: 'agendado', priority: 'baixa', dayOffset: 3, startTime: '11:00', endTime: '11:30', locationOrChannel: 'Tribunal', origin: 'processo', notes: 'Confirmar anexo final.' },
+  { id: 206, processId: 2, title: 'Conflito de agenda interno', type: 'compromisso_interno', status: 'agendado', priority: 'alta', dayOffset: 1, startTime: '09:00', endTime: '09:45', locationOrChannel: 'Interno', origin: 'manual', notes: 'Sobreposição intencional para validar conflito.' },
+] as const;
 
 const externalProcessRegistry = [
   {
@@ -170,8 +227,239 @@ function clearAuthCookie(res: express.Response) {
   });
 }
 
+function isPrismaConnectionError(error: unknown) {
+  if (error instanceof Prisma.PrismaClientInitializationError) return true;
+  if (error instanceof Prisma.PrismaClientUnknownRequestError) return true;
+  if (!(error instanceof Error)) return false;
+
+  return error.message.includes("Can't reach database server")
+    || error.message.includes('Authentication failed')
+    || error.message.includes('ECONNREFUSED');
+}
+
+function getDevMockUserByEmail(email: string) {
+  return devMockUsers.find((user) => user.email.toLowerCase() === email.toLowerCase()) ?? null;
+}
+
+function getDevMockSessionUser(email: string) {
+  const user = getDevMockUserByEmail(email);
+  if (!user) return null;
+  return { id: user.id, email: user.email, role: user.role };
+}
+
+function getDevMockProcessesForRole(decoded: UserToken) {
+  const visible = decoded.role === 'ADM' || decoded.role === 'FIN'
+    ? devMockProcesses
+    : devMockProcesses.filter((process) => process.ownerId === decoded.sub);
+
+  return visible.map((process) => ({
+    ...process,
+    owner: getDevMockSessionUser(devMockUsers.find((user) => user.id === process.ownerId)?.email || '') ?? undefined,
+  }));
+}
+
+function getDevMockProcessById(processId: number) {
+  const process = devMockProcesses.find((item) => item.id === processId);
+  if (!process) return null;
+
+  return {
+    ...process,
+    owner: getDevMockSessionUser(devMockUsers.find((user) => user.id === process.ownerId)?.email || '') ?? undefined,
+  };
+}
+
+function getDevMockDeadlinesForRole(decoded: UserToken) {
+  const visibleProcesses = getDevMockProcessesForRole(decoded);
+  const visibleProcessIds = new Set(visibleProcesses.map((process) => process.id));
+  const today = new Date();
+
+  return devMockDeadlines
+    .filter((deadline) => visibleProcessIds.has(deadline.processId))
+    .map((deadline) => {
+      const process = visibleProcesses.find((item) => item.id === deadline.processId);
+      const dueDate = addDays(today, deadline.dueOffsetDays).toISOString().slice(0, 10);
+
+      return {
+        id: deadline.id,
+        title: deadline.title,
+        processId: deadline.processId,
+        processLabel: `#${deadline.processId}`,
+        processTitle: process?.title ?? '',
+        clientId: null,
+        client: process?.client ?? 'Cliente não informado',
+        origin: deadline.origin,
+        dueDate,
+        status: deadline.status,
+        priority: deadline.priority,
+        owner: process?.owner?.email?.split('@')[0] ?? 'sem-responsavel',
+        area: process?.phase ?? 'Civel',
+        notes: deadline.notes,
+        completedAt: deadline.status === 'concluido' ? addDays(today, -2).toISOString() : null,
+      };
+    });
+}
+
+function getDevMockAgendaForRole(decoded: UserToken) {
+  const visibleProcesses = getDevMockProcessesForRole(decoded);
+  const visibleProcessIds = new Set(visibleProcesses.map((process) => process.id));
+  const today = new Date();
+
+  return devMockAgendaEvents
+    .filter((event) => visibleProcessIds.has(event.processId))
+    .map((event) => {
+      const process = visibleProcesses.find((item) => item.id === event.processId);
+
+      return {
+        id: event.id,
+        title: event.title,
+        type: event.type,
+        status: event.status,
+        priority: event.priority,
+        date: addDays(today, event.dayOffset).toISOString().slice(0, 10),
+        startTime: event.startTime,
+        endTime: event.endTime,
+        clientId: null,
+        client: process?.client ?? 'Cliente não informado',
+        processId: event.processId,
+        processLabel: `#${event.processId}`,
+        processTitle: process?.title ?? '',
+        responsible: process?.owner?.email?.split('@')[0] ?? 'sem-responsavel',
+        locationOrChannel: event.locationOrChannel,
+        notes: event.notes,
+        origin: event.origin,
+        createdBy: process?.owner?.email?.split('@')[0] ?? 'sem-responsavel',
+        attendanceId: null,
+        taskId: null,
+        isAudience: event.type === 'audiencia',
+        isReturn: event.type === 'retorno_agendado',
+        isDeadline: event.type === 'prazo_calendario',
+        requiresAttention: event.type === 'audiencia' || event.type === 'retorno_agendado' || event.type === 'prazo_calendario',
+      };
+    });
+}
+
 function canAccessCrm(user: UserToken) {
   return ['ADM', 'ADV', 'ATD'].includes(user.role);
+}
+
+const crmAuditService = new CrmAuditService(createPrismaCrmAuditRepository({
+  crmAuditEvent: prisma.crmAuditEvent,
+  crmIdempotencyRequest: prisma.crmIdempotencyRequest,
+}));
+
+const crmContactHistoryService = new OpportunityContactHistoryService(
+  createPrismaOpportunityContactHistoryRepository({
+    crmOpportunity: prisma.crmOpportunity,
+  }),
+  crmAuditService,
+);
+
+const crmOpportunityDocumentsService = new OpportunityDocumentsService(
+  createPrismaOpportunityDocumentsRepository({
+    crmOpportunity: prisma.crmOpportunity,
+    documento: prisma.documento,
+    crmOpportunityDocumentAttachment: prisma.crmOpportunityDocumentAttachment,
+  }),
+  crmAuditService,
+);
+
+const crmOpportunityConversionService = new CrmOpportunityConversionService(
+  createPrismaOpportunityConversionRepository(prisma),
+);
+
+const crmOpportunityProcessLinkService = new CrmOpportunityProcessLinkService(
+  createPrismaLinkProcessRepository(prisma),
+);
+const deadlineRiskService = new DeadlineRiskService();
+const deadlineAuditService = new DeadlineAuditService();
+
+function buildCrmActor(decoded: UserToken) {
+  return {
+    sub: decoded.sub,
+    email: decoded.email,
+    role: decoded.role,
+  };
+}
+
+function getCrmContractStatus(error: unknown) {
+  if (error instanceof CrmOpportunityContractError) return error.status;
+  if (error instanceof CrmAuditContractError) return error.statusCode;
+  return null;
+}
+
+function getCrmContractCode(error: unknown) {
+  if (error instanceof CrmOpportunityContractError) return error.code;
+  if (error instanceof CrmAuditContractError) return error.code;
+  return null;
+}
+
+function getCrmContractDetails(error: unknown) {
+  if (error instanceof CrmOpportunityContractError) return error.details;
+  if (error instanceof CrmAuditContractError) return error.details;
+  return undefined;
+}
+
+function buildDeadlineActor(decoded: UserToken) {
+  return `user:${decoded.sub}` as const;
+}
+
+function buildDeadlineRisk(deadline: {
+  id: number;
+  processId: number;
+  title: string;
+  dueDate: Date;
+  status: string;
+  priority: string;
+  origin?: string | null;
+  legalArea?: string | null;
+  publicationId?: number | null;
+  agendaEventId?: number | null;
+  agendaSyncStatus?: string | null;
+  completedAt?: Date | null;
+}) {
+  return deadlineRiskService.evaluate({
+    id: deadline.id,
+    processId: deadline.processId,
+    title: deadline.title,
+    dueDate: deadline.dueDate.toISOString().slice(0, 10),
+    status: deadline.status,
+    priority: deadline.priority,
+    origin: deadline.origin ?? 'interno',
+    publicationId: deadline.publicationId ?? null,
+    processPhase: deadline.legalArea ?? null,
+    agendaEventId: deadline.agendaEventId ? String(deadline.agendaEventId) : null,
+    agendaSyncStatus: (deadline.agendaSyncStatus as any) ?? (deadline.agendaEventId ? 'synced' : 'missing'),
+    completedAt: deadline.completedAt ? deadline.completedAt.toISOString() : null,
+  });
+}
+
+async function persistDeadlineAuditEvent(event: {
+  eventType: string;
+  status: string;
+  deadlineId: number;
+  processId: number | null;
+  publicationId: number | null;
+  occurredAt: string;
+  actor: string;
+  details: Record<string, unknown>;
+}) {
+  await prisma.crmAuditEvent.create({
+    data: {
+      id: `deadline:${event.eventType}:${event.deadlineId}:${Date.now()}`,
+      scope: 'audit.event',
+      entityType: 'deadline',
+      entityId: event.deadlineId,
+      action: event.eventType,
+      status: event.status,
+      summary: `${event.eventType} para prazo #${event.deadlineId}`,
+      details: event.details,
+      actor: { source: 'system', email: event.actor, role: 'deadline' },
+      occurredAt: event.occurredAt,
+      correlationId: null,
+      idempotencyKey: null,
+      createdAt: new Date().toISOString(),
+    },
+  });
 }
 
 const OPPORTUNITY_STAGE_SEQUENCE = ['acao_recomendada', 'em_contato', 'proposta_enviada', 'negociacao', 'ganha', 'perdida'] as const;
@@ -230,6 +518,49 @@ function addDays(base: Date, amount: number) {
   const next = new Date(base);
   next.setUTCDate(next.getUTCDate() + amount);
   return next;
+}
+
+function startOfUtcDay(date: Date) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0));
+}
+
+async function collectExistingAutomationDedupeKeys(triageItem: {
+  id: number;
+  processId: number | null;
+  event?: { publicationId?: number | null } | null;
+}) {
+  if (!triageItem.processId) return new Set<string>();
+
+  const priorDecisions = await prisma.triageDecision.findMany({
+    where: {
+      triageItemId: triageItem.id,
+      OR: [
+        { generatedTaskId: { not: null } },
+        { generatedDeadlineId: { not: null } },
+      ],
+    },
+    select: {
+      generatedTaskId: true,
+      generatedDeadlineId: true,
+    },
+  });
+
+  if (!priorDecisions.length) return new Set<string>();
+
+  const publicationRef = triageItem.event?.publicationId
+    ? `pub:${triageItem.event.publicationId}`
+    : `triage:${triageItem.id}`;
+  const dedupeKeys = new Set<string>();
+
+  if (priorDecisions.some((decision: any) => decision.generatedTaskId && decision.generatedDeadlineId)) {
+    dedupeKeys.add(`${publicationRef}|process:${triageItem.processId}|deadline-and-task`);
+  }
+
+  if (priorDecisions.some((decision: any) => decision.generatedTaskId && !decision.generatedDeadlineId)) {
+    dedupeKeys.add(`${publicationRef}|process:${triageItem.processId}|task`);
+  }
+
+  return dedupeKeys;
 }
 
 function createCaptureFingerprint(parts: Array<string | number | null | undefined>) {
@@ -1246,87 +1577,35 @@ async function ingestOabPublications(triggeredBy: string) {
 }
 
 function scheduleCnjCollector() {
-  const disabled = process.env.TRIAGE_SCHEDULER_DISABLED === 'true';
-  if (disabled) return;
-
-  const run = async () => {
-    try {
-      await ingestCnjPublications('scheduler');
-    } catch (error) {
-      console.error('[triage] CNJ scheduler failed:', error);
-    } finally {
-      const nextRun = computeNextScheduleDate(new Date(Date.now() + 60000));
-      const waitMs = Math.max(60000, nextRun.getTime() - Date.now());
-      setTimeout(run, waitMs);
-    }
-  };
-
-  const firstRun = computeNextScheduleDate();
-  const initialWaitMs = Math.max(60000, firstRun.getTime() - Date.now());
-  setTimeout(run, initialWaitMs);
+  createPublicationScheduler({
+    disabled: process.env.TRIAGE_SCHEDULER_DISABLED === 'true',
+    onTick: async () => { await ingestCnjPublications('scheduler'); },
+    onError: (error) => console.error('[triage] CNJ scheduler failed:', error),
+  }).arm();
 }
 
 function scheduleCpfCollector() {
-  const disabled = process.env.TRIAGE_SCHEDULER_DISABLED === 'true';
-  if (disabled) return;
-
-  const run = async () => {
-    try {
-      await ingestCpfPublications('scheduler');
-    } catch (error) {
-      console.error('[triage] CPF scheduler failed:', error);
-    } finally {
-      const nextRun = computeNextScheduleDate(new Date(Date.now() + 60000));
-      const waitMs = Math.max(60000, nextRun.getTime() - Date.now());
-      setTimeout(run, waitMs);
-    }
-  };
-
-  const firstRun = computeNextScheduleDate();
-  const initialWaitMs = Math.max(60000, firstRun.getTime() - Date.now());
-  setTimeout(run, initialWaitMs);
+  createPublicationScheduler({
+    disabled: process.env.TRIAGE_SCHEDULER_DISABLED === 'true',
+    onTick: async () => { await ingestCpfPublications('scheduler'); },
+    onError: (error) => console.error('[triage] CPF scheduler failed:', error),
+  }).arm();
 }
 
 function scheduleDiarioCollector() {
-  const disabled = process.env.TRIAGE_SCHEDULER_DISABLED === 'true';
-  if (disabled) return;
-
-  const run = async () => {
-    try {
-      await ingestDiarioPublications('scheduler');
-    } catch (error) {
-      console.error('[triage] Diário oficial scheduler failed:', error);
-    } finally {
-      const nextRun = computeNextScheduleDate(new Date(Date.now() + 60000));
-      const waitMs = Math.max(60000, nextRun.getTime() - Date.now());
-      setTimeout(run, waitMs);
-    }
-  };
-
-  const firstRun = computeNextScheduleDate();
-  const initialWaitMs = Math.max(60000, firstRun.getTime() - Date.now());
-  setTimeout(run, initialWaitMs);
+  createPublicationScheduler({
+    disabled: process.env.TRIAGE_SCHEDULER_DISABLED === 'true',
+    onTick: async () => { await ingestDiarioPublications('scheduler'); },
+    onError: (error) => console.error('[triage] Diário oficial scheduler failed:', error),
+  }).arm();
 }
 
 function scheduleOabCollector() {
-  const disabled = process.env.TRIAGE_SCHEDULER_DISABLED === 'true';
-  if (disabled) return;
-
-  const run = async () => {
-    try {
-      await ingestOabPublications('scheduler');
-    } catch (error) {
-      console.error('[triage] OAB scheduler failed:', error);
-    } finally {
-      const nextRun = computeNextScheduleDate(new Date(Date.now() + 60000));
-      const waitMs = Math.max(60000, nextRun.getTime() - Date.now());
-      setTimeout(run, waitMs);
-    }
-  };
-
-  const firstRun = computeNextScheduleDate();
-  const initialWaitMs = Math.max(60000, firstRun.getTime() - Date.now());
-  setTimeout(run, initialWaitMs);
+  createPublicationScheduler({
+    disabled: process.env.TRIAGE_SCHEDULER_DISABLED === 'true',
+    onTick: async () => { await ingestOabPublications('scheduler'); },
+    onError: (error) => console.error('[triage] OAB scheduler failed:', error),
+  }).arm();
 }
 
 async function syncClientsFromProcesses() {
@@ -2273,16 +2552,32 @@ app.post('/auth/login', async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ message: 'email e senha são obrigatórios' });
 
-  const user = await prisma.user.findUnique({ where: { email } });
-  if (!user) return res.status(401).json({ message: 'Credenciais inválidas' });
-  const passwordMatches = await bcrypt.compare(password, user.password);
-  if (!passwordMatches) return res.status(401).json({ message: 'Credenciais inválidas' });
+  try {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) return res.status(401).json({ message: 'Credenciais inválidas' });
+    const passwordMatches = await bcrypt.compare(password, user.password);
+    if (!passwordMatches) return res.status(401).json({ message: 'Credenciais inválidas' });
 
-  const sessionUser = { id: user.id, email: user.email, role: user.role };
-  const token = signUserToken(sessionUser);
-  setAuthCookie(res, token);
+    const sessionUser = { id: user.id, email: user.email, role: user.role };
+    const token = signUserToken(sessionUser);
+    setAuthCookie(res, token);
 
-  res.json({ user: sessionUser });
+    return res.json({ user: sessionUser });
+  } catch (error) {
+    if (!devMockEnabled || !isPrismaConnectionError(error)) {
+      return res.status(500).json({ message: error instanceof Error ? error.message : 'Erro ao autenticar' });
+    }
+
+    const user = getDevMockUserByEmail(email);
+    if (!user || user.password !== password) {
+      return res.status(401).json({ message: 'Credenciais inválidas' });
+    }
+
+    const sessionUser = { id: user.id, email: user.email, role: user.role };
+    const token = signUserToken(sessionUser);
+    setAuthCookie(res, token);
+    return res.json({ user: sessionUser, mockMode: true });
+  }
 });
 
 app.post('/auth/logout', (_req, res) => {
@@ -2301,8 +2596,16 @@ app.get('/users', async (req, res) => {
   if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
   if (decoded.role !== 'ADM') return res.status(403).send({ message: 'Acesso negado' });
 
-  const users = await prisma.user.findMany({ select: { id: true, email: true, role: true } });
-  res.json(users);
+  try {
+    const users = await prisma.user.findMany({ select: { id: true, email: true, role: true } });
+    return res.json(users);
+  } catch (error) {
+    if (!devMockEnabled || !isPrismaConnectionError(error)) {
+      return res.status(500).send({ message: error instanceof Error ? error.message : 'Erro ao carregar usuários' });
+    }
+
+    return res.json(devMockUsers.map(({ id, email, role }) => ({ id, email, role })));
+  }
 });
 
 app.get('/clients', async (req, res) => {
@@ -2654,32 +2957,43 @@ app.get('/deadlines', async (req, res) => {
   const decoded = getUserFromReq(req);
   if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
 
-  const ownerLabel = getResponsibleLabel(decoded.email);
-  const deadlines = await prisma.prazo.findMany({
-    where: decoded.role === 'ADM' || decoded.role === 'FIN'
-      ? undefined
-      : {
-          OR: [
-            { createdBy: ownerLabel ?? decoded.email },
-            { responsible: ownerLabel ?? decoded.email },
-            { process: { ownerId: decoded.sub } },
-          ],
-        },
-    include: {
-      process: {
-        include: {
-          owner: { select: { id: true, email: true, role: true } },
-          clientRecord: true,
+  try {
+    const ownerLabel = getResponsibleLabel(decoded.email);
+    const deadlines = await prisma.prazo.findMany({
+      where: decoded.role === 'ADM' || decoded.role === 'FIN'
+        ? undefined
+        : {
+            OR: [
+              { createdBy: ownerLabel ?? decoded.email },
+              { responsible: ownerLabel ?? decoded.email },
+              { process: { ownerId: decoded.sub } },
+            ],
+          },
+      include: {
+        process: {
+          include: {
+            owner: { select: { id: true, email: true, role: true } },
+            clientRecord: true,
+          },
         },
       },
-    },
-    orderBy: [
-      { dueDate: 'asc' },
-      { createdAt: 'desc' },
-    ],
-  });
+      orderBy: [
+        { dueDate: 'asc' },
+        { createdAt: 'desc' },
+      ],
+    });
 
-  res.json(deadlines.map((deadline) => buildDeadlinePayload(deadline)));
+    return res.json(deadlines.map((deadline) => ({
+      ...buildDeadlinePayload(deadline),
+      risk: buildDeadlineRisk(deadline),
+    })));
+  } catch (error) {
+    if (!devMockEnabled || !isPrismaConnectionError(error)) {
+      return res.status(500).send({ message: error instanceof Error ? error.message : 'Erro ao carregar prazos' });
+    }
+
+    return res.json(getDevMockDeadlinesForRole(decoded));
+  }
 });
 
 app.get('/deadlines/:id', async (req, res) => {
@@ -2701,7 +3015,10 @@ app.get('/deadlines/:id', async (req, res) => {
   if (!deadline) return res.status(404).send({ message: 'Prazo não encontrado' });
   if (!canReadDeadline(decoded, deadline)) return res.status(403).send({ message: 'Acesso negado' });
 
-  res.json(buildDeadlinePayload(deadline));
+  res.json({
+    ...buildDeadlinePayload(deadline),
+    risk: buildDeadlineRisk(deadline),
+  });
 });
 
 app.post('/deadlines', async (req, res) => {
@@ -2737,6 +3054,7 @@ app.post('/deadlines', async (req, res) => {
       responsible: responsible || getResponsibleLabel(decoded.email) || decoded.email,
       legalArea: processRecord.phase,
       notes: typeof notes === 'string' ? notes.trim() : null,
+      agendaSyncStatus: 'missing',
       createdBy: getResponsibleLabel(decoded.email) || decoded.email,
     },
     include: {
@@ -2749,7 +3067,10 @@ app.post('/deadlines', async (req, res) => {
     },
   });
 
-  res.status(201).json(buildDeadlinePayload(created));
+  res.status(201).json({
+    ...buildDeadlinePayload(created),
+    risk: buildDeadlineRisk(created),
+  });
 });
 
 app.put('/deadlines/:id', async (req, res) => {
@@ -2771,7 +3092,7 @@ app.put('/deadlines/:id', async (req, res) => {
   if (!current) return res.status(404).send({ message: 'Prazo não encontrado' });
   if (!canReadDeadline(decoded, current)) return res.status(403).send({ message: 'Acesso negado' });
 
-  const { title, dueDate, priority, status, responsible, notes, origin } = req.body;
+  const { title, dueDate, priority, status, responsible, notes, origin, completionJustification } = req.body;
   const nextStatus = status ?? current.status;
 
   const updated = await prisma.prazo.update({
@@ -2785,6 +3106,10 @@ app.put('/deadlines/:id', async (req, res) => {
       notes: notes === undefined ? current.notes : (typeof notes === 'string' ? notes.trim() : null),
       origin: origin ?? current.origin,
       completedAt: nextStatus === 'concluido' ? new Date() : (status ? null : current.completedAt),
+      completedBy: nextStatus === 'concluido' ? (getResponsibleLabel(decoded.email) || decoded.email) : null,
+      completionJustification: nextStatus === 'concluido'
+        ? (typeof completionJustification === 'string' && completionJustification.trim() ? completionJustification.trim() : 'Conclusão manual')
+        : null,
     },
     include: {
       process: {
@@ -2796,7 +3121,149 @@ app.put('/deadlines/:id', async (req, res) => {
     },
   });
 
-  res.json(buildDeadlinePayload(updated));
+  if (nextStatus === 'concluido') {
+    await persistDeadlineAuditEvent(deadlineAuditService.recordCompletion({
+      actor: buildDeadlineActor(decoded),
+      deadlineId: updated.id,
+      processId: updated.processId,
+      publicationId: updated.publicationId ?? null,
+      source: 'manual',
+      reason: typeof completionJustification === 'string' && completionJustification.trim() ? completionJustification.trim() : null,
+      occurredAt: new Date().toISOString(),
+      risk: buildDeadlineRisk(updated),
+    }));
+  }
+
+  res.json({
+    ...buildDeadlinePayload(updated),
+    risk: buildDeadlineRisk(updated),
+  });
+});
+
+app.post('/deadlines/bulk-action', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const bulkActionService = new DeadlineBulkActionService({
+    store: {
+      listByIds: async (ids) => {
+        const rows = await prisma.prazo.findMany({
+          where: { id: { in: ids } },
+          include: {
+            process: {
+              include: {
+                owner: { select: { id: true, email: true, role: true } },
+                clientRecord: true,
+              },
+            },
+          },
+        });
+
+        return rows.filter((row) => canReadDeadline(decoded, row)).map((row) => ({
+          id: row.id,
+          processId: row.processId,
+          processTitle: row.process?.title ?? null,
+          processPhase: row.legalArea ?? row.process?.phase ?? null,
+          clientId: row.process?.clientRecord?.id ?? null,
+          clientName: row.process?.clientRecord?.name ?? row.process?.client ?? null,
+          title: row.title,
+          description: row.notes ?? null,
+          dueDate: row.dueDate.toISOString().slice(0, 10),
+          status: row.status,
+          priority: row.priority,
+          origin: row.origin ?? 'interno',
+          responsible: row.responsible ?? null,
+          createdBy: row.createdBy ?? null,
+          completedAt: row.completedAt ? row.completedAt.toISOString() : null,
+          publicationId: row.publicationId ?? null,
+          agendaEventId: row.agendaEventId ? String(row.agendaEventId) : null,
+          agendaSyncStatus: (row.agendaSyncStatus as any) ?? (row.agendaEventId ? 'synced' : 'missing'),
+        }));
+      },
+      save: async (deadline) => {
+        const updated = await prisma.prazo.update({
+          where: { id: deadline.id },
+          data: {
+            dueDate: new Date(`${deadline.dueDate}T12:00:00.000Z`),
+            status: deadline.status,
+            priority: deadline.priority,
+            responsible: deadline.responsible,
+            completedAt: deadline.completedAt ? new Date(deadline.completedAt) : null,
+            notes: deadline.description,
+          },
+          include: {
+            process: {
+              include: {
+                owner: { select: { id: true, email: true, role: true } },
+                clientRecord: true,
+              },
+            },
+          },
+        });
+
+        return {
+          id: updated.id,
+          processId: updated.processId,
+          processTitle: updated.process?.title ?? null,
+          processPhase: updated.legalArea ?? updated.process?.phase ?? null,
+          clientId: updated.process?.clientRecord?.id ?? null,
+          clientName: updated.process?.clientRecord?.name ?? updated.process?.client ?? null,
+          title: updated.title,
+          description: updated.notes ?? null,
+          dueDate: updated.dueDate.toISOString().slice(0, 10),
+          status: updated.status,
+          priority: updated.priority,
+          origin: updated.origin ?? 'interno',
+          responsible: updated.responsible ?? null,
+          createdBy: updated.createdBy ?? null,
+          completedAt: updated.completedAt ? updated.completedAt.toISOString() : null,
+          publicationId: updated.publicationId ?? null,
+          agendaEventId: updated.agendaEventId ? String(updated.agendaEventId) : null,
+          agendaSyncStatus: (updated.agendaSyncStatus as any) ?? (updated.agendaEventId ? 'synced' : 'missing'),
+        };
+      },
+      getIdempotency: async (key) => {
+        const record = await prisma.crmIdempotencyRequest.findUnique({
+          where: { scope_key: { scope: 'deadlines.bulkAction', key } },
+        });
+        return record ? { key, status: 'completed', result: record.responseBody as any } : null;
+      },
+      saveIdempotency: async (record) => {
+        await prisma.crmIdempotencyRequest.create({
+          data: {
+            key: record.key,
+            scope: 'deadlines.bulkAction',
+            entityType: 'deadline',
+            entityId: null,
+            action: 'bulk_action',
+            payloadHash: record.key,
+            responseCode: 200,
+            responseBody: record.result,
+          },
+        });
+      },
+    },
+  });
+
+  try {
+    const result = await bulkActionService.execute({
+      idempotencyKey: typeof req.headers['idempotency-key'] === 'string' ? req.headers['idempotency-key'] : `bulk-${Date.now()}`,
+      actor: buildDeadlineActor(decoded),
+      action: req.body?.action,
+    });
+
+    for (const event of result.auditEvents) {
+      await persistDeadlineAuditEvent(event);
+    }
+
+    res.json(result);
+  } catch (error) {
+    if (error instanceof DeadlineDomainError) {
+      return res.status(error.statusCode).json({ message: error.message, code: error.code, details: error.details ?? null });
+    }
+
+    return res.status(500).json({ message: error instanceof Error ? error.message : 'Falha na ação em massa de prazos' });
+  }
 });
 
 app.get('/documents', async (req, res) => {
@@ -3222,42 +3689,140 @@ app.post('/crm/opportunities/:id/contact-events', async (req, res) => {
   if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
   if (!canAccessCrm(decoded)) return res.status(403).send({ message: 'Acesso negado' });
 
-  const opportunity = await prisma.crmOpportunity.findUnique({
-    where: { id: Number(req.params.id) },
-    include: { clientRecord: true, triageItems: true, contactEvents: { orderBy: { createdAt: 'desc' } } },
-  });
+  try {
+    await crmContactHistoryService.addContactEvent({
+      opportunityId: Number(req.params.id),
+      summary: req.body?.summary,
+      kind: req.body?.kind,
+      nextContactAt: req.body?.nextContactAt,
+      occurredAt: new Date().toISOString(),
+      idempotencyKey: typeof req.headers['idempotency-key'] === 'string' ? req.headers['idempotency-key'] : undefined,
+      actor: {
+        source: 'user',
+        userId: decoded.sub,
+        email: decoded.email,
+        role: decoded.role,
+      },
+      metadata: {
+        route: 'POST /crm/opportunities/:id/contact-events',
+      },
+    });
+
+    const updated = await prisma.crmOpportunity.findUnique({
+      where: { id: Number(req.params.id) },
+      include: { clientRecord: true, triageItems: true, contactEvents: { orderBy: { createdAt: 'desc' } } },
+    });
+
+    if (!updated) return res.status(404).send({ message: 'Oportunidade não encontrada' });
+
+    res.status(201).json(buildCrmOpportunityPayload(updated));
+  } catch (error) {
+    const status = getCrmContractStatus(error);
+    if (status) {
+      return res.status(status).json({
+        message: error instanceof Error ? error.message : 'Falha ao registrar contato comercial',
+        code: getCrmContractCode(error),
+        details: getCrmContractDetails(error),
+      });
+    }
+
+    return res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao registrar contato comercial' });
+  }
+});
+
+app.get('/crm/opportunities/:id/documents', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+  if (!canAccessCrm(decoded)) return res.status(403).send({ message: 'Acesso negado' });
+
+  const opportunity = await prisma.crmOpportunity.findUnique({ where: { id: Number(req.params.id) } });
   if (!opportunity) return res.status(404).send({ message: 'Oportunidade não encontrada' });
 
-  const summary = typeof req.body?.summary === 'string' ? req.body.summary.trim() : '';
-  if (!summary) return res.status(400).send({ message: 'Resumo do contato é obrigatório' });
-
-  const kind = typeof req.body?.kind === 'string' && req.body.kind.trim() ? req.body.kind.trim() : 'contato';
-  const parsedNextContact = req.body?.nextContactAt === undefined
-    ? opportunity.nextContactAt
-    : req.body?.nextContactAt === null
-      ? null
-      : parseOptionalDateTime(req.body?.nextContactAt);
-  if (parsedNextContact === 'invalid') {
-    return res.status(400).send({ message: 'nextContactAt inválido. Use data/hora ISO válida.' });
-  }
-
-  const updated = await prisma.crmOpportunity.update({
-    where: { id: opportunity.id },
-    data: {
-      lastContactAt: new Date(),
-      nextContactAt: parsedNextContact,
-      contactEvents: {
-        create: {
-          kind,
-          summary,
-          createdBy: decoded.email,
-        },
-      },
-    },
-    include: { clientRecord: true, triageItems: true, contactEvents: { orderBy: { createdAt: 'desc' } } },
+  const attachments = await prisma.crmOpportunityDocumentAttachment.findMany({
+    where: { crmOpportunityId: opportunity.id },
+    orderBy: { uploadedAt: 'desc' },
   });
 
-  res.status(201).json(buildCrmOpportunityPayload(updated));
+  res.json(attachments.map((attachment: any) => ({
+    id: attachment.id,
+    opportunityId: attachment.crmOpportunityId,
+    documentId: attachment.documentId ?? null,
+    title: attachment.titleSnapshot,
+    category: attachment.category,
+    status: attachment.status,
+    mimeType: attachment.mimeType,
+    previewUrl: attachment.previewUrl ?? null,
+    requiredChecklist: Boolean(attachment.requiredChecklist),
+    pendingForAdvance: Boolean(attachment.pendingForAdvance),
+    uploadedAt: attachment.uploadedAt.toISOString(),
+    responsible: attachment.responsible ?? '',
+    createdBy: attachment.createdBy ?? '',
+    externalDocumentId: attachment.externalDocumentId ?? null,
+  })));
+});
+
+app.post('/crm/opportunities/:id/documents', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+  if (!canAccessCrm(decoded)) return res.status(403).send({ message: 'Acesso negado' });
+
+  try {
+    const created = await crmOpportunityDocumentsService.attachDocument({
+      opportunityId: Number(req.params.id),
+      title: req.body?.title,
+      description: req.body?.description,
+      category: req.body?.category,
+      mimeType: req.body?.mimeType,
+      previewUrl: req.body?.previewUrl,
+      responsible: req.body?.responsible,
+      origin: req.body?.origin,
+      uploadedAt: req.body?.uploadedAt,
+      requiredChecklist: req.body?.requiredChecklist,
+      pendingForAdvance: req.body?.pendingForAdvance,
+      createdBy: decoded.email,
+      externalDocumentId: req.body?.externalDocumentId,
+      idempotencyKey: typeof req.headers['idempotency-key'] === 'string' ? req.headers['idempotency-key'] : undefined,
+      actor: {
+        source: 'user',
+        userId: decoded.sub,
+        email: decoded.email,
+        role: decoded.role,
+      },
+      metadata: {
+        route: 'POST /crm/opportunities/:id/documents',
+      },
+    });
+
+    res.status(201).json(created);
+  } catch (error) {
+    const status = getCrmContractStatus(error);
+    if (status) {
+      return res.status(status).json({
+        message: error instanceof Error ? error.message : 'Falha ao anexar documento comercial',
+        code: getCrmContractCode(error),
+        details: getCrmContractDetails(error),
+      });
+    }
+
+    return res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao anexar documento comercial' });
+  }
+});
+
+app.get('/crm/opportunities/:id/audit', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+  if (!canAccessCrm(decoded)) return res.status(403).send({ message: 'Acesso negado' });
+
+  const opportunity = await prisma.crmOpportunity.findUnique({ where: { id: Number(req.params.id) } });
+  if (!opportunity) return res.status(404).send({ message: 'Oportunidade não encontrada' });
+
+  const events = await crmAuditService.list({
+    entityType: 'crm_opportunity',
+    entityId: opportunity.id,
+    limit: 50,
+  });
+
+  res.json(events);
 });
 
 app.post('/crm/leads/:id/convert', async (req, res) => {
@@ -3314,144 +3879,99 @@ app.post('/crm/opportunities/:id/convert', async (req, res) => {
   if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
   if (!canAccessCrm(decoded)) return res.status(403).send({ message: 'Acesso negado' });
 
-  const opportunity = await prisma.crmOpportunity.findUnique({
-    where: { id: Number(req.params.id) },
-    include: { clientRecord: true, contactEvents: { orderBy: { createdAt: 'desc' } } },
-  });
-  if (!opportunity) return res.status(404).send({ message: 'Oportunidade não encontrada' });
-  if (opportunity.convertedProcessId) {
-    return res.status(409).send({ message: `Oportunidade já convertida no processo #${opportunity.convertedProcessId}.` });
-  }
+  try {
+    const command = validateOpportunityConversionCommand({
+      opportunityId: Number(req.params.id),
+      confirmConversion: req.body?.confirmConversion,
+      clientId: req.body?.clientId,
+      clientName: req.body?.clientName,
+      processTitle: req.body?.processTitle,
+      processPhase: req.body?.processPhase,
+      processStatus: req.body?.processStatus,
+      processNumber: req.body?.processNumber,
+      summary: req.body?.summary,
+      actor: buildCrmActor(decoded),
+    });
 
-  const conversionConfirmed = req.body?.confirmConversion === undefined ? true : Boolean(req.body.confirmConversion);
-  if (!conversionConfirmed) {
-    return res.status(400).send({ message: 'Confirmação de conversão ausente. Revise e confirme a conversão.' });
-  }
+    const conversion = await crmOpportunityConversionService.execute(command);
 
-  if (!opportunity.responsible?.trim()) {
-    return res.status(400).send({ message: 'Defina um responsável comercial antes da conversão.' });
-  }
-  if (!opportunity.nextContactAt && opportunity.status === 'em_contato') {
-    return res.status(400).send({ message: 'O estágio em_contato exige próximo contato antes da conversão.' });
-  }
-
-  const clientName = typeof req.body?.clientName === 'string' ? req.body.clientName.trim() : '';
-  const processTitle = typeof req.body?.processTitle === 'string' ? req.body.processTitle.trim() : '';
-  const processPhase = typeof req.body?.processPhase === 'string' ? req.body.processPhase.trim() : '';
-  const processStatus = typeof req.body?.processStatus === 'string' ? req.body.processStatus.trim() : '';
-  const processNumber = normalizeProcessNumber(req.body?.processNumber);
-
-  if (!clientName || !processTitle || !processPhase || !processStatus) {
-    return res.status(400).send({ message: 'Cliente e dados principais do processo são obrigatórios' });
-  }
-
-  if (processNumber) {
-    const existingProcess = await prisma.process.findFirst({ where: { processNumber } });
-    if (existingProcess) {
-      return res.status(409).send({ message: 'Esse numero de processo ja esta cadastrado na carteira' });
+    res.status(conversion.idempotent ? 200 : 201).json({
+      opportunity: buildCrmOpportunityPayload(conversion.opportunity),
+      client: conversion.client ? {
+        id: conversion.client.id,
+        name: conversion.client.name,
+        cpfCnpj: conversion.client.cpfCnpj ?? '',
+        status: conversion.client.status,
+        responsible: conversion.client.responsible ?? '',
+      } : null,
+      process: conversion.process ? {
+        id: conversion.process.id,
+        title: conversion.process.title,
+        processNumber: conversion.process.processNumber ?? '',
+        phase: conversion.process.phase,
+        status: conversion.process.status,
+        clientId: conversion.process.clientId ?? null,
+        client: conversion.process.client,
+      } : null,
+      outcome: conversion.outcome,
+      idempotent: conversion.idempotent,
+    });
+  } catch (error) {
+    const status = getCrmContractStatus(error);
+    if (status) {
+      return res.status(status).json({
+        message: error instanceof Error ? error.message : 'Falha ao converter oportunidade',
+        code: getCrmContractCode(error),
+        details: getCrmContractDetails(error),
+      });
     }
+
+    return res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao converter oportunidade' });
   }
+});
 
-  let client = null as any;
+app.post('/crm/opportunities/:id/link-process', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+  if (!canAccessCrm(decoded)) return res.status(403).send({ message: 'Acesso negado' });
 
-  if (typeof req.body?.clientId === 'number') {
-    client = await clientStore.findUnique({ where: { id: req.body.clientId } });
-  }
-
-  if (!client && opportunity.clientId) {
-    client = await clientStore.findUnique({ where: { id: opportunity.clientId } });
-  }
-
-  if (!client && opportunity.cpf) {
-    client = await clientStore.findFirst({ where: { cpfCnpj: opportunity.cpf } });
-  }
-
-  if (!client) {
-    client = await clientStore.findFirst({ where: { name: clientName } });
-  }
-
-  if (client) {
-    client = await clientStore.update({
-      where: { id: client.id },
-      data: {
-        cpfCnpj: opportunity.cpf || client.cpfCnpj,
-        legalArea: processPhase || client.legalArea,
-        responsible: opportunity.responsible || getResponsibleLabel(decoded.email),
-        status: client.status || 'ativo',
-      },
-    });
-  } else {
-    client = await clientStore.create({
-      data: {
-        name: clientName,
-        type: 'PF',
-        cpfCnpj: opportunity.cpf || null,
-        status: 'ativo',
-        legalArea: processPhase,
-        responsible: opportunity.responsible || getResponsibleLabel(decoded.email),
-        notes: 'Cliente criado a partir da conversão de oportunidade do CRM Jurídico.',
-      },
-    });
-  }
-
-  const conversion = await prisma.$transaction(async (tx: any) => {
-    const createdProcess = await tx.process.create({
-      data: {
-        title: processTitle,
-        processNumber: processNumber || null,
-        client: client.name,
-        clientId: client.id,
-        phase: processPhase,
-        status: processStatus,
-        ownerId: decoded.sub,
-      },
-      include: {
-        owner: { select: { id: true, email: true, role: true } },
-        clientRecord: true,
-      },
+  try {
+    const command = validateLinkProcessCommand({
+      opportunityId: Number(req.params.id),
+      processId: req.body?.processId,
+      confirmLink: req.body?.confirmLink,
+      summary: req.body?.summary,
+      actor: buildCrmActor(decoded),
     });
 
-    const updatedOpportunity = await tx.crmOpportunity.update({
-      where: { id: opportunity.id },
-      data: {
-        clientId: client.id,
-        convertedProcessId: createdProcess.id,
-        personName: client.name,
-        status: 'ganha',
-        summary: typeof req.body?.summary === 'string' && req.body.summary.trim() ? req.body.summary.trim() : opportunity.summary,
-        contactEvents: {
-          create: {
-            kind: 'conversao',
-            summary: `Convertida em cliente e processo #${createdProcess.id}.`,
-            createdBy: decoded.email,
-          },
-        },
+    const linked = await crmOpportunityProcessLinkService.execute(command);
+
+    res.status(linked.idempotent ? 200 : 201).json({
+      opportunity: buildCrmOpportunityPayload(linked.opportunity),
+      process: {
+        id: linked.process.id,
+        title: linked.process.title,
+        processNumber: linked.process.processNumber ?? '',
+        phase: linked.process.phase,
+        status: linked.process.status,
+        clientId: linked.process.clientId ?? null,
+        client: linked.process.client,
       },
-      include: { clientRecord: true, triageItems: true, contactEvents: { orderBy: { createdAt: 'desc' } } },
+      outcome: linked.outcome,
+      idempotent: linked.idempotent,
     });
+  } catch (error) {
+    const status = getCrmContractStatus(error);
+    if (status) {
+      return res.status(status).json({
+        message: error instanceof Error ? error.message : 'Falha ao vincular processo',
+        code: getCrmContractCode(error),
+        details: getCrmContractDetails(error),
+      });
+    }
 
-    return { createdProcess, updatedOpportunity };
-  });
-
-  res.status(201).json({
-    opportunity: buildCrmOpportunityPayload(conversion.updatedOpportunity),
-    client: {
-      id: client.id,
-      name: client.name,
-      cpfCnpj: client.cpfCnpj ?? '',
-      status: client.status,
-      responsible: client.responsible ?? '',
-    },
-    process: {
-      id: conversion.createdProcess.id,
-      title: conversion.createdProcess.title,
-      processNumber: conversion.createdProcess.processNumber ?? '',
-      phase: conversion.createdProcess.phase,
-      status: conversion.createdProcess.status,
-      clientId: conversion.createdProcess.clientId,
-      client: conversion.createdProcess.client,
-    },
-  });
+    return res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao vincular processo' });
+  }
 });
 
 app.get('/publications', async (req, res) => {
@@ -3501,6 +4021,77 @@ app.get('/publications/:id', async (req, res) => {
   if (!canReadPublication(decoded, publication)) return res.status(403).send({ message: 'Acesso negado' });
 
   res.json(buildPublicationPayload(publication));
+});
+
+app.get('/publications/:id/audit', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const publication = await prisma.publication.findUnique({
+    where: { id: Number(req.params.id) },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+      clientRecord: true,
+      publicationEvents: {
+        include: {
+          capture: true,
+        },
+        orderBy: { eventAt: 'desc' },
+      },
+    },
+  });
+
+  if (!publication) return res.status(404).send({ message: 'Publicação não encontrada' });
+  if (!canReadPublication(decoded, publication)) return res.status(403).send({ message: 'Acesso negado' });
+
+  const publicationDayStart = startOfUtcDay(publication.publishedAt);
+  const publicationDayEnd = addDays(publicationDayStart, 1);
+  const relatedTriageItems = await prisma.triageItem.findMany({
+    where: {
+      processId: publication.processId,
+      capture: {
+        occurredAt: {
+          gte: publicationDayStart,
+          lt: publicationDayEnd,
+        },
+      },
+    },
+    include: {
+      process: true,
+      clientRecord: true,
+      crmLead: true,
+      crmOpportunity: true,
+      capture: true,
+      event: true,
+      decisions: true,
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  res.json({
+    publication: buildPublicationPayload(publication),
+    events: publication.publicationEvents.map((event: any) => ({
+      id: event.id,
+      eventType: event.eventType,
+      title: event.title,
+      summary: event.summary,
+      riskLevel: event.riskLevel,
+      requiresAction: event.requiresAction,
+      eventAt: event.eventAt.toISOString(),
+      captureId: event.captureId,
+      sourceType: event.capture?.sourceType ?? null,
+      sourceReference: event.capture?.sourceReference ?? null,
+    })),
+    triage: relatedTriageItems.map((item: any) => ({
+      ...buildTriageItemPayload(item),
+      decisions: item.decisions.map((decision: any) => buildTriageDecisionPayload(decision)),
+    })),
+  });
 });
 
 app.post('/publications', async (req, res) => {
@@ -3645,67 +4236,218 @@ app.post('/publications/:id/create-deadline', async (req, res) => {
     }
   }
 
-  const dueDate = req.body?.dueDate
-    ? new Date(req.body.dueDate)
-    : addDays(publication.publishedAt, 15);
-  const title = typeof req.body?.title === 'string' && req.body.title.trim()
-    ? req.body.title.trim()
-    : `Prazo de manifestação - ${publication.process.title}`;
-  const priority = req.body?.priority || (publication.impact === 'critico' || publication.impact === 'alto' ? 'alta' : 'media');
-  const status = req.body?.status || (publication.impact === 'critico' ? 'critico' : 'aberto');
-  const responsible = req.body?.responsible || getResponsibleLabel(decoded.email) || decoded.email;
-  const notes = typeof req.body?.notes === 'string' && req.body.notes.trim()
-    ? req.body.notes.trim()
-    : `Prazo criado a partir da publicação ${publication.tribunal} em ${formatDateLabel(publication.publishedAt)}. ${publication.summary}`;
+  const deadlineAutomationService = new CreateDeadlineFromPublicationService({
+    store: {
+      createDeadline: async (input) => {
+        const created = await prisma.prazo.create({
+          data: {
+            processId: input.processId,
+            title: input.title,
+            dueDate: new Date(`${input.dueDate}T12:00:00.000Z`),
+            status: input.status,
+            priority: input.priority,
+            origin: input.origin,
+            responsible: input.responsible,
+            legalArea: input.processPhase,
+            notes: input.description,
+            publicationId: input.publicationId,
+            agendaSyncStatus: input.agendaSyncStatus,
+            createdBy: input.createdBy,
+          },
+          include: {
+            process: {
+              include: {
+                owner: { select: { id: true, email: true, role: true } },
+                clientRecord: true,
+              },
+            },
+          },
+        });
 
-  const createdDeadline = await prisma.prazo.create({
-    data: {
-      processId: publication.processId,
-      title,
-      dueDate,
-      priority,
-      status,
-      origin: 'publicacao',
-      responsible,
-      legalArea: publication.process.phase,
-      notes,
-      createdBy: getResponsibleLabel(decoded.email) || decoded.email,
+        return {
+          id: created.id,
+          processId: created.processId,
+          processTitle: created.process?.title ?? null,
+          processPhase: created.legalArea ?? created.process?.phase ?? null,
+          clientId: created.process?.clientRecord?.id ?? null,
+          clientName: created.process?.clientRecord?.name ?? created.process?.client ?? null,
+          title: created.title,
+          description: created.notes ?? null,
+          dueDate: created.dueDate.toISOString().slice(0, 10),
+          status: created.status,
+          priority: created.priority,
+          origin: created.origin ?? 'publicacao',
+          responsible: created.responsible ?? null,
+          createdBy: created.createdBy ?? null,
+          completedAt: created.completedAt ? created.completedAt.toISOString() : null,
+          publicationId: created.publicationId ?? null,
+          agendaEventId: null,
+          agendaSyncStatus: (created.agendaSyncStatus as any) ?? 'missing',
+        };
+      },
+      getIdempotency: async (key) => {
+        const record = await prisma.crmIdempotencyRequest.findUnique({
+          where: { scope_key: { scope: 'deadlines.createFromPublication', key } },
+        });
+        return record ? { key, status: 'completed', result: record.responseBody as any } : null;
+      },
+      saveIdempotency: async (record) => {
+        await prisma.crmIdempotencyRequest.create({
+          data: {
+            key: record.key,
+            scope: 'deadlines.createFromPublication',
+            entityType: 'deadline',
+            entityId: (record.result as any).deadline?.id ?? null,
+            action: 'create_from_publication',
+            payloadHash: record.key,
+            responseCode: 201,
+            responseBody: record.result,
+          },
+        });
+      },
     },
-    include: {
-      process: {
-        include: {
-          owner: { select: { id: true, email: true, role: true } },
-          clientRecord: true,
-        },
+    agendaGateway: {
+      upsert: async (command) => {
+        if (!command.payload) {
+          throw new DeadlineDomainError('AGENDA_SYNC_FAILED', 'Payload de agenda ausente para sincronização.', 503, false);
+        }
+
+        if (command.agendaEventId) {
+          const updated = await prisma.agendaEvent.update({
+            where: { id: Number(command.agendaEventId) },
+            data: {
+              title: command.payload.title,
+              eventType: command.payload.eventType,
+              status: command.payload.status,
+              priority: command.payload.priority,
+              startAt: new Date(command.payload.startAt),
+              endAt: new Date(command.payload.endAt),
+              processId: command.payload.processId,
+              clientId: command.payload.clientId,
+              responsible: command.payload.responsible,
+              origin: command.payload.origin,
+              notes: command.payload.notes,
+            },
+          });
+
+          return { agendaEventId: String(updated.id) };
+        }
+
+        const created = await prisma.agendaEvent.create({
+          data: {
+            title: command.payload.title,
+            eventType: command.payload.eventType,
+            status: command.payload.status,
+            priority: command.payload.priority,
+            startAt: new Date(command.payload.startAt),
+            endAt: new Date(command.payload.endAt),
+            processId: command.payload.processId,
+            clientId: command.payload.clientId,
+            responsible: command.payload.responsible,
+            origin: command.payload.origin,
+            notes: command.payload.notes,
+            createdBy: getResponsibleLabel(decoded.email) || decoded.email,
+          },
+        });
+
+        return { agendaEventId: String(created.id) };
       },
     },
   });
 
-  const updatedPublication = await prisma.publication.update({
-    where: { id: publication.id },
-    data: {
-      status: publication.status === 'tratada' ? publication.status : 'em_analise',
-      requiresAction: true,
-      convertedToDeadline: true,
-      derivedDeadlineId: createdDeadline.id,
-      derivedDeadlineLabel: `Prazo: ${formatDateLabel(createdDeadline.dueDate)}`,
-      read: true,
-    },
-    include: {
-      process: {
-        include: {
-          owner: { select: { id: true, email: true, role: true } },
-          clientRecord: true,
+  try {
+    const automation = await deadlineAutomationService.execute({
+      idempotencyKey: typeof req.headers['idempotency-key'] === 'string' ? req.headers['idempotency-key'] : `publication:${publication.id}`,
+      actor: buildDeadlineActor(decoded),
+      publication: {
+        id: publication.id,
+        processId: publication.processId,
+        processTitle: publication.process.title,
+        processPhase: publication.process.phase,
+        clientId: publication.clientRecord?.id ?? publication.process.clientRecord?.id ?? null,
+        clientName: publication.clientRecord?.name ?? publication.process.clientRecord?.name ?? publication.process.client,
+        publishedAt: publication.publishedAt.toISOString(),
+        tribunal: publication.tribunal,
+        summary: publication.summary,
+        impact: publication.impact,
+      },
+      request: {
+        dueDate: req.body?.dueDate,
+        title: req.body?.title,
+        notes: req.body?.notes,
+        responsible: req.body?.responsible,
+        priority: req.body?.priority,
+        createAgendaEvent: req.body?.createAgendaEvent,
+      },
+    });
+
+    if (!automation.idempotency.replayed && automation.agendaEvent?.agendaEventId) {
+      await prisma.prazo.update({
+        where: { id: automation.deadline.id },
+        data: {
+          agendaEventId: Number(automation.agendaEvent.agendaEventId),
+          agendaSyncStatus: 'synced',
+        },
+      });
+
+      await persistDeadlineAuditEvent(automation.auditEvent);
+    }
+
+    const createdDeadline = await prisma.prazo.findUnique({
+      where: { id: automation.deadline.id },
+      include: {
+        process: {
+          include: {
+            owner: { select: { id: true, email: true, role: true } },
+            clientRecord: true,
+          },
         },
       },
-      clientRecord: true,
-    },
-  });
+    });
 
-  res.status(201).json({
-    publication: buildPublicationPayload(updatedPublication),
-    deadline: buildDeadlinePayload(createdDeadline),
-  });
+    if (!createdDeadline) {
+      return res.status(500).send({ message: 'Prazo criado, mas não pôde ser recarregado.' });
+    }
+
+    const updatedPublication = await prisma.publication.update({
+      where: { id: publication.id },
+      data: {
+        status: publication.status === 'tratada' ? publication.status : 'em_analise',
+        requiresAction: true,
+        convertedToDeadline: true,
+        derivedDeadlineId: createdDeadline.id,
+        derivedDeadlineLabel: `Prazo: ${formatDateLabel(createdDeadline.dueDate)}`,
+        read: true,
+      },
+      include: {
+        process: {
+          include: {
+            owner: { select: { id: true, email: true, role: true } },
+            clientRecord: true,
+          },
+        },
+        clientRecord: true,
+      },
+    });
+
+    res.status(automation.idempotency.replayed ? 200 : 201).json({
+      publication: buildPublicationPayload(updatedPublication),
+      deadline: {
+        ...buildDeadlinePayload(createdDeadline),
+        risk: buildDeadlineRisk(createdDeadline),
+      },
+      agendaEvent: automation.agendaEvent,
+      auditEvent: automation.auditEvent,
+      idempotency: automation.idempotency,
+      outcome: automation.outcome,
+    });
+  } catch (error) {
+    if (error instanceof DeadlineDomainError) {
+      return res.status(error.statusCode).json({ message: error.message, code: error.code, details: error.details ?? null });
+    }
+
+    return res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao criar prazo a partir da publicação' });
+  }
 });
 
 app.get('/templates', async (req, res) => {
@@ -4121,45 +4863,53 @@ app.get('/agenda', async (req, res) => {
   const decoded = getUserFromReq(req);
   if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
 
-  const ownerLabel = getResponsibleLabel(decoded.email);
-  const events = await prisma.agendaEvent.findMany({
-    where: decoded.role === 'ADM' || decoded.role === 'FIN'
-      ? undefined
-      : {
-          OR: [
-            { createdBy: ownerLabel ?? decoded.email },
-            { responsible: ownerLabel ?? decoded.email },
-            { process: { ownerId: decoded.sub } },
-            { attendance: { actorEmail: decoded.email } },
-            { task: { owner: ownerLabel ?? decoded.email } },
-          ],
+  try {
+    const ownerLabel = getResponsibleLabel(decoded.email);
+    const events = await prisma.agendaEvent.findMany({
+      where: decoded.role === 'ADM' || decoded.role === 'FIN'
+        ? undefined
+        : {
+            OR: [
+              { createdBy: ownerLabel ?? decoded.email },
+              { responsible: ownerLabel ?? decoded.email },
+              { process: { ownerId: decoded.sub } },
+              { attendance: { actorEmail: decoded.email } },
+              { task: { owner: ownerLabel ?? decoded.email } },
+            ],
+          },
+      include: {
+        process: {
+          include: {
+            owner: { select: { id: true, email: true, role: true } },
+            clientRecord: true,
+          },
         },
-    include: {
-      process: {
-        include: {
-          owner: { select: { id: true, email: true, role: true } },
-          clientRecord: true,
+        clientRecord: true,
+        attendance: {
+          include: {
+            process: { select: { ownerId: true } },
+          },
+        },
+        task: {
+          include: {
+            process: { select: { ownerId: true } },
+          },
         },
       },
-      clientRecord: true,
-      attendance: {
-        include: {
-          process: { select: { ownerId: true } },
-        },
-      },
-      task: {
-        include: {
-          process: { select: { ownerId: true } },
-        },
-      },
-    },
-    orderBy: [
-      { startAt: 'asc' },
-      { createdAt: 'desc' },
-    ],
-  });
+      orderBy: [
+        { startAt: 'asc' },
+        { createdAt: 'desc' },
+      ],
+    });
 
-  res.json(events.map((event) => buildAgendaPayload(event)));
+    return res.json(events.map((event) => buildAgendaPayload(event)));
+  } catch (error) {
+    if (!devMockEnabled || !isPrismaConnectionError(error)) {
+      return res.status(500).send({ message: error instanceof Error ? error.message : 'Erro ao carregar agenda' });
+    }
+
+    return res.json(getDevMockAgendaForRole(decoded));
+  }
 });
 
 app.get('/agenda/:id', async (req, res) => {
@@ -4406,13 +5156,21 @@ app.get('/processes', async (req, res) => {
   const decoded = getUserFromReq(req);
   if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
 
-  if (decoded.role === 'ADM' || decoded.role === 'FIN') {
-    const allProcesses = await prisma.process.findMany({ include: { owner: true } });
-    return res.json(allProcesses);
-  }
+  try {
+    if (decoded.role === 'ADM' || decoded.role === 'FIN') {
+      const allProcesses = await prisma.process.findMany({ include: { owner: true } });
+      return res.json(allProcesses);
+    }
 
-  const own = await prisma.process.findMany({ where: { ownerId: decoded.sub }, include: { owner: true } });
-  res.json(own);
+    const own = await prisma.process.findMany({ where: { ownerId: decoded.sub }, include: { owner: true } });
+    return res.json(own);
+  } catch (error) {
+    if (!devMockEnabled || !isPrismaConnectionError(error)) {
+      return res.status(500).send({ message: error instanceof Error ? error.message : 'Erro ao carregar processos' });
+    }
+
+    return res.json(getDevMockProcessesForRole(decoded));
+  }
 });
 
 app.get('/processes/lookup', async (req, res) => {
@@ -4471,11 +5229,23 @@ app.get('/processes/:id', async (req, res) => {
   const decoded = getUserFromReq(req);
   if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
 
-  const process = await prisma.process.findUnique({ where: { id: Number(req.params.id) }, include: { owner: true } });
-  if (!process) return res.status(404).send({ message: 'Processo não encontrado' });
-  if (decoded.role === 'ADM' || decoded.role === 'FIN' || process.ownerId === decoded.sub) return res.json(process);
+  try {
+    const process = await prisma.process.findUnique({ where: { id: Number(req.params.id) }, include: { owner: true } });
+    if (!process) return res.status(404).send({ message: 'Processo não encontrado' });
+    if (decoded.role === 'ADM' || decoded.role === 'FIN' || process.ownerId === decoded.sub) return res.json(process);
 
-  return res.status(403).send({ message: 'Acesso negado' });
+    return res.status(403).send({ message: 'Acesso negado' });
+  } catch (error) {
+    if (!devMockEnabled || !isPrismaConnectionError(error)) {
+      return res.status(500).send({ message: error instanceof Error ? error.message : 'Erro ao carregar processo' });
+    }
+
+    const mockProcess = getDevMockProcessById(Number(req.params.id));
+    if (!mockProcess) return res.status(404).send({ message: 'Processo não encontrado' });
+    if (decoded.role === 'ADM' || decoded.role === 'FIN' || mockProcess.ownerId === decoded.sub) return res.json(mockProcess);
+
+    return res.status(403).send({ message: 'Acesso negado' });
+  }
 });
 
 app.post('/processes', async (req, res) => {
@@ -4956,53 +5726,60 @@ app.post('/triage/:id/decision', async (req, res) => {
   let generatedDeadlineId: number | null = null;
   let generatedLeadId: number | null = null;
   let generatedOpportunityId: number | null = null;
+  const actor = getResponsibleLabel(decoded.email) || decoded.email;
+  const plannedDecision = planTriageDecision({
+    triageItem,
+    decision: {
+      decisionType,
+      decisionReason: typeof decisionReason === 'string' ? decisionReason.trim() : null,
+      decisionNote: typeof decisionNote === 'string' ? decisionNote.trim() : null,
+      postponeUntil: typeof postponeUntil === 'string' ? postponeUntil : null,
+      assignedQueue: typeof assignedQueue === 'string' ? assignedQueue.trim() : null,
+      deadlineTitle: typeof deadlineTitle === 'string' ? deadlineTitle.trim() : null,
+      dueDate: typeof dueDate === 'string' ? dueDate.trim() : null,
+      deadlinePriority: typeof deadlinePriority === 'string' ? deadlinePriority.trim() : null,
+      taskTitle: typeof taskTitle === 'string' ? taskTitle.trim() : null,
+      taskDueDate: typeof taskDueDate === 'string' ? taskDueDate.trim() : null,
+      taskPriority: typeof taskPriority === 'string' ? taskPriority.trim() : null,
+      taskOwner: typeof taskOwner === 'string' ? taskOwner.trim() : null,
+      taskDescription: typeof taskDescription === 'string' ? taskDescription.trim() : null,
+    },
+    actor,
+    now: new Date(),
+    existingDedupeKeys: await collectExistingAutomationDedupeKeys(triageItem),
+  });
 
   if (decisionType === 'confirmado') {
-    if (triageItem.suggestedAction === 'criar_prazo' && triageItem.processId) {
-      const resolvedDeadlineDueDate = typeof dueDate === 'string' && dueDate.trim()
-        ? new Date(`${dueDate.trim()}T12:00:00`)
-        : addDays(new Date(), 2);
-      const resolvedTaskDueDate = typeof taskDueDate === 'string' && taskDueDate.trim()
-        ? new Date(`${taskDueDate.trim()}T12:00:00`)
-        : addDays(new Date(), 1);
-      const resolvedTaskOwner = typeof taskOwner === 'string' && taskOwner.trim()
-        ? taskOwner.trim()
-        : getResponsibleLabel(decoded.email) || decoded.email;
+    if (plannedDecision.automation.commandType === 'create_deadline_and_task' && triageItem.processId) {
       const deadline = await prisma.prazo.create({
         data: {
           processId: triageItem.processId,
-          title: typeof deadlineTitle === 'string' && deadlineTitle.trim()
-            ? deadlineTitle.trim()
-            : triageItem.event?.title || `Prazo derivado da triagem #${triageItem.id}`,
-          dueDate: resolvedDeadlineDueDate,
+          title: plannedDecision.automation.deadline.title || triageItem.event?.title || `Prazo derivado da triagem #${triageItem.id}`,
+          dueDate: new Date(`${plannedDecision.automation.deadline.dueDate}T12:00:00`),
           status: 'critico',
-          priority: typeof deadlinePriority === 'string' && deadlinePriority.trim() ? deadlinePriority.trim() : 'alta',
+          priority: plannedDecision.automation.deadline.priority || 'alta',
           origin: 'publicacao',
-          responsible: getResponsibleLabel(decoded.email) || decoded.email,
+          responsible: actor,
           legalArea: triageItem.process?.phase || null,
-          notes: typeof taskDescription === 'string' && taskDescription.trim() ? taskDescription.trim() : triageItem.suggestedReason,
-          createdBy: getResponsibleLabel(decoded.email) || decoded.email,
+          notes: plannedDecision.automation.deadline.notes || triageItem.suggestedReason,
+          createdBy: actor,
         },
       });
       generatedDeadlineId = deadline.id;
 
       const task = await prisma.task.create({
         data: {
-          title: typeof taskTitle === 'string' && taskTitle.trim()
-            ? taskTitle.trim()
-            : `Tratar ${triageItem.event?.title?.toLowerCase() || 'publicação crítica'}`,
-          description: typeof taskDescription === 'string' && taskDescription.trim()
-            ? taskDescription.trim()
-            : triageItem.suggestedReason,
+          title: plannedDecision.automation.task.title || `Tratar ${triageItem.event?.title?.toLowerCase() || 'publicação crítica'}`,
+          description: plannedDecision.automation.task.description || triageItem.suggestedReason,
           processId: triageItem.processId,
           clientId: triageItem.clientId,
           clientName: triageItem.clientRecord?.name || triageItem.process?.client || null,
           origin: 'publicacao',
-          dueDate: resolvedTaskDueDate,
+          dueDate: new Date(`${plannedDecision.automation.task.dueDate}T12:00:00`),
           status: 'pendente',
-          priority: typeof taskPriority === 'string' && taskPriority.trim() ? taskPriority.trim() : 'alta',
-          owner: resolvedTaskOwner,
-          createdBy: getResponsibleLabel(decoded.email) || decoded.email,
+          priority: plannedDecision.automation.task.priority || 'alta',
+          owner: plannedDecision.automation.task.owner || actor,
+          createdBy: actor,
           notes: triageItem.capture.normalizedText,
           linkedToDeadline: true,
           linkedToPublication: true,
@@ -5010,30 +5787,20 @@ app.post('/triage/:id/decision', async (req, res) => {
         },
       });
       generatedTaskId = task.id;
-    } else if (triageItem.suggestedAction === 'criar_tarefa' && triageItem.processId) {
-      const resolvedTaskDueDate = typeof taskDueDate === 'string' && taskDueDate.trim()
-        ? new Date(`${taskDueDate.trim()}T12:00:00`)
-        : addDays(new Date(), 1);
-      const resolvedTaskOwner = typeof taskOwner === 'string' && taskOwner.trim()
-        ? taskOwner.trim()
-        : getResponsibleLabel(decoded.email) || decoded.email;
+    } else if (plannedDecision.automation.commandType === 'create_task' && triageItem.processId) {
       const task = await prisma.task.create({
         data: {
-          title: typeof taskTitle === 'string' && taskTitle.trim()
-            ? taskTitle.trim()
-            : triageItem.event?.title || `Ação derivada da triagem #${triageItem.id}`,
-          description: typeof taskDescription === 'string' && taskDescription.trim()
-            ? taskDescription.trim()
-            : triageItem.suggestedReason,
+          title: plannedDecision.automation.task.title || triageItem.event?.title || `Ação derivada da triagem #${triageItem.id}`,
+          description: plannedDecision.automation.task.description || triageItem.suggestedReason,
           processId: triageItem.processId,
           clientId: triageItem.clientId,
           clientName: triageItem.clientRecord?.name || triageItem.process?.client || null,
           origin: 'publicacao',
-          dueDate: resolvedTaskDueDate,
+          dueDate: new Date(`${plannedDecision.automation.task.dueDate}T12:00:00`),
           status: 'pendente',
-          priority: typeof taskPriority === 'string' && taskPriority.trim() ? taskPriority.trim() : (triageItem.queueType === 'critica' ? 'alta' : 'media'),
-          owner: resolvedTaskOwner,
-          createdBy: getResponsibleLabel(decoded.email) || decoded.email,
+          priority: plannedDecision.automation.task.priority || (triageItem.queueType === 'critica' ? 'alta' : 'media'),
+          owner: plannedDecision.automation.task.owner || actor,
+          createdBy: actor,
           notes: triageItem.capture.normalizedText,
           linkedToPublication: true,
           immediateAction: triageItem.queueType === 'critica',
@@ -5082,10 +5849,10 @@ app.post('/triage/:id/decision', async (req, res) => {
   const decision = await prisma.triageDecision.create({
     data: {
       triageItemId: triageItem.id,
-      decisionType,
-      decisionReason: typeof decisionReason === 'string' ? decisionReason.trim() : null,
-      decisionNote: typeof decisionNote === 'string' ? decisionNote.trim() : null,
-      decidedBy: getResponsibleLabel(decoded.email) || decoded.email,
+      decisionType: plannedDecision.decision.decisionType,
+      decisionReason: plannedDecision.decision.decisionReason,
+      decisionNote: plannedDecision.decision.decisionNote,
+      decidedBy: plannedDecision.decision.decidedBy,
       generatedTaskId,
       generatedDeadlineId,
       generatedLeadId,
@@ -5093,26 +5860,17 @@ app.post('/triage/:id/decision', async (req, res) => {
     },
   });
 
-  const nextStatus =
-    decisionType === 'confirmado' || decisionType === 'descartado'
-      ? decisionType
-      : decisionType === 'revisao_manual'
-        ? 'em_revisao_manual'
-        : decisionType === 'adiado'
-          ? 'adiado'
-          : 'pendente';
-
   const updated = await prisma.triageItem.update({
     where: { id: triageItem.id },
     data: {
-      status: nextStatus,
-      queueType: decisionType === 'confirmado' || decisionType === 'descartado' ? 'tratados' : triageItem.queueType,
-      handledBy: getResponsibleLabel(decoded.email) || decoded.email,
-      handledAt: new Date(),
-      discardReason: decisionType === 'descartado' && typeof decisionReason === 'string' ? decisionReason.trim() : triageItem.discardReason,
-      discardNote: decisionType === 'descartado' && typeof decisionNote === 'string' ? decisionNote.trim() : triageItem.discardNote,
-      postponeUntil: decisionType === 'adiado' && typeof postponeUntil === 'string' ? new Date(postponeUntil) : triageItem.postponeUntil,
-      assignedQueue: typeof assignedQueue === 'string' && assignedQueue.trim() ? assignedQueue.trim() : triageItem.assignedQueue,
+      status: plannedDecision.itemUpdate.status,
+      queueType: plannedDecision.itemUpdate.queueType,
+      handledBy: plannedDecision.itemUpdate.handledBy,
+      handledAt: plannedDecision.itemUpdate.handledAt,
+      discardReason: plannedDecision.itemUpdate.discardReason,
+      discardNote: plannedDecision.itemUpdate.discardNote,
+      postponeUntil: plannedDecision.itemUpdate.postponeUntil,
+      assignedQueue: plannedDecision.itemUpdate.assignedQueue,
       crmLeadId: generatedLeadId ?? triageItem.crmLeadId,
       crmOpportunityId: generatedOpportunityId ?? triageItem.crmOpportunityId,
     },
@@ -5207,6 +5965,48 @@ app.post('/triage/jobs/run-oab', async (req, res) => {
     res.status(201).json(result);
   } catch (error) {
     res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao executar coleta OAB' });
+  }
+});
+
+app.post('/triage/jobs/:id/reprocess', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token nao fornecido ou invalido' });
+  if (!canAccessTriage(decoded)) return res.status(403).send({ message: 'Acesso negado' });
+
+  const sourceJob = await prisma.publicationSourceJob.findUnique({
+    where: { id: Number(req.params.id) },
+  });
+
+  if (!sourceJob) return res.status(404).send({ message: 'Job não encontrado' });
+  if (sourceJob.status !== 'failed' && sourceJob.status !== 'partial_failure') {
+    return res.status(409).send({ message: 'Apenas jobs com falha podem ser reprocessados com segurança' });
+  }
+
+  const actor = getResponsibleLabel(decoded.email) || decoded.email;
+
+  try {
+    const result =
+      sourceJob.sourceType === 'cnj'
+        ? await ingestCnjPublications(actor)
+        : sourceJob.sourceType === 'cpf'
+          ? await ingestCpfPublications(actor)
+          : sourceJob.sourceType === 'diario_oficial'
+            ? await ingestDiarioPublications(actor)
+            : sourceJob.sourceType === 'oab'
+              ? await ingestOabPublications(actor)
+              : null;
+
+    if (!result) {
+      return res.status(400).send({ message: 'Tipo de job não suportado para reprocessamento' });
+    }
+
+    res.status(201).json({
+      previousJobId: sourceJob.id,
+      reprocessedAt: new Date().toISOString(),
+      result,
+    });
+  } catch (error) {
+    res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao reprocessar job' });
   }
 });
 

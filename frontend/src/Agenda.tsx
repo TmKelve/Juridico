@@ -609,6 +609,27 @@ export function Agenda({ user }: AgendaProps) {
       };
     });
   }, [selectedDate, sorted]);
+  const visibleTodayCount = sorted.filter((event) => dayDiffFromToday(event.date, new Date()) === 0).length;
+  const visibleAttentionCount = sorted.filter((event) => event.status === 'atencao' || event.requiresAttention).length;
+  const visibleDeadlineCount = sorted.filter((event) => event.isDeadline).length;
+  const focusEvent = sorted.find((event) => event.status === 'atencao' || event.requiresAttention)
+    ?? sorted.find((event) => event.priority === 'alta')
+    ?? sorted[0]
+    ?? null;
+  const focusTone = focusEvent?.status === 'atencao' || focusEvent?.requiresAttention
+    ? 'warning'
+    : focusEvent?.priority === 'alta'
+      ? 'critical'
+      : 'neutral';
+  const focusMeta = focusEvent
+    ? `${formatPtDate(focusEvent.date)} · ${focusEvent.startTime}–${focusEvent.endTime} · ${focusEvent.responsible}`
+    : 'Nenhum evento focal para este recorte.';
+  const headerSummaryItems = [
+    { label: 'Em exibição', value: sorted.length, tone: 'neutral' },
+    { label: 'Hoje', value: visibleTodayCount, tone: visibleTodayCount > 0 ? 'info' : 'neutral' },
+    { label: 'Atenção', value: visibleAttentionCount, tone: visibleAttentionCount > 0 ? 'warning' : 'neutral' },
+    { label: 'Prazos', value: visibleDeadlineCount, tone: visibleDeadlineCount > 0 ? 'critical' : 'neutral' },
+  ] as const;
 
   if (loading) {
     return (
@@ -624,7 +645,7 @@ export function Agenda({ user }: AgendaProps) {
   return (
     <section className="agenda-page" aria-label="Agenda">
       <header className="agenda-header-card">
-        <div>
+        <div className="agenda-header-main">
           <p className="agenda-eyebrow">Planejamento temporal</p>
           <p className="agenda-summary-head">
             <strong>{sorted.length}</strong> evento(s) na carteira atual • <strong>{kpis.pendingReturns}</strong> retorno(s) pendente(s) • <strong>{kpis.overlaps}</strong> conflito(s)
@@ -632,34 +653,50 @@ export function Agenda({ user }: AgendaProps) {
           <p className="agenda-subtitle">
             Consolide compromissos, audiências, prazos e retornos em uma leitura operacional única, com foco no que exige ação agora.
           </p>
+          <div className="agenda-header-summary" aria-label="Pulso da agenda">
+            {headerSummaryItems.map((item) => (
+              <div key={item.label} className="agenda-header-summary-card" data-tone={item.tone}>
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <div className="agenda-header-actions" role="toolbar" aria-label="Ações da agenda">
-          <button className="btn-primary" onClick={() => openCreateModal('compromisso_interno')} aria-label="Novo compromisso">
-            <Plus size={14} aria-hidden="true" />
-            Novo compromisso
-          </button>
-
-          <div className="agenda-create-menu">
-            <button className="btn-secondary" onClick={() => setCreateMenuOpen((prev) => !prev)} aria-label="Abrir menu de novos eventos" aria-expanded={createMenuOpen}>
-              <CalendarClock size={14} aria-hidden="true" />
-              Mais eventos
-              {createMenuOpen ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
+        <div className="agenda-header-side">
+          <div className="agenda-header-actions" role="toolbar" aria-label="Ações da agenda">
+            <button className="btn-primary" onClick={() => openCreateModal('compromisso_interno')} aria-label="Novo compromisso">
+              <Plus size={14} aria-hidden="true" />
+              Novo compromisso
             </button>
-            {createMenuOpen && (
-              <div className="agenda-create-menu-popover" role="menu" aria-label="Criar novo evento">
-                <button type="button" role="menuitem" onClick={() => openCreateModal('audiencia')}>Nova audiência</button>
-                <button type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); navigate('/atendimentos'); }}>Novo retorno</button>
-                <button type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); navigate('/prazos'); }}>Novo prazo</button>
-                <button type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); navigate('/tarefas'); }}>Nova tarefa</button>
-              </div>
-            )}
-          </div>
 
-          <button className="btn-ghost" onClick={() => exportCsv(sorted)} aria-label="Exportar agenda">
-            <Download size={14} aria-hidden="true" />
-            Exportar
-          </button>
+            <div className="agenda-create-menu">
+              <button className="btn-secondary" onClick={() => setCreateMenuOpen((prev) => !prev)} aria-label="Abrir menu de novos eventos" aria-expanded={createMenuOpen}>
+                <CalendarClock size={14} aria-hidden="true" />
+                Mais eventos
+                {createMenuOpen ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
+              </button>
+              {createMenuOpen && (
+                <div className="agenda-create-menu-popover" role="menu" aria-label="Criar novo evento">
+                  <button type="button" role="menuitem" onClick={() => openCreateModal('audiencia')}>Nova audiência</button>
+                  <button type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); navigate('/atendimentos'); }}>Novo retorno</button>
+                  <button type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); navigate('/prazos'); }}>Novo prazo</button>
+                  <button type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); navigate('/tarefas'); }}>Nova tarefa</button>
+                </div>
+              )}
+            </div>
+
+            <button className="btn-ghost" onClick={() => exportCsv(sorted)} aria-label="Exportar agenda">
+              <Download size={14} aria-hidden="true" />
+              Exportar
+            </button>
+          </div>
+          <aside className="agenda-focus-card" data-tone={focusTone} aria-label="Foco do período">
+            <span className="agenda-focus-card-eyebrow">Próxima melhor ação</span>
+            <strong>{focusEvent ? focusEvent.title : 'Nenhum foco aberto'}</strong>
+            <p>{focusEvent ? `${focusEvent.client} · ${EVENT_TYPE_LABEL[focusEvent.type]}` : 'Use filtros e trocas de visão para identificar o próximo evento prioritário.'}</p>
+            <small>{focusMeta}</small>
+          </aside>
         </div>
       </header>
 
@@ -710,6 +747,24 @@ export function Agenda({ user }: AgendaProps) {
       )}
 
       <section className="agenda-filters" aria-label="Busca e filtros da agenda">
+        <div className="agenda-priority-strip" aria-label="Leitura do recorte atual">
+          <div className="agenda-priority-card" data-tone={visibleAttentionCount > 0 ? 'warning' : 'neutral'}>
+            <span>Exigem atenção</span>
+            <strong>{visibleAttentionCount}</strong>
+            <small>{visibleAttentionCount > 0 ? 'eventos com risco temporal' : 'sem alerta imediato'}</small>
+          </div>
+          <div className="agenda-priority-card" data-tone={kpis.overlaps > 0 ? 'critical' : 'neutral'}>
+            <span>Conflitos</span>
+            <strong>{kpis.overlaps}</strong>
+            <small>{kpis.overlaps > 0 ? 'sobreposições detectadas' : 'agenda sem choque'}</small>
+          </div>
+          <div className="agenda-priority-card" data-tone="info">
+            <span>Modo atual</span>
+            <strong>{formatViewLabel(view)}</strong>
+            <small>{view === 'semana' ? `layout ${weekLayout}` : 'leitura ativa do período'}</small>
+          </div>
+        </div>
+
         <div className="agenda-filter-row agenda-filter-row--top">
           <label className="agenda-field agenda-field--search" htmlFor="agenda-search">
             <span>Buscar evento</span>
@@ -901,6 +956,24 @@ export function Agenda({ user }: AgendaProps) {
               </button>
             </div>
           </header>
+
+          <div className="agenda-main-summary" aria-label="Resumo da visão atual">
+            <div className="agenda-main-summary-card">
+              <span>Leitura ativa</span>
+              <strong>{formatViewLabel(view)}</strong>
+              <small>{sorted.length} evento(s) ordenados no período</small>
+            </div>
+            <div className="agenda-main-summary-card">
+              <span>Data de referência</span>
+              <strong>{selectedDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</strong>
+              <small>{selectedDate.toLocaleDateString('pt-BR', { weekday: 'long' })}</small>
+            </div>
+            <div className="agenda-main-summary-card">
+              <span>Risco visível</span>
+              <strong>{visibleAttentionCount}</strong>
+              <small>{kpis.overlaps > 0 ? `${kpis.overlaps} conflito(s) na agenda` : 'sem conflito de horário'}</small>
+            </div>
+          </div>
 
           {view === 'dia' && (
             <div className="agenda-day-grid" role="list">

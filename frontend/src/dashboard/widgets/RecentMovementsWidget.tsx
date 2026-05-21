@@ -10,7 +10,7 @@ interface RecentMovementsWidgetProps {
 
 export function RecentMovementsWidget({ items }: RecentMovementsWidgetProps) {
   return (
-    <SectionCard title="Movimentações Recentes">
+    <SectionCard title="Movimentações Recentes" meta={`${items.length} atualização(ões)`}>
       {items.length > 0 ? (
         <ul className="rail-widget-list">
           {items.map((item) => (

@@ -1,0 +1,54 @@
+{
+  "name": "epic-cde",
+  "version": 1,
+  "purpose": "Seed previsivel para QA do epic CDE.",
+  "users": [
+    {
+      "email": "admin@juridico.com",
+      "role": "ADM"
+    },
+    {
+      "email": "advogado@juridico.com",
+      "role": "ADV"
+    }
+  ],
+  "crm": {
+    "opportunities": [
+      {
+        "id": 17,
+        "personName": "Contato Atlas",
+        "source": "triagem",
+        "status": "negociacao",
+        "expectedAction": "conversao",
+        "processNumber": "10024567820265020001"
+      }
+    ]
+  },
+  "publications": {
+    "eligibleForDeadline": [
+      {
+        "id": 551,
+        "processId": 3,
+        "processLabel": "#3",
+        "client": "Cliente Nexo",
+        "expectedAction": "create-deadline",
+        "idempotencyKey": "pub:551|process:3|create-deadline"
+      }
+    ]
+  },
+  "deadlines": {
+    "focus": [
+      {
+        "id": 1,
+        "origin": "publicacao",
+        "status": "aberto",
+        "priority": "alta"
+      }
+    ]
+  },
+  "notes": [
+    "O manifest deve manter labels e ids estaveis para o smoke.",
+    "Alteracoes de contrato precisam atualizar docs, seed e smoke juntos."
+  ]
+}
+

@@ -16,7 +16,7 @@ interface ContextRailContainerProps {
 export function ContextRailContainer({ agenda, movements, alerts, onShortcutClick }: ContextRailContainerProps) {
   return (
     <aside className="context-column" aria-label="Coluna contextual">
-      <SectionCard title="Ações Rápidas">
+      <SectionCard title="Ações Rápidas" meta="Atalhos de operação">
         <div className="action-card-grid">
           <ActionCard
             icon={PlusCircle}

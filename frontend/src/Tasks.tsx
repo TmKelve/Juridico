@@ -219,6 +219,24 @@ function OriginChip({ origin }: { origin: TaskOrigin }) {
   return <span className="tsk-origin-chip">{ORIGIN_LABEL[origin]}</span>;
 }
 
+function AutomationContext({ task }: { task: TaskItem }) {
+  const tags: string[] = [];
+  if (task.linkedToPublication) tags.push('Publicação');
+  if (task.linkedToDeadline) tags.push('Prazo');
+  if (task.linkedToDocument) tags.push('Documento');
+  if (task.immediateAction) tags.push('Ação imediata');
+
+  if (!tags.length) return null;
+
+  return (
+    <div className="tsk-drawer-head-meta">
+      {tags.map((tag) => (
+        <span key={tag} className="tsk-origin-chip">{tag}</span>
+      ))}
+    </div>
+  );
+}
+
 export function Tasks({ user }: TasksProps) {
   const navigate = useNavigate();
 
@@ -751,6 +769,7 @@ export function Tasks({ user }: TasksProps) {
                 <div><span className="tsk-label">Criador</span><span className="tsk-value">{selected.createdBy}</span></div>
                 <div><span className="tsk-label">Ação imediata</span><span className={`tsk-value${selected.immediateAction ? ' tsk-value--alert' : ''}`}>{selected.immediateAction ? 'Sim' : 'Não'}</span></div>
               </div>
+              <AutomationContext task={selected} />
               <div><span className="tsk-label">Observações</span><p className="tsk-notes">{selected.notes}</p></div>
             </div>
 
@@ -768,6 +787,11 @@ export function Tasks({ user }: TasksProps) {
                 else if (selected.origin === 'atendimento') navigate('/atendimentos');
                 else navigate('/processos');
               }}><ExternalLink size={13} /> Abrir origem</button>
+              {selected.linkedToPublication && (
+                <button className="btn-ghost" onClick={() => navigate(`/triagem?processId=${selected.processId ?? ''}`)}>
+                  <ExternalLink size={13} /> Abrir triagem
+                </button>
+              )}
             </div>
           </aside>
         </>

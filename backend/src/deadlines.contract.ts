@@ -8,7 +8,12 @@ type RawDeadlineRecord = {
   responsible?: string | null;
   legalArea?: string | null;
   notes?: string | null;
+  publicationId?: number | null;
+  agendaEventId?: number | null;
+  agendaSyncStatus?: string | null;
   completedAt?: Date | null;
+  completedBy?: string | null;
+  completionJustification?: string | null;
   processId: number;
   process?: {
     id: number;
@@ -40,6 +45,11 @@ export function buildDeadlinePayload(deadline: RawDeadlineRecord) {
     owner: deadline.responsible ?? process?.owner?.email?.split('@')[0] ?? 'sem-responsavel',
     area: deadline.legalArea ?? process?.phase ?? client?.legalArea ?? 'Civel',
     notes: deadline.notes ?? '',
+    publicationId: deadline.publicationId ?? null,
+    agendaEventId: deadline.agendaEventId ?? null,
+    agendaSyncStatus: deadline.agendaSyncStatus ?? 'missing',
     completedAt: deadline.completedAt ? deadline.completedAt.toISOString() : null,
+    completedBy: deadline.completedBy ?? '',
+    completionJustification: deadline.completionJustification ?? '',
   };
 }

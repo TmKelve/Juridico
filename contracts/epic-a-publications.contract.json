@@ -1,0 +1,190 @@
+{
+  "epic": "Epic A — Publicacoes/Intimacoes Automaticas",
+  "version": "2026-05-20",
+  "entities": {
+    "normalizedPublication": {
+      "description": "Payload canonico produzido apos coleta e normalizacao.",
+      "idempotencyKey": "sourceType|sourceReference|occurredAt|normalizedHash",
+      "fields": {
+        "sourceType": "cnj|cpf|cnpj|oab|processo|diario",
+        "sourceReference": "string",
+        "occurredAt": "ISO-8601 datetime",
+        "capturedAt": "ISO-8601 datetime",
+        "publicationType": "intimacao|citacao|despacho|sentenca|acordao|edital|outros",
+        "tribunal": "string|null",
+        "processNumber": "string|null",
+        "cpfCnpj": "string|null",
+        "oabNumber": "string|null",
+        "lawyerName": "string|null",
+        "clientName": "string|null",
+        "summary": "string",
+        "normalizedText": "string",
+        "metadata": "object",
+        "status": "novo|processado|falha|reprocessado"
+      }
+    },
+    "matchingResult": {
+      "description": "Resultado deterministico de match contra processo/cliente.",
+      "fields": {
+        "matchStatus": "matched|partial|ambiguous|unmatched",
+        "matchedBy": "cpf_cnpj|oab|processNumber|clientName|manual_review",
+        "processId": "number|null",
+        "clientId": "number|null",
+        "confidence": "high|medium|low",
+        "reasons": "string[]",
+        "candidates": "Array<{ processId?: number, clientId?: number, score: number, reason: string }>"
+      }
+    },
+    "classificationResult": {
+      "description": "Classificacao operacional do impacto da publicacao.",
+      "fields": {
+        "impactLevel": "critico|alto|medio|baixo",
+        "requiresTriage": "boolean",
+        "requiresDeadline": "boolean",
+        "requiresTask": "boolean",
+        "queueType": "critica|normal|tratados",
+        "reason": "string",
+        "signals": "string[]"
+      }
+    },
+    "automationCommand": {
+      "description": "Comando materializado para gerar prazo/tarefa sem duplicidade.",
+      "fields": {
+        "commandType": "create_deadline|create_task|create_deadline_and_task|none",
+        "dedupeKey": "string",
+        "publicationId": "number|null",
+        "triageItemId": "number|null",
+        "processId": "number|null",
+        "clientId": "number|null",
+        "deadline": {
+          "title": "string|null",
+          "dueDate": "ISO-8601 date|null",
+          "priority": "baixa|media|alta|null",
+          "notes": "string|null"
+        },
+        "task": {
+          "title": "string|null",
+          "dueDate": "ISO-8601 date|null",
+          "priority": "baixa|media|alta|critica|null",
+          "owner": "string|null",
+          "description": "string|null"
+        }
+      }
+    },
+    "auditEvent": {
+      "description": "Evento consultavel de trilha operacional e falhas.",
+      "fields": {
+        "eventType": "ingestion_started|publication_normalized|matching_completed|classification_completed|triage_decision_recorded|automation_executed|automation_skipped_duplicate|reprocess_requested|reprocess_completed|pipeline_failed",
+        "status": "success|warning|error",
+        "publicationId": "number|null",
+        "captureId": "number|null",
+        "triageItemId": "number|null",
+        "jobId": "number|null",
+        "processId": "number|null",
+        "details": "object",
+        "occurredAt": "ISO-8601 datetime",
+        "actor": "scheduler|system|user:<id>"
+      }
+    }
+  },
+  "examples": {
+    "normalizedPublication": {
+      "sourceType": "diario",
+      "sourceReference": "DJSP-2026-05-20-00019",
+      "occurredAt": "2026-05-20T09:00:00.000Z",
+      "capturedAt": "2026-05-20T09:01:13.000Z",
+      "publicationType": "intimacao",
+      "tribunal": "TJSP",
+      "processNumber": "10024567820265020001",
+      "cpfCnpj": "12345678900",
+      "oabNumber": "SP123456",
+      "lawyerName": "Maria Andrade",
+      "clientName": "Cliente Nexo",
+      "summary": "Intimacao para manifestacao em 15 dias.",
+      "normalizedText": "Intimem-se as partes para manifestacao em 15 dias.",
+      "metadata": {
+        "page": 12,
+        "edition": "2026-05-20"
+      },
+      "status": "novo"
+    },
+    "matchingResult": {
+      "matchStatus": "matched",
+      "matchedBy": "processNumber",
+      "processId": 3,
+      "clientId": 8,
+      "confidence": "high",
+      "reasons": [
+        "Numero de processo encontrado em cadastro ativo."
+      ],
+      "candidates": []
+    },
+    "classificationResult": {
+      "impactLevel": "critico",
+      "requiresTriage": true,
+      "requiresDeadline": true,
+      "requiresTask": true,
+      "queueType": "critica",
+      "reason": "Prazo recursal identificado no texto normalizado.",
+      "signals": [
+        "prazo",
+        "sentenca",
+        "manifestacao obrigatoria"
+      ]
+    },
+    "automationCommand": {
+      "commandType": "create_deadline_and_task",
+      "dedupeKey": "pub:551|process:3|deadline-and-task",
+      "publicationId": 551,
+      "triageItemId": 778,
+      "processId": 3,
+      "clientId": 8,
+      "deadline": {
+        "title": "Manifestacao sobre publicacao DJSP-2026-05-20-00019",
+        "dueDate": "2026-06-04",
+        "priority": "alta",
+        "notes": "Gerado automaticamente pela triagem."
+      },
+      "task": {
+        "title": "Preparar manifestacao da intimacao",
+        "dueDate": "2026-06-03",
+        "priority": "alta",
+        "owner": "advogado",
+        "description": "Revisar documentos e protocolar dentro do prazo."
+      }
+    },
+    "auditEvent": {
+      "eventType": "automation_executed",
+      "status": "success",
+      "publicationId": 551,
+      "captureId": 902,
+      "triageItemId": 778,
+      "jobId": 44,
+      "processId": 3,
+      "details": {
+        "generatedDeadlineId": 109,
+        "generatedTaskId": 301
+      },
+      "occurredAt": "2026-05-20T09:05:18.000Z",
+      "actor": "system"
+    }
+  },
+  "errors": {
+    "PUB_DUPLICATE": "Publicacao ignorada por idempotencia.",
+    "PUB_MATCH_AMBIGUOUS": "Mais de um candidato valido encontrado.",
+    "PUB_MATCH_NOT_FOUND": "Nenhum processo ou cliente elegivel encontrado.",
+    "PUB_AUTOMATION_DUPLICATE": "Prazo ou tarefa ja existente para a chave de deduplicacao.",
+    "PUB_REPROCESS_NOT_ALLOWED": "Evento nao elegivel para reprocessamento seguro.",
+    "PUB_PIPELINE_FAILURE": "Falha inesperada em uma etapa do pipeline."
+  },
+  "pipelineOrder": [
+    "collect",
+    "normalize",
+    "match",
+    "classify",
+    "triage",
+    "automate",
+    "audit",
+    "reprocess"
+  ]
+}

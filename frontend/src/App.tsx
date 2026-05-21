@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useEffectEvent, useState } from 'react'
+import { Suspense, lazy, useEffect, useEffectEvent, useRef, useState } from 'react'
 import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AlertTriangle } from 'lucide-react'
 import { api } from './api'
@@ -343,8 +343,11 @@ function App() {
   const [users, setUsers] = useState<User[]>([])
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const hasRestoredSessionRef = useRef(false)
 
   useEffect(() => {
+    if (hasRestoredSessionRef.current) return
+    hasRestoredSessionRef.current = true
     trackPageView('app')
     restoreSession(true)
   }, [])
@@ -386,9 +389,15 @@ function App() {
 
   const restoreSession = async (silent = false) => {
     try {
-      const [meRes, homeRes] = await Promise.all([api.getMe(), api.getHome()])
+      const meRes = await api.getMe()
 
-      if (meRes.status === 200 && homeRes.status === 200) {
+      if (meRes.status !== 200) {
+        throw new Error(meRes.error || 'Sessão não encontrada')
+      }
+
+      const homeRes = await api.getHome()
+
+      if (homeRes.status === 200) {
         const meUser = meRes.data.user || {}
         const restoredUser: User = {
           id: Number(meUser.id ?? meUser.sub ?? 0),
@@ -402,7 +411,7 @@ function App() {
         return
       }
 
-      throw new Error(meRes.error || homeRes.error || 'Erro ao restaurar sessão')
+      throw new Error(homeRes.error || 'Erro ao restaurar sessão')
     } catch (err) {
       if (silent) {
         setHome(null)
