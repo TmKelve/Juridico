@@ -345,7 +345,7 @@
 
 .crm-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(420px, 480px);
+  grid-template-columns: minmax(0, 1fr) minmax(520px, 580px);
   overflow: visible;
   align-items: start;
   gap: 12px;
@@ -608,7 +608,7 @@
   display: flex;
   align-items: stretch;
   gap: 10px;
-  min-width: max-content;
+  min-width: 100%;
   padding: 2px 2px 4px;
 }
 
@@ -616,16 +616,14 @@
   display: grid;
   grid-template-rows: auto 1fr auto;
   gap: 10px;
-  width: 280px;
-  min-width: 280px;
-  max-width: 300px;
-  flex: 0 0 280px;
+  flex: 1 1 260px;
+  min-width: 240px;
+  max-width: none;
   padding: 10px;
   border: 1px solid var(--neutral-200, #dbe2ea);
   border-top-width: 3px;
   border-radius: 12px;
   background: #f8fafc;
-  flex-shrink: 0;
 }
 
 /* Stage-based top border colors */
@@ -1093,7 +1091,7 @@
   overflow-x: hidden;
   width: 100%;
   min-width: 0;
-  max-width: 480px;
+  max-width: 580px;
   padding: 14px;
   border: 1px solid var(--neutral-200, #dbe2ea);
   box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
