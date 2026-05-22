@@ -1267,19 +1267,32 @@
 
 .crm-inline-field input,
 .crm-panel textarea,
-.crm-inline-field select {
+.crm-inline-field select,
+.crm-dialog__body textarea {
   min-height: 44px;
   padding: 10px 12px;
   border: 1px solid var(--neutral-200, #dbe2ea);
   border-radius: 12px;
   background: #fff;
+  font: inherit;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.crm-inline-field input:focus,
+.crm-panel textarea:focus,
+.crm-inline-field select:focus,
+.crm-dialog__body textarea:focus {
+  outline: none;
+  border-color: var(--brand-500, #3f88c5);
+  box-shadow: 0 0 0 3px rgba(63, 136, 197, 0.14);
 }
 
 .crm-value--warning {
   color: #b45309;
 }
 
-.crm-panel textarea {
+.crm-panel textarea,
+.crm-dialog__body textarea {
   min-height: 96px;
   resize: vertical;
 }
@@ -1583,12 +1596,18 @@
 .crm-dialog__panel {
   position: relative;
   z-index: 1;
-  width: min(760px, calc(100vw - 48px));
+  width: min(680px, calc(100vw - 48px));
   max-height: calc(100vh - 48px);
   overflow: auto;
-  padding: 20px;
+  padding: 24px;
   display: grid;
-  gap: 16px;
+  gap: 20px;
+  background: var(--surface-raised, #fff);
+  border-radius: 18px;
+  border: 1px solid var(--neutral-200, #dbe2ea);
+  box-shadow:
+    0 32px 64px rgba(15, 23, 42, 0.14),
+    0 0 0 1px rgba(15, 23, 42, 0.04);
 }
 
 .crm-dialog__header {
@@ -1596,25 +1615,30 @@
   justify-content: space-between;
   gap: 16px;
   align-items: start;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--neutral-100, #f1f5f9);
 }
 
 .crm-dialog__header h3 {
   margin: 4px 0 6px;
-  font-size: 22px;
+  font-size: 20px;
 }
 
 .crm-dialog__header p {
   margin: 0;
+  font-size: 13px;
   color: var(--neutral-600, #5f6f82);
 }
 
 .crm-dialog__body {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 14px;
 }
 
-.crm-dialog__body .crm-inline-field:nth-child(6) {
+/* CPF | Responsável — linha 2 */
+/* Próximo contato e Resumo — largura total */
+.crm-dialog__body .crm-inline-field:nth-child(n+5) {
   grid-column: 1 / -1;
 }
 
@@ -1624,6 +1648,8 @@
   gap: 16px;
   align-items: center;
   flex-wrap: wrap;
+  padding-top: 16px;
+  border-top: 1px solid var(--neutral-100, #f1f5f9);
 }
 
 @media (max-width: 1536px) {
