@@ -29,7 +29,7 @@ export class FinanceCollectionDispatchJob {
 
     for (const schedule of schedules) {
       const attempts = await this.dependencies.repository.listAttemptsByScheduleId(schedule.id);
-      const existingSameSlot = attempts.find((attempt) => attempt.scheduledFor === schedule.nextRunAt);
+      const existingSameSlot = attempts.find((attempt) => readScheduledFor(attempt) === schedule.nextRunAt);
       if (existingSameSlot) continue;
 
       const attemptNumber = attempts.length + 1;
@@ -49,9 +49,11 @@ export class FinanceCollectionDispatchJob {
           channel: schedule.channel,
           destination,
           message: `Lembrete de cobrança do lançamento #${schedule.entryId}`,
-          providerPayload: delivery.providerPayload ?? {},
+          providerPayload: {
+            ...(delivery.providerPayload ?? {}),
+            scheduledFor: schedule.nextRunAt,
+          },
           sentAt: delivery.acceptedAt,
-          scheduledFor: schedule.nextRunAt,
         });
         const nextRun = new Date(new Date(schedule.nextRunAt).getTime() + schedule.cadenceDays * 86400000).toISOString();
         await this.dependencies.repository.updateSchedule(schedule.id, {
@@ -67,9 +69,10 @@ export class FinanceCollectionDispatchJob {
           channel: schedule.channel,
           destination,
           message: `Lembrete de cobrança do lançamento #${schedule.entryId}`,
-          providerPayload: {},
+          providerPayload: {
+            scheduledFor: schedule.nextRunAt,
+          },
           errorMessage: error?.message ?? 'unknown error',
-          scheduledFor: schedule.nextRunAt,
         });
         const retryDelayMs = this.dependencies.retryDelayMs ?? 5 * 60 * 1000;
         await this.dependencies.repository.updateSchedule(schedule.id, {
@@ -97,4 +100,10 @@ export class FinanceCollectionDispatchJob {
       failed,
     };
   }
+}
+
+function readScheduledFor(attempt: any) {
+  if (!attempt?.providerPayload || typeof attempt.providerPayload !== 'object') return null;
+  const payload = attempt.providerPayload as Record<string, unknown>;
+  return typeof payload.scheduledFor === 'string' ? payload.scheduledFor : null;
 }

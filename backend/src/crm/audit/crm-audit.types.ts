@@ -4,6 +4,7 @@ export const crmAuditEntityTypes = [
   'crm_opportunity',
   'crm_contact_event',
   'crm_opportunity_document',
+  'document',
   'crm_idempotency',
 ] as const;
 

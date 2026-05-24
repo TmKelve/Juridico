@@ -9,6 +9,8 @@
 - Cobrança mock para Pix/boleto/link.
 - Webhook financeiro com baixa automática.
 - Conciliação bancária, aging, inadimplência e relatórios.
+- Parcelamento financeiro com geração automática de parcelas.
+- Visão operacional de inadimplência por cliente/processo/contato.
 - Régua de cobrança, job de dispatch e scheduler isolado.
 - Adapter HTTP em `backend/src/finance/http/register-finance-routes.ts`.
 - Tela operacional `frontend/src/Financeiro.tsx`.
@@ -24,3 +26,4 @@
 - Novo módulo transversal com persistência, auditoria e UI.
 - Nenhuma rota antiga foi removida.
 - O scheduler financeiro ainda precisa de bootstrap explícito para operação automática contínua.
+- O financeiro agora suporta vínculo operacional entre lançamento, cliente e processo, além de planos parcelados acompanháveis por status de parcela.

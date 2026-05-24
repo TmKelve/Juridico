@@ -245,6 +245,52 @@
   font-size: 30px;
 }
 
+.triage-card__ops,
+.triage-panel__list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.triage-metric-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.triage-metric-pill--critica,
+.triage-metric-pill.is-breached {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.triage-metric-pill--alta {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.triage-metric-pill--media {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.triage-metric-pill--baixa {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.triage-panel__stack {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
 .triage-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(340px, 420px);

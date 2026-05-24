@@ -72,6 +72,11 @@ function formatRelative(iso: string) {
   return `há ${diffDays}d`;
 }
 
+function formatSlaDate(iso: string | null) {
+  if (!iso) return 'SLA não calculado';
+  return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+}
+
 function kpiTone(value: number, danger = false) {
   if (danger && value > 0) return 'critical';
   if (value > 0) return 'info';
@@ -745,6 +750,14 @@ export function Triagem({ user }: TriagemProps) {
                     <span>{item.status.replaceAll('_', ' ')}</span>
                   </div>
 
+                  <div className="triage-card__ops">
+                    <span className={`triage-metric-pill triage-metric-pill--${item.priorityLabel || 'media'}`}>
+                      Prioridade {item.priorityLabel || 'media'}
+                    </span>
+                    {item.queueRank ? <span className="triage-metric-pill">Rank #{item.queueRank}</span> : null}
+                    {item.agingHours !== null ? <span className={`triage-metric-pill${item.breached ? ' is-breached' : ''}`}>{item.agingHours}h aging</span> : null}
+                  </div>
+
                   <div className="triage-card__reason">{item.suggestedReason}</div>
 
                   <div className="triage-card__actions">
@@ -820,6 +833,10 @@ export function Triagem({ user }: TriagemProps) {
                   <div><span>Ocorrência</span><strong>{formatDateTime(selected.capture.occurredAt)}</strong></div>
                   <div><span>CPF</span><strong>{selected.capture.cpf || '—'}</strong></div>
                   <div><span>Fila</span><strong>{selected.queueType === 'critica' ? 'Crítica' : selected.queueType === 'normal' ? 'Normal' : 'Tratados'}</strong></div>
+                  <div><span>Prioridade</span><strong>{selected.priorityLabel || '—'}</strong></div>
+                  <div><span>Rank</span><strong>{selected.queueRank ? `#${selected.queueRank}` : '—'}</strong></div>
+                  <div><span>Aging</span><strong>{selected.agingHours !== null ? `${selected.agingHours}h` : '—'}</strong></div>
+                  <div><span>SLA alvo</span><strong>{formatSlaDate(selected.slaTargetAt)}</strong></div>
                 </div>
               </section>
 
@@ -830,6 +847,16 @@ export function Triagem({ user }: TriagemProps) {
                   <AlertTriangle size={16} />
                   <span>Confiança {CONFIDENCE_LABEL[selected.aiConfidenceBand].toLowerCase()} com ação sugerida: {ACTION_LABEL[selected.suggestedAction].toLowerCase()}.</span>
                 </div>
+                {selected.explanation ? (
+                  <div className="triage-panel__stack">
+                    <strong>{selected.explanation.summary}</strong>
+                    <div className="triage-panel__list">
+                      {selected.explanation.priorityReasons.slice(0, 4).map((reason) => (
+                        <span key={reason} className="triage-metric-pill">{reason}</span>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </section>
 
               <section className="triage-panel">

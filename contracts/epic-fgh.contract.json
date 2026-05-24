@@ -1,0 +1,406 @@
+{
+  "epic": "Epic F/G/H — Triagem Inteligente, Documentos End-to-End e Clientes + Comunicação",
+  "version": "2026-05-22",
+  "compatibility": {
+    "rules": [
+      "Nao remover campos existentes dos payloads atuais de triage, documents, clients, crm, attendances, deadlines e tasks.",
+      "Preservar as rotas ja consumidas pelo frontend atual; novos campos devem ser aditivos e opcionais quando aplicavel.",
+      "Toda automacao materializada deve carregar idempotencyKey ou dedupeKey auditavel.",
+      "Toda acao critica deve emitir audit.event com correlationId e actor."
+    ]
+  },
+  "commands": {
+    "triage.item.create": {
+      "input": {
+        "sourceType": "cnj|cpf|diario_oficial|oab|manual|portal",
+        "sourceReference": "string",
+        "occurredAt": "ISO-8601 datetime",
+        "processId": "number|null",
+        "clientId": "number|null",
+        "captureId": "number|null",
+        "eventId": "number|null",
+        "queueType": "critica|normal|tratados",
+        "suggestedAction": "criar_prazo|criar_tarefa|criar_oportunidade|criar_lead|registrar_publicacao|sem_acao",
+        "suggestedReason": "string",
+        "priorityScore": "number",
+        "priorityReasons": "string[]",
+        "idempotencyKey": "string"
+      },
+      "output": {
+        "id": "number",
+        "status": "pendente|em_revisao_manual|confirmado|descartado|adiado",
+        "queueType": "critica|normal|tratados",
+        "slaTargetAt": "ISO-8601 datetime",
+        "agingHours": "number",
+        "idempotent": "boolean"
+      },
+      "errors": {
+        "TRIAGE_DUPLICATE": "Item ja existente para a mesma chave de idempotencia.",
+        "TRIAGE_INVALID_TARGET": "Nenhum alvo elegivel para criar triagem.",
+        "TRIAGE_INVALID_QUEUE": "Fila informada nao e suportada."
+      },
+      "idempotency": "sourceType|sourceReference|occurredAt|processId|clientId|suggestedAction"
+    },
+    "triage.item.prioritize": {
+      "input": {
+        "triageItemId": "number",
+        "priorityScore": "number",
+        "priorityReasons": "string[]",
+        "agingHours": "number",
+        "slaTargetAt": "ISO-8601 datetime|null"
+      },
+      "output": {
+        "triageItemId": "number",
+        "queueRank": "number",
+        "priorityLabel": "critica|alta|media|baixa",
+        "agingHours": "number",
+        "breached": "boolean"
+      },
+      "errors": {
+        "TRIAGE_NOT_FOUND": "Item de triagem nao encontrado.",
+        "TRIAGE_PRIORITY_INVALID": "Priority score invalido."
+      },
+      "idempotency": "triageItemId|priorityScore|slaTargetAt"
+    },
+    "triage.item.decide": {
+      "input": {
+        "triageItemId": "number",
+        "decisionType": "confirmado|descartado|adiado|revisao_manual|escalado",
+        "decisionReason": "string|null",
+        "decisionNote": "string|null",
+        "postponeUntil": "ISO-8601 datetime|null",
+        "escalationQueue": "string|null",
+        "actor": "user:<id>|system",
+        "idempotencyKey": "string"
+      },
+      "output": {
+        "triageItemId": "number",
+        "decisionId": "number",
+        "status": "confirmado|descartado|adiado|em_revisao_manual|escalado",
+        "automationPlanned": "boolean",
+        "automationCommandIds": "string[]"
+      },
+      "errors": {
+        "TRIAGE_DECISION_CONFLICT": "Decisao ja registrada com outra chave/payload.",
+        "TRIAGE_DECISION_INVALID": "Payload de decisao invalido."
+      },
+      "idempotency": "triageItemId|decisionType|decisionReason|postponeUntil"
+    },
+    "triage.item.explain": {
+      "input": {
+        "triageItemId": "number"
+      },
+      "output": {
+        "triageItemId": "number",
+        "explanation": {
+          "summary": "string",
+          "appliedRules": "string[]",
+          "matchedSignals": "string[]",
+          "confidenceBand": "alta|media|baixa",
+          "priorityReasons": "string[]"
+        }
+      },
+      "errors": {
+        "TRIAGE_NOT_FOUND": "Item de triagem nao encontrado.",
+        "TRIAGE_EXPLANATION_UNAVAILABLE": "Explicacao ainda nao materializada."
+      },
+      "idempotency": "triageItemId"
+    },
+    "triage.item.triggerAutomation": {
+      "input": {
+        "triageItemId": "number",
+        "decisionId": "number",
+        "commands": "Array<{ type: string, dedupeKey: string }>",
+        "actor": "user:<id>|system"
+      },
+      "output": {
+        "triageItemId": "number",
+        "executed": "Array<{ commandType: string, entityId: number|string|null }>",
+        "skippedDuplicates": "string[]",
+        "failed": "Array<{ commandType: string, code: string, message: string }>"
+      },
+      "errors": {
+        "TRIAGE_AUTOMATION_DUPLICATE": "Comando ja aplicado.",
+        "TRIAGE_AUTOMATION_FAILED": "Falha inesperada na automacao."
+      },
+      "idempotency": "decisionId|commands[].dedupeKey"
+    },
+    "document.upload": {
+      "input": {
+        "processId": "number",
+        "clientId": "number|null",
+        "title": "string",
+        "category": "Checklist|Peticao|Contrato|Prova|Financeiro|Cliente",
+        "mimeType": "string",
+        "storageKey": "string",
+        "checksum": "string",
+        "origin": "upload|cliente|publicacao|interno|portal",
+        "idempotencyKey": "string"
+      },
+      "output": {
+        "documentId": "number",
+        "version": "number",
+        "isLatestVersion": "boolean",
+        "uploadedAt": "ISO-8601 datetime",
+        "idempotent": "boolean"
+      },
+      "errors": {
+        "DOCUMENT_DUPLICATE_UPLOAD": "Arquivo ja recebido para a mesma chave de upload.",
+        "DOCUMENT_PROCESS_REQUIRED": "Processo vinculado e obrigatorio.",
+        "DOCUMENT_STORAGE_INVALID": "StorageKey ou checksum invalido."
+      },
+      "idempotency": "processId|storageKey|checksum"
+    },
+    "document.version.create": {
+      "input": {
+        "documentId": "number",
+        "storageKey": "string",
+        "checksum": "string",
+        "notes": "string|null",
+        "actor": "user:<id>|system",
+        "idempotencyKey": "string"
+      },
+      "output": {
+        "documentId": "number",
+        "newVersionId": "number",
+        "version": "number",
+        "previousVersionId": "number",
+        "idempotent": "boolean"
+      },
+      "errors": {
+        "DOCUMENT_NOT_FOUND": "Documento nao encontrado.",
+        "DOCUMENT_VERSION_CONFLICT": "Versao duplicada ou payload divergente."
+      },
+      "idempotency": "documentId|checksum"
+    },
+    "document.checklist.bind": {
+      "input": {
+        "processId": "number",
+        "checklistCode": "string",
+        "documentType": "string",
+        "required": "boolean",
+        "linkedDocumentId": "number|null",
+        "actor": "user:<id>|system"
+      },
+      "output": {
+        "bindingId": "string",
+        "processId": "number",
+        "linkedDocumentId": "number|null",
+        "status": "pendente|recebido|validado|rejeitado"
+      },
+      "errors": {
+        "DOCUMENT_CHECKLIST_CONFLICT": "Checklist ja vinculado de forma incompativel.",
+        "DOCUMENT_CHECKLIST_INVALID": "Tipo processual ou item de checklist invalido."
+      },
+      "idempotency": "processId|checklistCode|documentType"
+    },
+    "document.approval.update": {
+      "input": {
+        "documentId": "number",
+        "decision": "aprovado|rejeitado",
+        "reason": "string",
+        "note": "string|null",
+        "actor": "user:<id>|system",
+        "idempotencyKey": "string"
+      },
+      "output": {
+        "documentId": "number",
+        "status": "validado|rejeitado",
+        "approvedAt": "ISO-8601 datetime|null",
+        "rejectedAt": "ISO-8601 datetime|null",
+        "idempotent": "boolean"
+      },
+      "errors": {
+        "DOCUMENT_APPROVAL_INVALID": "Motivo e obrigatorio para aprovar/rejeitar.",
+        "DOCUMENT_APPROVAL_CONFLICT": "Decisao duplicada ou conflitante."
+      },
+      "idempotency": "documentId|decision|reason"
+    },
+    "document.link.bindEntities": {
+      "input": {
+        "documentId": "number",
+        "processId": "number|null",
+        "deadlineId": "number|null",
+        "attendanceId": "number|null",
+        "triageItemId": "number|null",
+        "crmOpportunityId": "number|null",
+        "actor": "user:<id>|system"
+      },
+      "output": {
+        "documentId": "number",
+        "links": "Array<{ entityType: string, entityId: number }>"
+      },
+      "errors": {
+        "DOCUMENT_LINK_NOT_FOUND": "Entidade alvo nao encontrada.",
+        "DOCUMENT_LINK_CONFLICT": "Vinculo duplicado ou proibido."
+      },
+      "idempotency": "documentId|processId|deadlineId|attendanceId|triageItemId|crmOpportunityId"
+    },
+    "document.artifact.generate": {
+      "input": {
+        "templateId": "number|string",
+        "processId": "number",
+        "documentTitle": "string",
+        "payload": "object",
+        "persistAsDocument": "boolean",
+        "actor": "user:<id>|system",
+        "idempotencyKey": "string"
+      },
+      "output": {
+        "artifactId": "string",
+        "documentId": "number|null",
+        "storageKey": "string",
+        "checksum": "string",
+        "generatedAt": "ISO-8601 datetime",
+        "idempotent": "boolean"
+      },
+      "errors": {
+        "DOCUMENT_ARTIFACT_TEMPLATE_INVALID": "Template invalido ou incompleto.",
+        "DOCUMENT_ARTIFACT_FAILED": "Falha ao gerar artefato persistido."
+      },
+      "idempotency": "templateId|processId|documentTitle|checksum(payload)"
+    },
+    "client.portal.fetch": {
+      "input": {
+        "clientId": "number",
+        "includeDocuments": "boolean",
+        "includePublications": "boolean",
+        "includeDeadlines": "boolean"
+      },
+      "output": {
+        "clientId": "number",
+        "summary": {
+          "activeProcesses": "number",
+          "pendingDocuments": "number",
+          "recentPublications": "number"
+        },
+        "cards": "object",
+        "timeline": "Array<object>"
+      },
+      "errors": {
+        "CLIENT_NOT_FOUND": "Cliente nao encontrado.",
+        "CLIENT_PORTAL_FORBIDDEN": "Acesso nao autorizado ao portal."
+      },
+      "idempotency": "clientId|includeDocuments|includePublications|includeDeadlines"
+    },
+    "client.communication.send": {
+      "input": {
+        "clientId": "number",
+        "channel": "email|whatsapp|portal",
+        "subject": "string|null",
+        "message": "string",
+        "templateCode": "string|null",
+        "contextEntityType": "document|triage|process|attendance|crm",
+        "contextEntityId": "number|string|null",
+        "idempotencyKey": "string"
+      },
+      "output": {
+        "communicationId": "string",
+        "deliveryStatus": "queued|sent|delivered|failed",
+        "retryCount": "number",
+        "idempotent": "boolean"
+      },
+      "errors": {
+        "COMMUNICATION_CONSENT_REQUIRED": "Cliente nao consentiu com o canal.",
+        "COMMUNICATION_INVALID_CHANNEL": "Canal nao suportado.",
+        "COMMUNICATION_DISPATCH_FAILED": "Falha no envio ou enfileiramento."
+      },
+      "idempotency": "clientId|channel|templateCode|checksum(message)|contextEntityType|contextEntityId"
+    },
+    "client.communication.history": {
+      "input": {
+        "clientId": "number",
+        "channel": "email|whatsapp|portal|all",
+        "limit": "number"
+      },
+      "output": {
+        "clientId": "number",
+        "items": "Array<{ communicationId: string, channel: string, status: string, sentAt: string|null, deliveredAt: string|null, summary: string }>"
+      },
+      "errors": {
+        "CLIENT_NOT_FOUND": "Cliente nao encontrado."
+      },
+      "idempotency": "clientId|channel|limit"
+    },
+    "client.consent.update": {
+      "input": {
+        "clientId": "number",
+        "preferences": {
+          "email": "boolean",
+          "whatsapp": "boolean",
+          "portal": "boolean"
+        },
+        "legalBasis": "consentimento|execucao_contrato|legitimo_interesse",
+        "capturedAt": "ISO-8601 datetime",
+        "capturedBy": "string"
+      },
+      "output": {
+        "clientId": "number",
+        "consentVersion": "number",
+        "preferences": "object",
+        "updatedAt": "ISO-8601 datetime"
+      },
+      "errors": {
+        "CLIENT_NOT_FOUND": "Cliente nao encontrado.",
+        "CONSENT_INVALID": "Preferencias ou base legal invalidas."
+      },
+      "idempotency": "clientId|capturedAt|checksum(preferences)"
+    },
+    "client.prospect.signal": {
+      "input": {
+        "cpfCnpj": "string",
+        "personName": "string|null",
+        "sourceType": "publicacao|manual|importacao",
+        "sourceReference": "string",
+        "summary": "string",
+        "idempotencyKey": "string"
+      },
+      "output": {
+        "prospectId": "number",
+        "leadId": "number|null",
+        "matchedClientId": "number|null",
+        "hasActiveProcess": "boolean",
+        "idempotent": "boolean"
+      },
+      "errors": {
+        "PROSPECT_DUPLICATE": "Sinal de prospeccao duplicado.",
+        "PROSPECT_INVALID_DOCUMENT": "CPF/CNPJ invalido."
+      },
+      "idempotency": "cpfCnpj|sourceType|sourceReference"
+    },
+    "audit.event": {
+      "input": {
+        "scope": "triage|documents|clients|communication|crm|portal",
+        "entityType": "string",
+        "entityId": "number|string|null",
+        "action": "string",
+        "status": "success|warning|error",
+        "summary": "string",
+        "details": "object",
+        "actor": "object",
+        "correlationId": "string|null",
+        "idempotencyKey": "string|null",
+        "occurredAt": "ISO-8601 datetime"
+      },
+      "output": {
+        "auditEventId": "string",
+        "stored": "boolean"
+      },
+      "errors": {
+        "AUDIT_INVALID_SCOPE": "Escopo de auditoria invalido.",
+        "AUDIT_STORAGE_FAILED": "Falha ao persistir auditoria."
+      },
+      "idempotency": "scope|action|entityType|entityId|idempotencyKey"
+    }
+  },
+  "integrationOrder": [
+    "contracts",
+    "backend-triage",
+    "backend-documents",
+    "backend-clients-communication",
+    "frontend-triage-documents",
+    "frontend-clients",
+    "tests-hardening-observability",
+    "docs-evidence"
+  ]
+}

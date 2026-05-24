@@ -23,6 +23,8 @@ import {
 } from 'lucide-react';
 import { EmptyState, FilterBar, KpiCard, PageHeader, StatusPill } from './components/product';
 import { Badge, Button } from './components/ui';
+import { ClientPortalPanel } from './components/clients/ClientPortalPanel';
+import { ClientCommunicationPanel } from './components/communication/ClientCommunicationPanel';
 import { api, type ApiClient } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import './Clients.css';
@@ -193,21 +195,31 @@ function PendenciaBadge({ count }: { count: number }) {
 
 // ─── DETAIL TABS ──────────────────────────────────────────────────────────────
 
-const DETAIL_TABS = ['Resumo', 'Processos', 'Cadastro'] as const;
+const DETAIL_TABS = ['Resumo', 'Portal', 'Comunicação', 'Processos', 'Cadastro'] as const;
 type DetailTab = typeof DETAIL_TABS[number];
 
 function ClientDetailView({
   client,
+  user,
+  initialTab,
   onClose,
   onGoToAtendimento,
   onOpenProcesso,
+  onOpenDocuments,
 }: {
   client: ClientItem;
+  user: { email: string };
+  initialTab: DetailTab;
   onClose: () => void;
   onGoToAtendimento: (client: ClientItem) => void;
   onOpenProcesso: (processId: number) => void;
+  onOpenDocuments: (client: ClientItem, processId?: number) => void;
 }) {
-  const [activeTab, setActiveTab] = useState<DetailTab>('Resumo');
+  const [activeTab, setActiveTab] = useState<DetailTab>(initialTab);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab, client.id]);
 
   return (
     <div className="cli-detail-overlay" onClick={onClose} aria-hidden="true">
@@ -351,6 +363,30 @@ function ClientDetailView({
             </div>
           )}
 
+          {activeTab === 'Portal' && (
+            <ClientPortalPanel
+              clientId={Number(client.id)}
+              clientName={client.nome}
+              onOpenProcess={onOpenProcesso}
+              onOpenDocuments={(processId) => onOpenDocuments(client, processId)}
+            />
+          )}
+
+          {activeTab === 'Comunicação' && (
+            <ClientCommunicationPanel
+              client={{
+                id: Number(client.id),
+                nome: client.nome,
+                email: client.email,
+                telefone: client.telefone,
+                processos: client.processos,
+              }}
+              userEmail={user.email}
+              onOpenDocuments={(processId) => onOpenDocuments(client, processId)}
+              onOpenProcess={onOpenProcesso}
+            />
+          )}
+
           {activeTab === 'Processos' && (
             <div className="cli-detail-section-list">
               <div className="cli-detail-section">
@@ -472,6 +508,7 @@ export function Clients({ user }: ClientsProps) {
   const [page, setPage]                 = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [selectedClient, setSelectedClient] = useState<ClientItem | null>(null);
+  const [detailInitialTab, setDetailInitialTab] = useState<DetailTab>('Resumo');
   const [openMenuId, setOpenMenuId]     = useState<string | null>(null);
   const [showForm, setShowForm]         = useState(false);
   const [form, setForm]                 = useState<NewClientForm>(EMPTY_FORM);
@@ -496,6 +533,7 @@ export function Clients({ user }: ClientsProps) {
     if (!clientId || Number.isNaN(clientId)) return;
     const match = clients.find((client) => Number(client.id) === clientId);
     if (!match) return;
+    setDetailInitialTab('Resumo');
     setSelectedClient(match);
     const next = new URLSearchParams(searchParams);
     next.delete('clientId');
@@ -548,6 +586,18 @@ export function Clients({ user }: ClientsProps) {
         },
       },
     });
+  }
+
+  function openClientDetail(client: ClientItem, tab: DetailTab = 'Resumo') {
+    setDetailInitialTab(tab);
+    setSelectedClient(client);
+  }
+
+  function openClientDocuments(client: ClientItem, processId?: number) {
+    const params = new URLSearchParams();
+    params.set('client', client.nome);
+    if (processId) params.set('processId', String(processId));
+    navigate(`/documentos?${params.toString()}`);
   }
 
   function saveFilters() {
@@ -671,10 +721,10 @@ export function Clients({ user }: ClientsProps) {
       <tr
         key={c.id}
         className="cli-table-row"
-        onClick={() => setSelectedClient(c)}
+        onClick={() => openClientDetail(c)}
         tabIndex={0}
         aria-label={`Cliente ${c.nome}`}
-        onKeyDown={(e) => e.key === 'Enter' && setSelectedClient(c)}
+        onKeyDown={(e) => e.key === 'Enter' && openClientDetail(c)}
       >
         <td className="cli-td-client">
           <span className="cli-avatar-sm" aria-hidden="true">{c.nome.charAt(0)}</span>
@@ -735,8 +785,18 @@ export function Clients({ user }: ClientsProps) {
             {isMenuOpen && (
               <ul className="cli-ctx-menu" role="menu">
                 <li role="none">
-                  <button role="menuitem" onClick={() => { setSelectedClient(c); setOpenMenuId(null); }}>
+                  <button role="menuitem" onClick={() => { openClientDetail(c); setOpenMenuId(null); }}>
                     <User size={13} /> Ver detalhe
+                  </button>
+                </li>
+                <li role="none">
+                  <button role="menuitem" onClick={() => { openClientDetail(c, 'Comunicação'); setOpenMenuId(null); }}>
+                    <Mail size={13} /> Comunicar cliente
+                  </button>
+                </li>
+                <li role="none">
+                  <button role="menuitem" onClick={() => { openClientDetail(c, 'Portal'); setOpenMenuId(null); }}>
+                    <ExternalLink size={13} /> Ver portal
                   </button>
                 </li>
                 <li role="none">
@@ -752,7 +812,7 @@ export function Clients({ user }: ClientsProps) {
                   </li>
                 )}
                 <li role="none">
-                  <button role="menuitem" onClick={() => { navigate('/documentos'); setOpenMenuId(null); }}>
+                  <button role="menuitem" onClick={() => { openClientDocuments(c); setOpenMenuId(null); }}>
                     <FileText size={13} /> Ver documentos
                   </button>
                 </li>
@@ -1079,11 +1139,11 @@ export function Clients({ user }: ClientsProps) {
                 <div
                   key={c.id}
                   className="cli-card"
-                  onClick={() => setSelectedClient(c)}
+                  onClick={() => openClientDetail(c)}
                   tabIndex={0}
                   role="button"
                   aria-label={`Abrir detalhe de ${c.nome}`}
-                  onKeyDown={(e) => e.key === 'Enter' && setSelectedClient(c)}
+                  onKeyDown={(e) => e.key === 'Enter' && openClientDetail(c)}
                 >
                   <div className="cli-card-head">
                     <span className="cli-avatar-md" aria-hidden="true">{c.nome.charAt(0)}</span>
@@ -1144,10 +1204,19 @@ export function Clients({ user }: ClientsProps) {
       {selectedClient && (
         <ClientDetailView
           client={selectedClient}
-          onClose={() => setSelectedClient(null)}
+          user={user}
+          initialTab={detailInitialTab}
+          onClose={() => {
+            setSelectedClient(null);
+            setDetailInitialTab('Resumo');
+          }}
           onGoToAtendimento={(client) => {
             setSelectedClient(null);
             goToAtendimento(client);
+          }}
+          onOpenDocuments={(client, processId) => {
+            setSelectedClient(null);
+            openClientDocuments(client, processId);
           }}
           onOpenProcesso={(processId) => {
             setSelectedClient(null);

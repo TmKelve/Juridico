@@ -33,6 +33,7 @@ export function buildDocumentPayload(document: RawDocumentRecord) {
     processId: document.processId,
     processLabel: `#${document.processId}`,
     processTitle: process?.title ?? '',
+    clientId: client?.id ?? null,
     client: client?.name ?? process?.client ?? 'Cliente não informado',
     category: document.category ?? 'Checklist',
     status: document.status,

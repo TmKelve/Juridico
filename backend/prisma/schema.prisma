@@ -38,6 +38,7 @@ model Client {
   crmLeads CrmLead[]
   crmOpportunities CrmOpportunity[]
   financeEntries FinanceEntry[]
+  financeInstallmentPlans FinanceInstallmentPlan[]
 }
 
 model Process {
@@ -61,6 +62,7 @@ model Process {
   publicationEvents PublicationEvent[]
   triageItems TriageItem[]
   financeEntries FinanceEntry[]
+  financeInstallmentPlans FinanceInstallmentPlan[]
 }
 
 model Publication {
@@ -471,6 +473,7 @@ model FinanceCategory {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   entries     FinanceEntry[]
+  installmentPlans FinanceInstallmentPlan[]
 }
 
 model FinanceEntry {
@@ -489,6 +492,9 @@ model FinanceEntry {
   clientRecord      Client?         @relation(fields: [clientId], references: [id])
   processId         Int?
   process           Process?        @relation(fields: [processId], references: [id])
+  installmentPlanId Int?
+  installmentPlan   FinanceInstallmentPlan? @relation(fields: [installmentPlanId], references: [id])
+  installmentNumber Int?
   categoryCode      String
   category          FinanceCategory @relation(fields: [categoryCode], references: [code])
   responsibleUserId Int?
@@ -504,6 +510,32 @@ model FinanceEntry {
   @@index([type, status, dueDate])
   @@index([clientId, status])
   @@index([processId, status])
+  @@index([installmentPlanId, installmentNumber])
+}
+
+model FinanceInstallmentPlan {
+  id                    Int            @id @default(autoincrement())
+  description           String
+  clientId              Int?
+  clientRecord          Client?        @relation(fields: [clientId], references: [id])
+  processId             Int?
+  process               Process?       @relation(fields: [processId], references: [id])
+  categoryCode          String
+  category              FinanceCategory @relation(fields: [categoryCode], references: [code])
+  installmentCount      Int
+  installmentAmountCents Int
+  totalAmountCents      Int
+  dueDay                Int
+  firstDueDate          DateTime
+  active                Boolean        @default(true)
+  notes                 String?
+  createdBy             String?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  entries               FinanceEntry[]
+
+  @@index([clientId, active])
+  @@index([processId, active])
 }
 
 model FinanceCharge {

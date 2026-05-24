@@ -1,6 +1,9 @@
 ﻿import express from 'express';
 import cors from 'cors';
 import bcrypt from 'bcrypt';
+import { createHash, randomUUID } from 'crypto';
+import { promises as fs } from 'fs';
+import path from 'path';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { signUserToken, verifyToken, type UserToken } from './auth';
 import { buildAgendaPayload } from './agenda.contract';
@@ -8,6 +11,9 @@ import { collectCnjPublications } from './cnj-publications.provider';
 import { collectCpfPublications } from './cpf-publications.provider';
 import { collectDiarioPublications } from './diario-publications.provider';
 import { collectOabPublications } from './oab-publications.provider';
+import { ClientConsentService, createPrismaClientConsentRepository } from './clients/consent';
+import { ClientPortalService, createPrismaClientPortalRepository } from './clients/portal';
+import { ClientCommunicationService, createPrismaCommunicationRepository, InMemoryCommunicationDispatcher } from './communication';
 import { buildCrmLeadPayload, buildCrmOpportunityPayload } from './crm.contract';
 import { CrmAuditService, createPrismaCrmAuditRepository } from './crm/audit';
 import { OpportunityContactHistoryService, createPrismaOpportunityContactHistoryRepository } from './crm/contact-history';
@@ -16,6 +22,7 @@ import { validateOpportunityConversionCommand } from './crm/conversion/opportuni
 import { createPrismaOpportunityConversionRepository } from './crm/conversion/prisma-opportunity-conversion.repository';
 import { OpportunityDocumentsService, createPrismaOpportunityDocumentsRepository } from './crm/documents';
 import { CrmContractError as CrmAuditContractError } from './crm/audit/crm-audit.validators';
+import { CrmProspectingService, createPrismaCrmProspectingRepository } from './crm/prospecting';
 import { createPrismaLinkProcessRepository } from './crm/process-link/prisma-link-process.repository';
 import { CrmOpportunityProcessLinkService } from './crm/process-link/link-process.service';
 import { validateLinkProcessCommand } from './crm/process-link/link-process.validators';
@@ -24,17 +31,24 @@ import { DeadlineAuditService } from './deadlines/deadline-audit.service';
 import { DeadlineBulkActionService } from './deadlines/batch-actions/deadline-bulk-action.service';
 import { DeadlineRiskService } from './deadlines/deadline-risk.service';
 import { DeadlineDomainError } from './deadlines/deadline-errors';
+import { DocumentApprovalService } from './documents/approval';
+import { ProceduralDocumentChecklistService } from './documents/checklist';
+import { DocumentUploadService } from './documents/upload';
+import { DocumentVersioningService } from './documents/versioning';
 import { CreateDeadlineFromPublicationService } from './publications/deadline-automation/create-from-publication.service';
 import { buildDeadlinePayload } from './deadlines.contract';
 import { buildDocumentPayload } from './documents.contract';
 import { lookupExternalProcess } from './process-lookup.provider';
 import { createPublicationScheduler } from './shared/scheduler/publication-schedule';
 import { planTriageDecision } from './triage/decision-engine';
+import { assistTriageDecision } from './triage/decision/assisted-triage-decision';
+import { rankUnifiedTriageQueue } from './triage/queue/triage-unified-queue';
 import { buildPublicationPayload } from './publications.contract';
 import { buildTaskPayload } from './tasks.contract';
 import { buildTemplatePayload } from './templates.contract';
 import { classifyTriageItem } from './triage-ai.provider';
 import { buildTriageDecisionPayload, buildTriageItemPayload } from './triage.contract';
+import { buildTriageExplanation } from './triage/explainability/triage-explanation-builder';
 import { resolveTriageTarget } from './triage.matcher';
 import { registerFinanceRoutes } from './finance/http/register-finance-routes';
 import { listFinancePermissions } from './authz/finance/permissions';
@@ -381,6 +395,33 @@ const crmOpportunityConversionService = new CrmOpportunityConversionService(
 const crmOpportunityProcessLinkService = new CrmOpportunityProcessLinkService(
   createPrismaLinkProcessRepository(prisma),
 );
+const clientPortalService = new ClientPortalService(
+  createPrismaClientPortalRepository(prisma),
+);
+const clientConsentService = new ClientConsentService(
+  createPrismaClientConsentRepository({
+    client: prisma.client,
+    crmAuditEvent: prisma.crmAuditEvent,
+  }),
+  crmAuditService,
+);
+const clientCommunicationService = new ClientCommunicationService(
+  createPrismaCommunicationRepository({
+    client: prisma.client,
+    crmAuditEvent: prisma.crmAuditEvent,
+  }),
+  crmAuditService,
+  new InMemoryCommunicationDispatcher(),
+);
+const crmProspectingService = new CrmProspectingService(
+  createPrismaCrmProspectingRepository({
+    client: prisma.client,
+    process: prisma.process,
+    crmLead: prisma.crmLead,
+  }),
+  crmAuditService,
+);
+const documentChecklistService = new ProceduralDocumentChecklistService();
 const deadlineRiskService = new DeadlineRiskService();
 const deadlineAuditService = new DeadlineAuditService();
 
@@ -404,10 +445,357 @@ function getCrmContractCode(error: unknown) {
   return null;
 }
 
+function deriveBasePriorityScore(item: {
+  queueType: string;
+  aiScoreRaw?: number | null;
+  event?: { riskLevel?: string | null; requiresAction?: boolean | null } | null;
+  suggestedAction?: string | null;
+}) {
+  const aiScore = typeof item.aiScoreRaw === 'number' && Number.isFinite(item.aiScoreRaw)
+    ? Math.round(item.aiScoreRaw)
+    : null;
+  if (aiScore !== null) return aiScore;
+
+  let score = item.queueType === 'critica' ? 85 : item.queueType === 'tratados' ? 20 : 55;
+  if (item.event?.requiresAction) score += 10;
+  if (item.event?.riskLevel === 'critico') score += 10;
+  if (item.event?.riskLevel === 'alto') score += 5;
+  if (item.suggestedAction === 'criar_prazo') score += 5;
+  return Math.min(score, 100);
+}
+
 function getCrmContractDetails(error: unknown) {
   if (error instanceof CrmOpportunityContractError) return error.details;
   if (error instanceof CrmAuditContractError) return error.details;
   return undefined;
+}
+
+const documentsStorageRoot = path.join(process.cwd(), 'storage', 'documents');
+
+type DocumentSidecarState = {
+  metadata: Record<string, unknown>;
+  storage: Record<string, unknown>;
+  approval: Record<string, unknown> | null;
+  links: Array<{ entityType: string; entityId: number }>;
+  artifacts: Array<Record<string, unknown>>;
+};
+
+function getFileExtension(fileName: string) {
+  const ext = path.extname(fileName || '').trim().toLowerCase();
+  return ext && ext.length <= 10 ? ext : '';
+}
+
+function computeContentChecksum(contentBase64: string) {
+  return createHash('sha256').update(Buffer.from(contentBase64, 'base64')).digest('hex');
+}
+
+async function ensureDocumentsStorageRoot() {
+  await fs.mkdir(documentsStorageRoot, { recursive: true });
+}
+
+async function listDocumentAuditTrail(documentId: number) {
+  return crmAuditService.list({
+    scope: 'documents',
+    entityType: 'document',
+    entityId: documentId,
+    limit: 100,
+  });
+}
+
+async function hydrateDocumentSidecar(documentId: number): Promise<DocumentSidecarState> {
+  const events = await listDocumentAuditTrail(documentId);
+  const state: DocumentSidecarState = {
+    metadata: {},
+    storage: {},
+    approval: null,
+    links: [],
+    artifacts: [],
+  };
+
+  for (const event of [...events].reverse()) {
+    const details = (event.details ?? {}) as Record<string, unknown>;
+    if (details.metadata && typeof details.metadata === 'object' && !Array.isArray(details.metadata)) {
+      state.metadata = { ...state.metadata, ...(details.metadata as Record<string, unknown>) };
+    }
+    if (details.storage && typeof details.storage === 'object' && !Array.isArray(details.storage)) {
+      state.storage = { ...state.storage, ...(details.storage as Record<string, unknown>) };
+    }
+    if (event.action === 'document.approval.update') {
+      state.approval = {
+        decision: details.decision ?? null,
+        reason: details.reason ?? null,
+        decidedAt: details.decidedAt ?? event.occurredAt,
+        checklist: details.checklist ?? null,
+      };
+    }
+    if (event.action === 'document.link.bindEntities') {
+      const links = Array.isArray(details.links) ? details.links : [];
+      state.links = links
+        .filter((link) => link && typeof link === 'object')
+        .map((link) => ({
+          entityType: String((link as Record<string, unknown>).entityType ?? ''),
+          entityId: Number((link as Record<string, unknown>).entityId ?? 0),
+        }))
+        .filter((link) => link.entityType && Number.isInteger(link.entityId) && link.entityId > 0);
+    }
+    if (event.action === 'document.artifact.generate') {
+      state.artifacts.push({
+        artifactId: details.artifactId ?? event.id,
+        templateId: details.templateId ?? null,
+        storageKey: details.storageKey ?? null,
+        generatedAt: details.generatedAt ?? event.occurredAt,
+        documentId,
+      });
+    }
+  }
+
+  return state;
+}
+
+async function recordDocumentAuditEvent(input: {
+  documentId: number;
+  action: string;
+  status: 'success' | 'warning' | 'error';
+  summary: string;
+  details?: Record<string, unknown>;
+  actor: { source: 'user' | 'system' | 'api'; email?: string | null; role?: string | null; userId?: number | null };
+  idempotencyKey?: string | null;
+}) {
+  return crmAuditService.record({
+    scope: 'documents',
+    entityType: 'document',
+    entityId: input.documentId,
+    action: input.action,
+    status: input.status,
+    summary: input.summary,
+    details: input.details ?? {},
+    actor: input.actor,
+    occurredAt: new Date().toISOString(),
+    idempotencyKey: input.idempotencyKey ?? null,
+  });
+}
+
+async function buildDocumentResponse(document: any) {
+  const sidecar = await hydrateDocumentSidecar(document.id);
+  return {
+    ...buildDocumentPayload(document),
+    metadata: sidecar.metadata,
+    storage: sidecar.storage,
+    approval: sidecar.approval,
+    links: sidecar.links,
+    artifacts: sidecar.artifacts,
+  };
+}
+
+function createLocalDocumentStorageAdapter() {
+  return {
+    async store(input: {
+      processId: number;
+      fileName: string;
+      contentBase64: string;
+      mimeType: string;
+      sizeInBytes: number;
+      metadata: Record<string, unknown>;
+    }) {
+      await ensureDocumentsStorageRoot();
+      const checksum = computeContentChecksum(input.contentBase64);
+      const extension = getFileExtension(input.fileName);
+      const fileName = `${new Date().toISOString().slice(0, 10)}-${input.processId}-${checksum.slice(0, 12)}${extension}`;
+      const filePath = path.join(documentsStorageRoot, fileName);
+
+      await fs.writeFile(filePath, Buffer.from(input.contentBase64, 'base64'));
+
+      return {
+        storageKey: filePath,
+        mimeType: input.mimeType,
+        sizeInBytes: input.sizeInBytes,
+        checksum,
+        previewUrl: null,
+      };
+    },
+  };
+}
+
+function createDocumentUploadService() {
+  return new DocumentUploadService(
+    createLocalDocumentStorageAdapter(),
+    {
+      async assertProcessExists(processId: number) {
+        const process = await prisma.process.findUnique({
+          where: { id: processId },
+          select: { id: true, phase: true },
+        });
+
+        return process
+          ? { id: process.id, proceduralType: process.phase ?? null }
+          : null;
+      },
+      async createDocument(input: any) {
+        const created = await prisma.documento.create({
+          data: {
+            processId: input.processId,
+            title: input.title,
+            description: input.description,
+            status: input.status,
+            category: input.category,
+            origin: input.origin,
+            responsible: input.responsible,
+            requiredChecklist: input.requiredChecklist,
+            pendingForAdvance: input.pendingForAdvance,
+            mimeType: input.mimeType,
+            previewUrl: input.previewUrl,
+            createdBy: input.createdBy,
+          },
+        });
+
+        await recordDocumentAuditEvent({
+          documentId: created.id,
+          action: 'document.upload',
+          status: 'success',
+          summary: `Upload persistido para documento #${created.id}`,
+          details: {
+            metadata: input.metadata,
+            storage: input.storage,
+            processId: input.processId,
+            version: created.version,
+          },
+          actor: { source: 'api', role: 'documents' },
+          idempotencyKey: typeof input.storage.checksum === 'string' ? input.storage.checksum : null,
+        });
+
+        return {
+          id: created.id,
+          processId: created.processId,
+          title: created.title,
+          status: created.status,
+          category: created.category,
+          version: created.version,
+          isLatestVersion: created.isLatestVersion,
+          mimeType: created.mimeType,
+          previewUrl: created.previewUrl,
+          metadata: input.metadata,
+          storage: input.storage,
+        };
+      },
+    } as any,
+  );
+}
+
+function createDocumentVersioningService() {
+  return new DocumentVersioningService({
+    async findById(documentId: number) {
+      const document = await prisma.documento.findUnique({ where: { id: documentId } });
+      if (!document) return null;
+      const sidecar = await hydrateDocumentSidecar(documentId);
+      return {
+        ...document,
+        metadata: sidecar.metadata,
+        storage: sidecar.storage,
+      };
+    },
+    async createNextVersion(input: any) {
+      await prisma.documento.updateMany({
+        where: {
+          processId: input.processId,
+          title: input.title,
+          isLatestVersion: true,
+        },
+        data: { isLatestVersion: false },
+      });
+
+      const created = await prisma.documento.create({
+        data: {
+          processId: input.processId,
+          title: input.title,
+          description: input.description,
+          status: input.status,
+          category: input.category,
+          version: input.version,
+          isLatestVersion: true,
+          origin: input.origin,
+          responsible: input.responsible,
+          requiredChecklist: input.requiredChecklist,
+          pendingForAdvance: input.pendingForAdvance,
+          mimeType: input.mimeType,
+          previewUrl: input.previewUrl,
+          createdBy: null,
+        },
+      });
+
+      await recordDocumentAuditEvent({
+        documentId: created.id,
+        action: 'document.version.create',
+        status: 'success',
+        summary: `Versão ${created.version} criada para documento #${created.id}`,
+        details: {
+          metadata: input.metadata,
+          storage: input.storage,
+          version: created.version,
+        },
+        actor: { source: 'api', role: 'documents' },
+      });
+
+      return {
+        ...created,
+        metadata: input.metadata,
+        storage: input.storage,
+      };
+    },
+  } as any);
+}
+
+function createDocumentApprovalService() {
+  return new DocumentApprovalService({
+    async findById(documentId: number) {
+      const document = await prisma.documento.findUnique({ where: { id: documentId } });
+      if (!document) return null;
+      const sidecar = await hydrateDocumentSidecar(documentId);
+      return {
+        id: document.id,
+        processId: document.processId,
+        title: document.title,
+        status: document.status,
+        version: document.version,
+        isLatestVersion: document.isLatestVersion,
+        metadata: sidecar.metadata,
+      };
+    },
+    async saveDecision(input: any) {
+      const nextStatus = input.decision === 'approved' ? 'validado' : 'rejeitado';
+      await prisma.documento.update({
+        where: { id: input.documentId },
+        data: { status: nextStatus },
+      });
+
+      await recordDocumentAuditEvent({
+        documentId: input.documentId,
+        action: 'document.approval.update',
+        status: input.decision === 'approved' ? 'success' : 'warning',
+        summary: `Documento #${input.documentId} ${input.decision === 'approved' ? 'aprovado' : 'rejeitado'}`,
+        details: {
+          decision: input.decision,
+          reason: input.reason,
+          checklist: input.checklist ?? null,
+          decidedAt: new Date().toISOString(),
+        },
+        actor: {
+          source: input.actor.source,
+          userId: input.actor.userId ?? null,
+          email: input.actor.email ?? null,
+          role: input.actor.role ?? null,
+        },
+      });
+
+      return {
+        documentId: input.documentId,
+        status: nextStatus,
+        decision: input.decision,
+        reason: input.reason,
+        decidedAt: new Date().toISOString(),
+        checklist: input.checklist,
+      };
+    },
+  } as any, documentChecklistService);
 }
 
 function buildDeadlineActor(decoded: UserToken) {
@@ -2699,6 +3087,84 @@ app.get('/clients/:id', async (req, res) => {
   res.json(buildClientPayload(client));
 });
 
+app.get('/clients/:id/portal', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  try {
+    const data = await clientPortalService.fetch({
+      clientId: Number(req.params.id),
+      includeDocuments: req.query.includeDocuments !== '0',
+      includePublications: req.query.includePublications !== '0',
+      includeDeadlines: req.query.includeDeadlines !== '0',
+    });
+
+    res.json(data);
+  } catch (error) {
+    const status = getCrmContractStatus(error);
+    if (status) {
+      return res.status(status).json({
+        message: error instanceof Error ? error.message : 'Falha ao carregar portal do cliente',
+        code: getCrmContractCode(error),
+        details: getCrmContractDetails(error),
+      });
+    }
+
+    return res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao carregar portal do cliente' });
+  }
+});
+
+app.get('/clients/:id/consent', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+  if (!canManageClients(decoded.role)) return res.status(403).send({ message: 'Acesso negado' });
+
+  try {
+    const data = await clientConsentService.get(Number(req.params.id));
+    res.json(data);
+  } catch (error) {
+    const status = getCrmContractStatus(error);
+    if (status) {
+      return res.status(status).json({
+        message: error instanceof Error ? error.message : 'Falha ao carregar consentimento',
+        code: getCrmContractCode(error),
+        details: getCrmContractDetails(error),
+      });
+    }
+
+    return res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao carregar consentimento' });
+  }
+});
+
+app.put('/clients/:id/consent', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+  if (!canManageClients(decoded.role)) return res.status(403).send({ message: 'Acesso negado' });
+
+  try {
+    const data = await clientConsentService.update({
+      clientId: Number(req.params.id),
+      preferences: req.body?.preferences,
+      legalBasis: req.body?.legalBasis,
+      capturedAt: typeof req.body?.capturedAt === 'string' ? req.body.capturedAt : new Date().toISOString(),
+      capturedBy: typeof req.body?.capturedBy === 'string' && req.body.capturedBy.trim() ? req.body.capturedBy.trim() : decoded.email,
+    });
+
+    res.json(data);
+  } catch (error) {
+    const status = getCrmContractStatus(error);
+    if (status) {
+      return res.status(status).json({
+        message: error instanceof Error ? error.message : 'Falha ao atualizar consentimento',
+        code: getCrmContractCode(error),
+        details: getCrmContractDetails(error),
+      });
+    }
+
+    return res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao atualizar consentimento' });
+  }
+});
+
 app.post('/clients', async (req, res) => {
   const decoded = getUserFromReq(req);
   if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
@@ -2790,6 +3256,67 @@ app.put('/clients/:id', async (req, res) => {
   }
 
   res.json(buildClientPayload(updated));
+});
+
+app.get('/clients/:id/communications', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+  if (!canAccessCrm(decoded)) return res.status(403).send({ message: 'Acesso negado' });
+
+  try {
+    const data = await clientCommunicationService.history({
+      clientId: Number(req.params.id),
+      channel: typeof req.query.channel === 'string' ? req.query.channel : 'all',
+      limit: typeof req.query.limit === 'string' ? Number(req.query.limit) : 20,
+    });
+
+    res.json(data);
+  } catch (error) {
+    const status = getCrmContractStatus(error);
+    if (status) {
+      return res.status(status).json({
+        message: error instanceof Error ? error.message : 'Falha ao carregar histórico de comunicação',
+        code: getCrmContractCode(error),
+        details: getCrmContractDetails(error),
+      });
+    }
+
+    return res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao carregar histórico de comunicação' });
+  }
+});
+
+app.post('/clients/:id/communications', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+  if (!canAccessCrm(decoded)) return res.status(403).send({ message: 'Acesso negado' });
+
+  try {
+    const data = await clientCommunicationService.send({
+      clientId: Number(req.params.id),
+      channel: req.body?.channel,
+      subject: req.body?.subject,
+      message: req.body?.message,
+      templateCode: req.body?.templateCode,
+      contextEntityType: req.body?.contextEntityType,
+      contextEntityId: req.body?.contextEntityId,
+      idempotencyKey: typeof req.headers['idempotency-key'] === 'string'
+        ? req.headers['idempotency-key']
+        : `comm:${req.params.id}:${req.body?.channel ?? 'portal'}:${String(req.body?.contextEntityType ?? 'manual')}:${String(req.body?.contextEntityId ?? 'na')}`,
+    });
+
+    res.status(data.idempotent ? 200 : 201).json(data);
+  } catch (error) {
+    const status = getCrmContractStatus(error);
+    if (status) {
+      return res.status(status).json({
+        message: error instanceof Error ? error.message : 'Falha ao enviar comunicação',
+        code: getCrmContractCode(error),
+        details: getCrmContractDetails(error),
+      });
+    }
+
+    return res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao enviar comunicação' });
+  }
 });
 
 app.get('/attendances', async (req, res) => {
@@ -3343,7 +3870,7 @@ app.get('/documents', async (req, res) => {
     ],
   });
 
-  res.json(documents.map((document) => buildDocumentPayload(document)));
+  res.json(await Promise.all(documents.map((document) => buildDocumentResponse(document))));
 });
 
 app.get('/documents/:id', async (req, res) => {
@@ -3365,7 +3892,94 @@ app.get('/documents/:id', async (req, res) => {
   if (!document) return res.status(404).send({ message: 'Documento não encontrado' });
   if (!canReadDocument(decoded, document)) return res.status(403).send({ message: 'Acesso negado' });
 
-  res.json(buildDocumentPayload(document));
+  res.json(await buildDocumentResponse(document));
+});
+
+app.get('/documents/:id/audit', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const document = await prisma.documento.findUnique({
+    where: { id: Number(req.params.id) },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+    },
+  });
+
+  if (!document) return res.status(404).send({ message: 'Documento não encontrado' });
+  if (!canReadDocument(decoded, document)) return res.status(403).send({ message: 'Acesso negado' });
+
+  res.json(await listDocumentAuditTrail(document.id));
+});
+
+app.get('/documents/:id/links', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const document = await prisma.documento.findUnique({
+    where: { id: Number(req.params.id) },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+    },
+  });
+
+  if (!document) return res.status(404).send({ message: 'Documento não encontrado' });
+  if (!canReadDocument(decoded, document)) return res.status(403).send({ message: 'Acesso negado' });
+
+  const sidecar = await hydrateDocumentSidecar(document.id);
+  res.json({ documentId: document.id, links: sidecar.links });
+});
+
+app.post('/documents/:id/links', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const document = await prisma.documento.findUnique({
+    where: { id: Number(req.params.id) },
+    include: {
+      process: {
+        include: {
+          owner: { select: { id: true, email: true, role: true } },
+          clientRecord: true,
+        },
+      },
+    },
+  });
+
+  if (!document) return res.status(404).send({ message: 'Documento não encontrado' });
+  if (!canReadDocument(decoded, document)) return res.status(403).send({ message: 'Acesso negado' });
+
+  const links = [
+    { entityType: 'process', entityId: req.body?.processId },
+    { entityType: 'deadline', entityId: req.body?.deadlineId },
+    { entityType: 'attendance', entityId: req.body?.attendanceId },
+    { entityType: 'triage', entityId: req.body?.triageItemId },
+    { entityType: 'crm_opportunity', entityId: req.body?.crmOpportunityId },
+  ]
+    .filter((entry) => Number.isInteger(Number(entry.entityId)) && Number(entry.entityId) > 0)
+    .map((entry) => ({ entityType: entry.entityType, entityId: Number(entry.entityId) }));
+
+  await recordDocumentAuditEvent({
+    documentId: document.id,
+    action: 'document.link.bindEntities',
+    status: 'success',
+    summary: `Vínculos atualizados para documento #${document.id}`,
+    details: { links },
+    actor: { source: 'user', email: decoded.email, role: decoded.role, userId: decoded.sub },
+    idempotencyKey: typeof req.headers['idempotency-key'] === 'string' ? req.headers['idempotency-key'] : null,
+  });
+
+  res.status(201).json({ documentId: document.id, links });
 });
 
 app.post('/documents', async (req, res) => {
@@ -3384,6 +3998,54 @@ app.post('/documents', async (req, res) => {
 
   const access = await assertProcessAccess(decoded, Number(processId));
   if (access.error) return res.status(access.error.status).send({ message: access.error.message });
+
+  if (req.body?.file?.contentBase64) {
+    try {
+      const uploaded = await createDocumentUploadService().upload({
+        processId: Number(processId),
+        title: title.trim(),
+        description: typeof notes === 'string' ? notes.trim() : '',
+        category,
+        status,
+        origin,
+        responsible,
+        requiredChecklist,
+        pendingForAdvance,
+        previewUrl,
+        createdBy: getResponsibleLabel(decoded.email) || decoded.email,
+        actor: {
+          source: 'user',
+          userId: decoded.sub,
+          email: decoded.email,
+          role: decoded.role,
+        },
+        file: req.body.file,
+        metadata: req.body?.metadata ?? {},
+      });
+
+      const created = await prisma.documento.findUnique({
+        where: { id: uploaded.document.id },
+        include: {
+          process: {
+            include: {
+              owner: { select: { id: true, email: true, role: true } },
+              clientRecord: true,
+            },
+          },
+        },
+      });
+
+      if (!created) return res.status(404).send({ message: 'Documento não encontrado após upload' });
+      return res.status(201).json(await buildDocumentResponse(created));
+    } catch (error) {
+      const statusCode = getCrmContractStatus(error) ?? 500;
+      return res.status(statusCode).json({
+        message: error instanceof Error ? error.message : 'Falha no upload do documento',
+        code: getCrmContractCode(error),
+        details: getCrmContractDetails(error),
+      });
+    }
+  }
 
   const processRecord = access.process;
   const created = await prisma.documento.create({
@@ -3411,7 +4073,21 @@ app.post('/documents', async (req, res) => {
     },
   });
 
-  res.status(201).json(buildDocumentPayload(created));
+  await recordDocumentAuditEvent({
+    documentId: created.id,
+    action: 'document.upload',
+    status: 'success',
+    summary: `Documento lógico criado para processo #${created.processId}`,
+    details: {
+      metadata: req.body?.metadata ?? {},
+      storage: {},
+      processId: created.processId,
+      version: created.version,
+    },
+    actor: { source: 'user', email: decoded.email, role: decoded.role, userId: decoded.sub },
+  });
+
+  res.status(201).json(await buildDocumentResponse(created));
 });
 
 app.put('/documents/:id', async (req, res) => {
@@ -3436,40 +4112,96 @@ app.put('/documents/:id', async (req, res) => {
   const { title, status, category, origin, responsible, notes, requiredChecklist, pendingForAdvance, mimeType, previewUrl, createNewVersion } = req.body;
 
   if (createNewVersion) {
-    await prisma.documento.update({
-      where: { id: current.id },
-      data: { isLatestVersion: false },
-    });
+    try {
+      const versioned = await createDocumentVersioningService().createVersion({
+        documentId: current.id,
+        actor: {
+          source: 'user',
+          userId: decoded.sub,
+          email: decoded.email,
+          role: decoded.role,
+        },
+        changes: {
+          title: typeof title === 'string' ? title.trim() : undefined,
+          description: typeof notes === 'string' ? notes.trim() : undefined,
+          status: status || 'aguardando_validacao',
+          category,
+          origin,
+          responsible,
+          requiredChecklist,
+          pendingForAdvance,
+          mimeType,
+          previewUrl,
+          metadata: req.body?.metadata,
+        },
+      });
 
-    const versioned = await prisma.documento.create({
-      data: {
-        processId: current.processId,
-        title: typeof title === 'string' && title.trim() ? title.trim() : current.title,
-        description: typeof notes === 'string' ? notes.trim() : current.description,
-        status: status || 'aguardando_validacao',
-        category: category || current.category,
-        version: current.version + 1,
-        isLatestVersion: true,
-        origin: origin || current.origin,
-        uploadedAt: new Date(),
-        responsible: responsible ?? current.responsible,
-        requiredChecklist: requiredChecklist ?? current.requiredChecklist,
-        pendingForAdvance: pendingForAdvance ?? current.pendingForAdvance,
-        mimeType: mimeType || current.mimeType,
-        previewUrl: previewUrl === undefined ? current.previewUrl : previewUrl,
-        createdBy: getResponsibleLabel(decoded.email) || decoded.email,
-      },
-      include: {
-        process: {
-          include: {
-            owner: { select: { id: true, email: true, role: true } },
-            clientRecord: true,
+      const versionedRecord = await prisma.documento.findUnique({
+        where: { id: versioned.id },
+        include: {
+          process: {
+            include: {
+              owner: { select: { id: true, email: true, role: true } },
+              clientRecord: true,
+            },
           },
         },
-      },
-    });
+      });
 
-    return res.json(buildDocumentPayload(versioned));
+      if (!versionedRecord) return res.status(404).send({ message: 'Versão não encontrada após criação' });
+      return res.json(await buildDocumentResponse(versionedRecord));
+    } catch (error) {
+      const statusCode = getCrmContractStatus(error) ?? 500;
+      return res.status(statusCode).json({
+        message: error instanceof Error ? error.message : 'Falha ao criar nova versão',
+        code: getCrmContractCode(error),
+        details: getCrmContractDetails(error),
+      });
+    }
+  }
+
+  if (status === 'validado' || status === 'rejeitado') {
+    try {
+      await createDocumentApprovalService().decide({
+        documentId: current.id,
+        decision: status === 'validado' ? 'approved' : 'rejected',
+        reason: typeof req.body?.approvalReason === 'string'
+          ? req.body.approvalReason
+          : typeof notes === 'string' && notes.trim()
+            ? notes.trim()
+            : status === 'rejeitado'
+              ? 'Rejeitado na atualização do documento'
+              : 'Aprovado na atualização do documento',
+        actor: {
+          source: 'user',
+          userId: decoded.sub,
+          email: decoded.email,
+          role: decoded.role,
+        },
+      });
+
+      const updatedRecord = await prisma.documento.findUnique({
+        where: { id: current.id },
+        include: {
+          process: {
+            include: {
+              owner: { select: { id: true, email: true, role: true } },
+              clientRecord: true,
+            },
+          },
+        },
+      });
+
+      if (!updatedRecord) return res.status(404).send({ message: 'Documento não encontrado após decisão' });
+      return res.json(await buildDocumentResponse(updatedRecord));
+    } catch (error) {
+      const statusCode = getCrmContractStatus(error) ?? 500;
+      return res.status(statusCode).json({
+        message: error instanceof Error ? error.message : 'Falha ao aprovar/rejeitar documento',
+        code: getCrmContractCode(error),
+        details: getCrmContractDetails(error),
+      });
+    }
   }
 
   const updated = await prisma.documento.update({
@@ -3496,7 +4228,7 @@ app.put('/documents/:id', async (req, res) => {
     },
   });
 
-  res.json(buildDocumentPayload(updated));
+  res.json(await buildDocumentResponse(updated));
 });
 
 app.get('/crm/leads', async (req, res) => {
@@ -4019,6 +4751,38 @@ app.post('/crm/opportunities/:id/link-process', async (req, res) => {
     }
 
     return res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao vincular processo' });
+  }
+});
+
+app.post('/crm/prospects/signal', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+  if (!canAccessCrm(decoded)) return res.status(403).send({ message: 'Acesso negado' });
+
+  try {
+    const data = await crmProspectingService.signal({
+      cpfCnpj: req.body?.cpfCnpj,
+      personName: req.body?.personName,
+      sourceType: req.body?.sourceType,
+      sourceReference: req.body?.sourceReference,
+      summary: req.body?.summary,
+      idempotencyKey: typeof req.headers['idempotency-key'] === 'string'
+        ? req.headers['idempotency-key']
+        : `prospect:${String(req.body?.cpfCnpj ?? 'na')}:${String(req.body?.sourceType ?? 'manual')}:${String(req.body?.sourceReference ?? 'na')}`,
+    });
+
+    res.status(data.idempotent ? 200 : 201).json(data);
+  } catch (error) {
+    const status = getCrmContractStatus(error);
+    if (status) {
+      return res.status(status).json({
+        message: error instanceof Error ? error.message : 'Falha ao sinalizar prospecção',
+        code: getCrmContractCode(error),
+        details: getCrmContractDetails(error),
+      });
+    }
+
+    return res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao sinalizar prospecção' });
   }
 });
 
@@ -4696,6 +5460,28 @@ app.post('/templates/:id/generate-document', async (req, res) => {
     },
   });
 
+  const artifactId = `artifact_${randomUUID().replace(/-/g, '')}`;
+  await recordDocumentAuditEvent({
+    documentId: createdDocument.id,
+    action: 'document.artifact.generate',
+    status: 'success',
+    summary: `Artefato documental gerado a partir do template ${template.name}`,
+    details: {
+      artifactId,
+      templateId: template.id,
+      templateName: template.name,
+      storageKey: `generated:${createdDocument.id}:${artifactId}`,
+      generatedAt: new Date().toISOString(),
+      processId: processRecord.id,
+      metadata: {
+        templateVersion: template.version,
+        pieceType: template.pieceType,
+        fields,
+      },
+    },
+    actor: { source: 'user', email: decoded.email, role: decoded.role, userId: decoded.sub },
+  });
+
   const usedAt = new Date();
   await prisma.template.update({
     where: { id: template.id },
@@ -4703,7 +5489,8 @@ app.post('/templates/:id/generate-document', async (req, res) => {
   });
 
   res.status(201).json({
-    document: buildDocumentPayload(createdDocument),
+    document: await buildDocumentResponse(createdDocument),
+    artifactId,
     templateLastUsedAt: usedAt.toISOString().slice(0, 10),
   });
 });
@@ -5654,7 +6441,17 @@ app.get('/triage', async (req, res) => {
     ],
   });
 
-  res.json(items.map((item: any) => buildTriageItemPayload(item)));
+  const rankedItems = rankUnifiedTriageQueue({
+    items: items.map((item: any) => ({
+      ...item,
+      sourceType: item.capture?.sourceType ?? item.sourceLabel ?? 'triage',
+      priorityScore: deriveBasePriorityScore(item),
+      priorityReasons: [item.suggestedReason],
+    })),
+    now: new Date(),
+  });
+
+  res.json(rankedItems.map((item: any) => buildTriageItemPayload(item)));
 });
 
 app.get('/triage/:id', async (req, res) => {
@@ -5681,9 +6478,22 @@ app.get('/triage/:id', async (req, res) => {
         })
       : [];
 
+  const latestDecision = triageItem.decisions[0] ?? null;
+  const explanation = buildTriageExplanation({
+    triageItem: {
+      ...triageItem,
+      sourceType: triageItem.capture?.sourceType ?? triageItem.sourceLabel ?? 'triage',
+      priorityScore: deriveBasePriorityScore(triageItem),
+      priorityReasons: [triageItem.suggestedReason],
+    },
+    decisionType: latestDecision?.decisionType ?? 'pendente',
+    decisionReason: latestDecision?.decisionReason ?? triageItem.suggestedReason,
+  });
+
   res.json({
     ...buildTriageItemPayload(triageItem),
     decisions: triageItem.decisions.map((decision: any) => buildTriageDecisionPayload(decision)),
+    explanation,
     timeline: timeline.map((event: any) => ({
       id: event.id,
       title: event.title,
@@ -5775,6 +6585,36 @@ app.post('/triage/:id/decision', async (req, res) => {
   let generatedLeadId: number | null = null;
   let generatedOpportunityId: number | null = null;
   const actor = getResponsibleLabel(decoded.email) || decoded.email;
+  const assistedDecision = assistTriageDecision({
+    triageItem: {
+      ...triageItem,
+      sourceType: triageItem.capture?.sourceType ?? triageItem.sourceLabel ?? 'triage',
+      priorityScore: deriveBasePriorityScore(triageItem),
+      priorityReasons: [triageItem.suggestedReason],
+    },
+    decision: {
+      triageItemId: triageItem.id,
+      decisionType,
+      decisionReason: typeof decisionReason === 'string' ? decisionReason.trim() : null,
+      decisionNote: typeof decisionNote === 'string' ? decisionNote.trim() : null,
+      postponeUntil: typeof postponeUntil === 'string' ? postponeUntil : null,
+      assignedQueue: typeof assignedQueue === 'string' ? assignedQueue.trim() : null,
+      deadlineTitle: typeof deadlineTitle === 'string' ? deadlineTitle.trim() : null,
+      dueDate: typeof dueDate === 'string' ? dueDate.trim() : null,
+      deadlinePriority: typeof deadlinePriority === 'string' ? deadlinePriority.trim() : null,
+      taskTitle: typeof taskTitle === 'string' ? taskTitle.trim() : null,
+      taskDueDate: typeof taskDueDate === 'string' ? taskDueDate.trim() : null,
+      taskPriority: typeof taskPriority === 'string' ? taskPriority.trim() : null,
+      taskOwner: typeof taskOwner === 'string' ? taskOwner.trim() : null,
+      taskDescription: typeof taskDescription === 'string' ? taskDescription.trim() : null,
+      idempotencyKey: typeof req.headers['idempotency-key'] === 'string'
+        ? req.headers['idempotency-key']
+        : `triage:${triageItem.id}:${decisionType}:${typeof postponeUntil === 'string' ? postponeUntil : 'na'}`,
+    },
+    actor,
+    now: new Date(),
+    existingDedupeKeys: await collectExistingAutomationDedupeKeys(triageItem),
+  });
   const plannedDecision = planTriageDecision({
     triageItem,
     decision: {
@@ -5935,6 +6775,9 @@ app.post('/triage/:id/decision', async (req, res) => {
   res.json({
     item: buildTriageItemPayload(updated),
     decision: buildTriageDecisionPayload(decision),
+    projection: assistedDecision.projection,
+    explanation: assistedDecision.explanation,
+    automation: assistedDecision.automation,
   });
 });
 

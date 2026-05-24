@@ -90,3 +90,100 @@ test('FinanceWebhookService settles entry automatically when mock provider confi
   assert.equal(second.charge.id, first.charge.id);
   assert.equal(repository.listChargeEventRows().length, 2);
 });
+
+test('FinanceWebhookService trusts canonical webhook input and does not re-normalize provider payload', async () => {
+  const {
+    FinanceBillingService,
+    InMemoryFinanceBillingRepository,
+  } = require('../../../dist/finance/billing/billing.service.js');
+  const { FinanceWebhookService } = require('../../../dist/finance/webhooks/finance-webhook.service.js');
+  const { InMemoryFinanceAuditRepository, FinanceAuditService } = require('../../../dist/finance/shared/audit.js');
+
+  const repository = new InMemoryFinanceBillingRepository({
+    entries: [
+      {
+        id: 91,
+        type: 'receivable',
+        status: 'open',
+        description: 'Parcela Asaas cliente Orion',
+        amountCents: 125000,
+        settledAmountCents: 0,
+        dueDate: new Date('2026-05-30T00:00:00.000Z'),
+        settlementDate: null,
+        paymentMethod: null,
+        currency: 'BRL',
+        clientId: 7,
+        processId: 14,
+        categoryCode: 'HONORARIOS',
+        category: { code: 'HONORARIOS', label: 'Honorarios' },
+        responsibleUserId: 3,
+        notes: null,
+        createdAt: new Date('2026-05-21T10:00:00.000Z'),
+        updatedAt: new Date('2026-05-21T10:00:00.000Z'),
+        charges: [],
+      },
+    ],
+  });
+  const auditService = new FinanceAuditService(new InMemoryFinanceAuditRepository());
+  const paymentProvider = {
+    name: 'asaas',
+    async generateCharge() {
+      throw new Error('not used');
+    },
+    normalizeWebhook() {
+      throw new Error('normalizeWebhook should not be called for canonical input');
+    },
+  };
+
+  const billingService = new FinanceBillingService({
+    repository,
+    paymentProvider: {
+      ...paymentProvider,
+      async generateCharge() {
+        return {
+          provider: 'asaas',
+          externalId: 'pay_91',
+          paymentUrl: 'https://provider.local/pay_91',
+          pixCode: null,
+          boletoBarcode: null,
+          providerPayload: { id: 'pay_91' },
+        };
+      },
+    },
+    auditService,
+    now: () => new Date('2026-05-21T13:00:00.000Z'),
+  });
+
+  const generated = await billingService.generate({
+    entryId: 91,
+    method: 'payment_link',
+    expiresAt: '2026-05-30T23:59:59.000Z',
+    recipientEmail: 'cliente@orion.com',
+    recipientPhone: null,
+    idempotencyKey: 'charge:91:link',
+    actor: { source: 'user', userId: 4, email: 'cobranca@lexora.local', role: 'FIN' },
+  });
+
+  const service = new FinanceWebhookService({
+    repository,
+    paymentProvider,
+    auditService,
+    now: () => new Date('2026-05-22T15:00:00.000Z'),
+  });
+
+  const result = await service.handle({
+    provider: 'asaas',
+    providerEventId: 'evt_asaas_paid_91',
+    chargeExternalId: generated.charge.externalId,
+    status: 'paid',
+    paidAt: '2026-05-22T14:15:00.000Z',
+    amountPaidCents: 125000,
+    idempotencyKey: 'evt_asaas_paid_91',
+    actor: { source: 'api', email: 'webhook@asaas.local', role: 'system' },
+  });
+
+  assert.equal(result.charge.status, 'paid');
+  assert.equal(result.entry.status, 'paid');
+  assert.equal(result.entry.paymentMethod, 'link');
+  assert.equal(repository.listChargeEventRows().at(-1).providerEventId, 'evt_asaas_paid_91');
+});

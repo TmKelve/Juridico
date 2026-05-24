@@ -7,7 +7,7 @@ export const financeReconciliationStatuses = ['pending', 'matched', 'partial', '
 export const financeCollectionChannels = ['email', 'whatsapp', 'sms'] as const;
 export const financeCollectionStatuses = ['scheduled', 'processing', 'sent', 'failed', 'cancelled'] as const;
 export const financeAuditStatuses = ['success', 'warning', 'error'] as const;
-export const financeAuditEntityTypes = ['entry', 'charge', 'reconciliation', 'collection', 'report', 'permission'] as const;
+export const financeAuditEntityTypes = ['entry', 'charge', 'reconciliation', 'collection', 'report', 'permission', 'installment_plan'] as const;
 export const financePermissions = [
   'finance:view',
   'finance:entry',
@@ -48,15 +48,83 @@ export interface FinanceEntryPayload {
   paymentMethod: FinancePaymentMethod | null;
   currency: string;
   clientId: number | null;
+  clientName?: string | null;
+  clientEmail?: string | null;
+  clientPhone?: string | null;
   processId: number | null;
+  processTitle?: string | null;
+  processNumber?: string | null;
   categoryCode: string;
   categoryLabel: string;
   responsibleUserId: number | null;
+  installmentPlanId?: number | null;
+  installmentNumber?: number | null;
+  installmentLabel?: string | null;
   chargeStatus: FinanceChargeStatus | null;
   billingMethod: FinanceChargeMethod | null;
   notes: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface FinanceInstallmentPlanPayload {
+  id: number;
+  contractLabel: string;
+  description: string;
+  clientId: number | null;
+  clientName: string;
+  processId: number | null;
+  processTitle: string | null;
+  processNumber: string | null;
+  categoryCode: string;
+  dayOfMonth: number;
+  status: 'draft' | 'active' | 'completed' | 'defaulted' | 'cancelled';
+  installments: Array<{
+    entryId: number | null;
+    installmentNumber: number;
+    status: 'scheduled' | 'open' | 'paid' | 'overdue' | 'cancelled' | 'partially_paid';
+    amountCents: number;
+    dueDate: string;
+    settlementDate: string | null;
+    chargeStatus: FinanceChargeStatus | null;
+  }>;
+  metrics: {
+    paidCount: number;
+    onTimeCount: number;
+    overdueCount: number;
+    openCount: number;
+    remainingCount: number;
+    overdueAmountCents: number;
+    remainingAmountCents: number;
+  };
+  installmentCount: number;
+  installmentAmountCents: number;
+  totalAmountCents: number;
+  firstDueDate: string;
+  nextDueDate: string | null;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FinanceDelinquencyContactPayload {
+  id: string;
+  clientId: number | null;
+  clientName: string;
+  contactName: string | null;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  processId: number | null;
+  processTitle: string | null;
+  processNumber: string | null;
+  overdueEntriesCount: number;
+  overdueInstallmentsCount: number;
+  overdueAmountCents: number;
+  oldestDaysPastDue: number;
+  nextActionAt: string | null;
+  lastCollectionChannel: 'email' | 'whatsapp' | 'sms' | 'phone' | 'manual' | null;
+  lastCollectionOutcome: 'sent' | 'delivered' | 'paid' | 'failed' | 'no_response' | null;
+  entries: FinanceEntryPayload[];
 }
 
 export interface FinanceChargePayload {

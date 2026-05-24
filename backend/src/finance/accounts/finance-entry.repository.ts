@@ -12,7 +12,11 @@ export interface FinanceEntryRow {
   paymentMethod: string | null;
   currency: string;
   clientId: number | null;
+  clientRecord?: { id: number; name: string; email?: string | null; phone?: string | null } | null;
   processId: number | null;
+  process?: { id: number; title: string; processNumber?: string | null } | null;
+  installmentPlanId?: number | null;
+  installmentNumber?: number | null;
   categoryCode: string;
   category?: { code: string; label: string } | null;
   responsibleUserId: number | null;
@@ -42,6 +46,8 @@ export interface FinanceEntryCreateInput {
   currency: string;
   clientId: number | null;
   processId: number | null;
+  installmentPlanId?: number | null;
+  installmentNumber?: number | null;
   categoryCode: string;
   responsibleUserId: number | null;
   notes: string | null;
@@ -86,7 +92,11 @@ export class InMemoryFinanceEntryRepository implements FinanceEntryRepository {
       paymentMethod: input.paymentMethod,
       currency: input.currency,
       clientId: input.clientId,
+      clientRecord: null,
       processId: input.processId,
+      process: null,
+      installmentPlanId: input.installmentPlanId ?? null,
+      installmentNumber: input.installmentNumber ?? null,
       categoryCode: input.categoryCode,
       category: null,
       responsibleUserId: input.responsibleUserId,
@@ -162,7 +172,11 @@ export class InMemoryFinanceEntryRepository implements FinanceEntryRepository {
       paymentMethod: entry.paymentMethod ?? current?.paymentMethod ?? null,
       currency: entry.currency ?? current?.currency ?? 'BRL',
       clientId: entry.clientId ?? current?.clientId ?? null,
+      clientRecord: entry.clientRecord ?? current?.clientRecord ?? null,
       processId: entry.processId ?? current?.processId ?? null,
+      process: entry.process ?? current?.process ?? null,
+      installmentPlanId: entry.installmentPlanId ?? current?.installmentPlanId ?? null,
+      installmentNumber: entry.installmentNumber ?? current?.installmentNumber ?? null,
       categoryCode: entry.categoryCode ?? current?.categoryCode ?? '',
       category: entry.category ?? current?.category ?? null,
       responsibleUserId: entry.responsibleUserId ?? current?.responsibleUserId ?? null,
@@ -181,7 +195,12 @@ export class InMemoryFinanceEntryRepository implements FinanceEntryRepository {
 export class PrismaFinanceEntryRepository implements FinanceEntryRepository {
   constructor(private readonly prisma: any) {}
 
-  private include = { category: true, charges: { orderBy: { createdAt: 'desc' }, take: 1 } };
+  private include = {
+    category: true,
+    charges: { orderBy: { createdAt: 'desc' }, take: 1 },
+    clientRecord: { select: { id: true, name: true, email: true, phone: true } },
+    process: { select: { id: true, title: true, processNumber: true } },
+  };
 
   async create(input: FinanceEntryCreateInput) {
     return this.prisma.financeEntry.create({ data: input, include: this.include });

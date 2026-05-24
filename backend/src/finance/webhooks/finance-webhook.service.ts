@@ -1,11 +1,12 @@
 import { buildFinanceChargePayload, buildFinanceEntryPayload } from '../../finance.contract';
 import { FinanceAuditService, FinanceDomainError, type FinanceActor } from '../shared';
+import type { FinancePaymentProvider } from '../payment-links/finance-payment-provider';
 
 export class FinanceWebhookService {
   constructor(
     private readonly dependencies: {
       repository: any;
-      paymentProvider: { generateCharge?: unknown };
+      paymentProvider: FinancePaymentProvider;
       auditService: FinanceAuditService;
       now?: () => Date;
     },
@@ -21,43 +22,53 @@ export class FinanceWebhookService {
     idempotencyKey?: string | null;
     actor: FinanceActor;
   }) {
+    const normalized = {
+      provider: input.provider,
+      providerEventId: input.providerEventId,
+      chargeExternalId: input.chargeExternalId,
+      status: input.status,
+      paidAt: input.paidAt,
+      amountPaidCents: input.amountPaidCents,
+      rawPayload: input,
+    };
+
     const charge = this.dependencies.repository.listChargeRows
-      ? this.dependencies.repository.listChargeRows().find((item: any) => item.externalId === input.chargeExternalId)
-      : await this.dependencies.repository.findChargeByExternalId(input.chargeExternalId);
+      ? this.dependencies.repository.listChargeRows().find((item: any) => item.externalId === normalized.chargeExternalId)
+      : await this.dependencies.repository.findChargeByExternalId(normalized.chargeExternalId);
 
     if (!charge) {
       throw new FinanceDomainError('Cobrança não encontrada para o webhook', 404, 'FIN_CHARGE_NOT_FOUND', {
-        chargeExternalId: input.chargeExternalId,
+        chargeExternalId: normalized.chargeExternalId,
       });
     }
 
     const result = await this.dependencies.auditService.runIdempotent({
-      key: input.idempotencyKey ?? input.providerEventId,
+      key: input.idempotencyKey ?? normalized.providerEventId,
       scope: 'finance.billing.webhookUpdate',
       entityType: 'charge',
       entityId: charge.id,
       action: 'webhook_update',
-      payload: input,
+      payload: normalized,
       execute: async () => {
-        charge.status = input.status;
-        charge.paidAt = input.paidAt ? new Date(input.paidAt) : null;
+        charge.status = normalized.status;
+        charge.paidAt = normalized.paidAt ? new Date(normalized.paidAt) : null;
         charge.updatedAt = this.dependencies.now?.() ?? new Date();
         await this.dependencies.repository.appendChargeEvent({
           chargeId: charge.id,
-          providerEventId: input.providerEventId,
+          providerEventId: normalized.providerEventId,
           eventType: 'webhook_update',
-          status: input.status,
-          payload: input,
+          status: normalized.status,
+          payload: normalized.rawPayload,
           occurredAt: this.dependencies.now?.() ?? new Date(),
         });
 
         const entry = await this.dependencies.repository.findEntryById(charge.entryId);
-        const updatedEntry = input.status === 'paid'
+        const updatedEntry = normalized.status === 'paid'
           ? await this.dependencies.repository.updateEntry(charge.entryId, {
             status: 'paid',
             settlementDate: charge.paidAt,
             paymentMethod: charge.method === 'payment_link' ? 'link' : charge.method,
-            settledAmountCents: input.amountPaidCents ?? entry.amountCents,
+            settledAmountCents: normalized.amountPaidCents ?? entry.amountCents,
           })
           : entry;
 
@@ -75,9 +86,9 @@ export class FinanceWebhookService {
       action: 'charge_webhook_processed',
       status: 'success',
       summary: `Webhook financeiro processado para cobrança #${charge.id}`,
-      details: { chargeExternalId: input.chargeExternalId, status: input.status },
+      details: { chargeExternalId: normalized.chargeExternalId, status: normalized.status, provider: normalized.provider },
       actor: input.actor,
-      idempotencyKey: input.idempotencyKey ?? input.providerEventId,
+      idempotencyKey: input.idempotencyKey ?? normalized.providerEventId,
     });
 
     return {

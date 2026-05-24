@@ -1,6 +1,6 @@
 import { buildFinanceChargePayload, buildFinanceEntryPayload } from '../../finance.contract';
 import { FinanceAuditService, FinanceDomainError, type FinanceActor, type FinanceChargeMethod } from '../shared';
-import { MockFinancePaymentProvider } from '../payment-links/mock-payment-provider';
+import type { FinancePaymentProvider } from '../payment-links/finance-payment-provider';
 
 export interface FinanceBillingRepository {
   findEntryById(entryId: number): Promise<any | null>;
@@ -108,7 +108,7 @@ export class FinanceBillingService {
   constructor(
     private readonly dependencies: {
       repository: FinanceBillingRepository;
-      paymentProvider: MockFinancePaymentProvider;
+      paymentProvider: FinancePaymentProvider;
       auditService: FinanceAuditService;
       now?: () => Date;
     },
@@ -140,7 +140,7 @@ export class FinanceBillingService {
       payload: input,
       responseCode: 201,
       execute: async () => {
-        const chargeDraft = this.dependencies.paymentProvider.generateCharge({
+        const chargeDraft = await this.dependencies.paymentProvider.generateCharge({
           entryId: entry.id,
           method: input.method,
           amountCents: entry.amountCents - (entry.settledAmountCents ?? 0),
@@ -148,6 +148,11 @@ export class FinanceBillingService {
           expiresAt: input.expiresAt,
           recipientEmail: input.recipientEmail,
           recipientPhone: input.recipientPhone,
+          metadata: {
+            description: entry.description,
+            clientId: entry.clientId ?? null,
+            processId: entry.processId ?? null,
+          },
         });
 
         const charge = await this.dependencies.repository.createCharge({

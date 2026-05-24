@@ -1,0 +1,205 @@
+.client-portal-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.client-portal-panel--loading,
+.client-portal-panel--error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+}
+
+.client-portal-panel--error {
+  background: var(--error-100);
+  border-color: var(--error-300);
+  color: var(--error-700);
+}
+
+.client-portal-hero,
+.client-portal-section,
+.client-portal-summary-card {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+}
+
+.client-portal-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand-100) 65%, white) 0%, var(--bg-surface) 62%),
+    var(--bg-surface);
+}
+
+.client-portal-eyebrow {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--brand-600);
+}
+
+.client-portal-hero h4,
+.client-portal-section h5 {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.client-portal-copy,
+.client-portal-section-head p,
+.client-portal-list-item p,
+.client-portal-empty,
+.client-portal-timeline-item p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.client-portal-summary-grid,
+.client-portal-section-grid {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.client-portal-summary-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.client-portal-summary-card {
+  padding: var(--space-3) var(--space-4);
+}
+
+.client-portal-summary-card span {
+  display: block;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.client-portal-summary-card strong {
+  display: block;
+  margin-top: var(--space-2);
+  font-size: 1.75rem;
+}
+
+.client-portal-section-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.client-portal-section {
+  padding: var(--space-4);
+}
+
+.client-portal-section--deadlines {
+  background: color-mix(in srgb, var(--warning-100) 45%, white);
+}
+
+.client-portal-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.client-portal-list,
+.client-portal-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.client-portal-list-item,
+.client-portal-timeline-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+}
+
+.client-portal-list-item strong,
+.client-portal-timeline-item strong {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.client-portal-list-item span,
+.client-portal-link {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+.client-portal-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.client-portal-badge--warning {
+  background: var(--warning-100);
+  color: var(--warning-700);
+}
+
+.client-portal-timeline-item {
+  justify-content: flex-start;
+}
+
+.client-portal-timeline-marker {
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: var(--brand-500);
+  flex: none;
+}
+
+.client-portal-timeline-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: 2px;
+}
+
+.client-portal-link {
+  margin-top: var(--space-1);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.client-portal-link:hover {
+  color: var(--brand-700);
+  text-decoration: underline;
+}
+
+@media (max-width: 960px) {
+  .client-portal-summary-grid,
+  .client-portal-section-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .client-portal-hero,
+  .client-portal-list-item {
+    flex-direction: column;
+  }
+
+  .client-portal-inline-actions {
+    justify-content: flex-start;
+  }
+}

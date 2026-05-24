@@ -158,9 +158,17 @@
 }
 
 .finance-panel__header h3,
+.finance-panel__subheader h4,
 .finance-mini-report h4 {
   margin: 0 0 6px;
   color: #0f172a;
+}
+
+.finance-panel__subheader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .finance-table-wrap {
@@ -184,6 +192,13 @@
 .finance-audit-item strong {
   display: block;
   color: #0f172a;
+}
+
+.finance-table td span {
+  display: block;
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 13px;
 }
 
 .finance-status {
@@ -212,9 +227,23 @@
 
 .finance-status--warning,
 .finance-status--partial,
-.finance-status--partially_paid {
+.finance-status--partially_paid,
+.finance-status--draft,
+.finance-status--scheduled,
+.finance-status--active {
   background: rgba(245, 158, 11, 0.16);
   color: #b45309;
+}
+
+.finance-status--completed {
+  background: rgba(16, 185, 129, 0.16);
+  color: #047857;
+}
+
+.finance-status--defaulted,
+.finance-status--cancelled {
+  background: rgba(239, 68, 68, 0.16);
+  color: #b91c1c;
 }
 
 .finance-actions-inline {
@@ -231,6 +260,14 @@
 .finance-aging-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.finance-section-stack,
+.finance-plan-detail,
+.finance-plan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .finance-aging-card {
@@ -269,6 +306,12 @@
   gap: 12px;
 }
 
+.finance-form__inline {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .finance-form label {
   display: flex;
   flex-direction: column;
@@ -298,6 +341,135 @@
   display: flex;
   justify-content: space-between;
   gap: 12px;
+}
+
+.finance-inline-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border-radius: 18px;
+  padding: 16px;
+  background: rgba(241, 245, 249, 0.88);
+}
+
+.finance-inline-note p {
+  margin: 0;
+  color: #475569;
+}
+
+.finance-delinquency-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.finance-delinquency-card,
+.finance-plan-card {
+  width: 100%;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 22px;
+  padding: 18px;
+  background: rgba(248, 250, 252, 0.94);
+  text-align: left;
+}
+
+.finance-delinquency-card__header,
+.finance-plan-card__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.finance-delinquency-card__header p,
+.finance-plan-card__header p {
+  margin: 4px 0 0;
+  color: #64748b;
+}
+
+.finance-delinquency-card__meta,
+.finance-plan-card__meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.finance-delinquency-card__meta dt,
+.finance-plan-card__meta dt {
+  margin-bottom: 4px;
+  color: #64748b;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.finance-delinquency-card__meta dd,
+.finance-plan-card__meta dd {
+  margin: 0;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.finance-delinquency-card__footer,
+.finance-plan-card__kpis,
+.finance-plan-detail__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.finance-delinquency-card__footer span,
+.finance-plan-card__kpis span,
+.finance-plan-detail__meta span {
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(226, 232, 240, 0.72);
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.finance-plan-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.finance-plan-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.finance-plan-list__item {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.finance-plan-list__item.is-active .finance-plan-card {
+  border-color: rgba(14, 165, 233, 0.55);
+  box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.12);
+}
+
+.finance-plan-detail {
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 24px;
+  padding: 18px;
+  background: rgba(248, 250, 252, 0.94);
+}
+
+.finance-table--compact th,
+.finance-table--compact td {
+  padding: 12px 10px;
+}
+
+.finance-toolbar__process {
+  min-width: 280px;
 }
 
 .finance-empty,
@@ -331,18 +503,33 @@
   }
 
   .finance-metrics-grid,
-  .finance-aging-grid {
+  .finance-aging-grid,
+  .finance-delinquency-grid,
+  .finance-plan-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .finance-plan-layout {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
 @media (max-width: 720px) {
   .finance-metrics-grid,
-  .finance-aging-grid {
+  .finance-aging-grid,
+  .finance-delinquency-grid,
+  .finance-plan-summary,
+  .finance-delinquency-card__meta,
+  .finance-plan-card__meta,
+  .finance-form__inline {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .finance-tabs {
     overflow-x: auto;
+  }
+
+  .finance-toolbar__process {
+    min-width: 100%;
   }
 }

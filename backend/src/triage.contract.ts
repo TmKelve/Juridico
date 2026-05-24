@@ -6,6 +6,14 @@ type RawTriageItem = {
   suggestedReason: string;
   aiConfidenceBand?: string | null;
   aiScoreRaw?: number | null;
+  priorityScore?: number | null;
+  priorityLabel?: string | null;
+  priorityReasons?: string[] | null;
+  queueRank?: number | null;
+  agingHours?: number | null;
+  slaTargetAt?: Date | string | null;
+  breached?: boolean | null;
+  operationalBucket?: string | null;
   postponeUntil?: Date | null;
   assignedQueue?: string | null;
   handledBy?: string | null;
@@ -70,6 +78,13 @@ export function buildTriageDecisionPayload(decision: RawTriageDecision) {
 }
 
 export function buildTriageItemPayload(item: RawTriageItem) {
+  const resolvedSlaTargetAt =
+    item.slaTargetAt instanceof Date
+      ? item.slaTargetAt.toISOString()
+      : typeof item.slaTargetAt === 'string' && item.slaTargetAt.trim()
+        ? new Date(item.slaTargetAt).toISOString()
+        : null;
+
   return {
     id: item.id,
     queueType: item.queueType,
@@ -78,6 +93,14 @@ export function buildTriageItemPayload(item: RawTriageItem) {
     suggestedReason: item.suggestedReason,
     aiConfidenceBand: item.aiConfidenceBand ?? 'media',
     aiScoreRaw: item.aiScoreRaw ?? null,
+    priorityScore: item.priorityScore ?? null,
+    priorityLabel: item.priorityLabel ?? null,
+    priorityReasons: item.priorityReasons ?? [],
+    queueRank: item.queueRank ?? null,
+    agingHours: item.agingHours ?? null,
+    slaTargetAt: resolvedSlaTargetAt,
+    breached: Boolean(item.breached),
+    operationalBucket: item.operationalBucket ?? null,
     postponeUntil: item.postponeUntil ? item.postponeUntil.toISOString() : null,
     assignedQueue: item.assignedQueue ?? 'fila_central',
     handledBy: item.handledBy ?? null,

@@ -46,12 +46,20 @@ export interface ApiFinanceEntry {
   paymentMethod: 'manual' | 'pix' | 'boleto' | 'link' | 'bank_transfer' | 'cash' | null;
   currency: string;
   clientId: number | null;
+  clientName?: string | null;
+  clientEmail?: string | null;
+  clientPhone?: string | null;
   processId: number | null;
+  processTitle?: string | null;
+  processNumber?: string | null;
   categoryCode: string;
   categoryLabel: string;
   responsibleUserId: number | null;
   chargeStatus: 'draft' | 'pending' | 'paid' | 'failed' | 'cancelled' | 'expired' | null;
   billingMethod: 'boleto' | 'pix' | 'payment_link' | null;
+  installmentPlanId?: number | null;
+  installmentNumber?: number | null;
+  installmentTotal?: number | null;
   notes: string;
   createdAt: string;
   updatedAt: string;
@@ -77,7 +85,7 @@ export interface ApiFinanceCharge {
 export interface ApiFinanceAuditEvent {
   id: string;
   scope: string;
-  entityType: 'entry' | 'charge' | 'reconciliation' | 'collection' | 'report' | 'permission';
+  entityType: 'entry' | 'charge' | 'reconciliation' | 'collection' | 'report' | 'permission' | 'installment_plan';
   entityId: string | null;
   action: string;
   status: 'success' | 'warning' | 'error';
@@ -122,6 +130,67 @@ export interface ApiFinanceCashflowReport {
     outflowCents: number;
     netCents: number;
   }>;
+}
+
+export interface ApiFinanceDelinquencyContact {
+  id: string;
+  clientId: number | null;
+  clientName: string;
+  contactName: string | null;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  processId: number | null;
+  processTitle: string | null;
+  processNumber: string | null;
+  overdueEntriesCount: number;
+  overdueInstallmentsCount: number;
+  overdueAmountCents: number;
+  oldestDaysPastDue: number;
+  nextActionAt: string | null;
+  lastCollectionChannel: 'email' | 'whatsapp' | 'sms' | 'phone' | 'manual' | null;
+  lastCollectionOutcome: 'sent' | 'delivered' | 'paid' | 'failed' | 'no_response' | null;
+  entries: ApiFinanceEntry[];
+}
+
+export interface ApiFinanceInstallment {
+  entryId: number | null;
+  installmentNumber: number;
+  status: 'scheduled' | 'open' | 'paid' | 'overdue' | 'cancelled' | 'partially_paid';
+  amountCents: number;
+  dueDate: string;
+  settlementDate: string | null;
+  chargeStatus: ApiFinanceEntry['chargeStatus'];
+}
+
+export interface ApiFinanceInstallmentPlan {
+  id: number;
+  contractLabel: string;
+  description: string;
+  clientId: number | null;
+  clientName: string;
+  processId: number | null;
+  processTitle: string | null;
+  processNumber: string | null;
+  categoryCode: string;
+  dayOfMonth: number;
+  firstDueDate: string;
+  nextDueDate: string | null;
+  installmentCount: number;
+  installmentAmountCents: number;
+  totalAmountCents: number;
+  status: 'draft' | 'active' | 'completed' | 'defaulted' | 'cancelled';
+  metrics: {
+    paidCount: number;
+    onTimeCount: number;
+    overdueCount: number;
+    openCount: number;
+    remainingCount: number;
+    overdueAmountCents: number;
+    remainingAmountCents: number;
+  };
+  installments: ApiFinanceInstallment[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ApiProcess {
@@ -174,6 +243,98 @@ export interface ApiClient {
     pendingAttendance: boolean;
     pendingItems: number;
   };
+}
+
+export interface ApiClientPortalDocumentCard {
+  documentId: number;
+  processId: number;
+  title: string;
+  status: string;
+  category: string;
+  uploadedAt: string;
+}
+
+export interface ApiClientPortalPublicationCard {
+  publicationId: number;
+  processId: number;
+  title: string;
+  status: string;
+  publishedAt: string;
+  requiresAction: boolean;
+}
+
+export interface ApiClientPortalDeadlineCard {
+  deadlineId: number;
+  processId: number;
+  title: string;
+  status: string;
+  dueDate: string;
+  priority: string;
+}
+
+export interface ApiClientPortalTimelineItem {
+  entityType: 'document' | 'publication' | 'deadline';
+  entityId: number;
+  processId: number;
+  title: string;
+  status: string;
+  occurredAt: string;
+  highlight: string;
+}
+
+export interface ApiClientPortal {
+  clientId: number;
+  summary: {
+    activeProcesses: number;
+    pendingDocuments: number;
+    recentPublications: number;
+  };
+  cards: {
+    client: {
+      id: number;
+      name: string;
+      status: string;
+    };
+    documents: ApiClientPortalDocumentCard[];
+    publications: ApiClientPortalPublicationCard[];
+    deadlines: ApiClientPortalDeadlineCard[];
+  };
+  timeline: ApiClientPortalTimelineItem[];
+}
+
+export interface ApiClientConsent {
+  clientId: number;
+  consentVersion: number;
+  preferences: {
+    email: boolean;
+    whatsapp: boolean;
+    portal: boolean;
+  };
+  legalBasis: 'consentimento' | 'execucao_contrato' | 'legitimo_interesse';
+  capturedAt?: string;
+  capturedBy?: string;
+  updatedAt: string;
+}
+
+export interface ApiClientCommunicationHistoryItem {
+  communicationId: string;
+  channel: 'email' | 'whatsapp' | 'portal';
+  status: 'queued' | 'sent' | 'delivered' | 'failed';
+  sentAt: string | null;
+  deliveredAt: string | null;
+  summary: string;
+}
+
+export interface ApiClientCommunicationHistory {
+  clientId: number;
+  items: ApiClientCommunicationHistoryItem[];
+}
+
+export interface ApiClientCommunicationSendResult {
+  communicationId: string;
+  deliveryStatus: 'queued' | 'sent' | 'delivered' | 'failed';
+  retryCount: number;
+  idempotent: boolean;
 }
 
 export interface ApiAttendance {
@@ -284,6 +445,7 @@ export interface ApiDocument {
   processId: number;
   processLabel: string;
   processTitle: string;
+  clientId: number | null;
   client: string;
   category: 'Peticao' | 'Contrato' | 'Prova' | 'Financeiro' | 'Checklist';
   status: 'pendente' | 'aguardando_validacao' | 'validado' | 'rejeitado';
@@ -297,6 +459,16 @@ export interface ApiDocument {
   pendingForAdvance: boolean;
   mimeType: 'application/pdf' | 'image/png' | 'image/jpeg' | 'application/octet-stream';
   previewUrl?: string;
+  metadata?: Record<string, unknown>;
+  storage?: Record<string, unknown>;
+  approval?: {
+    decision: string | null;
+    reason: string | null;
+    decidedAt: string | null;
+    checklist?: unknown;
+  } | null;
+  links?: Array<{ entityType: string; entityId: number }>;
+  artifacts?: Array<Record<string, unknown>>;
 }
 
 export interface ApiPublication {
@@ -392,6 +564,14 @@ export interface ApiTriageItem {
   sourceLabel: string;
   createdAt: string;
   updatedAt: string;
+  priorityScore: number | null;
+  priorityLabel: 'critica' | 'alta' | 'media' | 'baixa' | null;
+  priorityReasons: string[];
+  queueRank: number | null;
+  agingHours: number | null;
+  slaTargetAt: string | null;
+  breached: boolean;
+  operationalBucket: string | null;
   processId: number | null;
   processLabel: string;
   processTitle: string;
@@ -421,6 +601,13 @@ export interface ApiTriageItem {
     riskLevel: string;
     requiresAction: boolean;
   }>;
+  explanation?: {
+    summary: string;
+    appliedRules: string[];
+    matchedSignals: string[];
+    confidenceBand: 'alta' | 'media' | 'baixa';
+    priorityReasons: string[];
+  };
 }
 
 export interface ApiTriageJob {
@@ -631,6 +818,70 @@ export const api = {
   getClient: (id: number) =>
     apiClient<ApiClient>(`/clients/${id}`),
 
+  getClientPortal: (id: number, options?: {
+    includeDocuments?: boolean;
+    includePublications?: boolean;
+    includeDeadlines?: boolean;
+  }) => {
+    const params = new URLSearchParams();
+    if (options?.includeDocuments === false) params.set('includeDocuments', '0');
+    if (options?.includePublications === false) params.set('includePublications', '0');
+    if (options?.includeDeadlines === false) params.set('includeDeadlines', '0');
+    const query = params.toString();
+    return apiClient<ApiClientPortal>(query ? `/clients/${id}/portal?${query}` : `/clients/${id}/portal`);
+  },
+
+  getClientConsent: (id: number) =>
+    apiClient<ApiClientConsent>(`/clients/${id}/consent`),
+
+  updateClientConsent: (id: number, data: {
+    preferences: {
+      email: boolean;
+      whatsapp: boolean;
+      portal: boolean;
+    };
+    legalBasis: ApiClientConsent['legalBasis'];
+    capturedAt?: string;
+    capturedBy?: string;
+  }) =>
+    apiClient<ApiClientConsent>(`/clients/${id}/consent`, {
+      method: 'PUT',
+      body: data,
+    }),
+
+  getClientCommunications: (id: number, filters?: {
+    channel?: 'email' | 'whatsapp' | 'portal' | 'all';
+    limit?: number;
+  }) => {
+    const params = new URLSearchParams();
+    if (filters?.channel) params.set('channel', filters.channel);
+    if (typeof filters?.limit === 'number') params.set('limit', String(filters.limit));
+    const query = params.toString();
+    return apiClient<ApiClientCommunicationHistory>(query ? `/clients/${id}/communications?${query}` : `/clients/${id}/communications`);
+  },
+
+  sendClientCommunication: (id: number, data: {
+    channel: 'email' | 'whatsapp' | 'portal';
+    subject?: string | null;
+    message: string;
+    templateCode?: string | null;
+    contextEntityType: 'document' | 'triage' | 'process' | 'attendance' | 'crm';
+    contextEntityId?: number | string | null;
+    idempotencyKey?: string | null;
+  }) =>
+    apiClient<ApiClientCommunicationSendResult>(`/clients/${id}/communications`, {
+      method: 'POST',
+      body: {
+        channel: data.channel,
+        subject: data.subject ?? null,
+        message: data.message,
+        templateCode: data.templateCode ?? null,
+        contextEntityType: data.contextEntityType,
+        contextEntityId: data.contextEntityId ?? null,
+      },
+      headers: data.idempotencyKey ? { 'Idempotency-Key': data.idempotencyKey } : undefined,
+    }),
+
   createClient: (data: {
     name: string;
     type: 'PF' | 'PJ';
@@ -764,6 +1015,57 @@ export const api = {
     return apiClient<ApiFinanceAuditEvent[]>(query ? `/finance/audit?${query}` : '/finance/audit');
   },
 
+  getFinanceDelinquencyContacts: (filters?: {
+    referenceDate?: string;
+    status?: 'open' | 'overdue' | 'all';
+    clientId?: number;
+    processId?: number;
+  }) => {
+    const params = new URLSearchParams();
+    if (filters?.referenceDate) params.set('referenceDate', filters.referenceDate);
+    if (filters?.status) params.set('status', filters.status);
+    if (typeof filters?.clientId === 'number') params.set('clientId', String(filters.clientId));
+    if (typeof filters?.processId === 'number') params.set('processId', String(filters.processId));
+    const query = params.toString();
+    return apiClient<ApiFinanceDelinquencyContact[]>(query ? `/finance/delinquency/contacts?${query}` : '/finance/delinquency/contacts');
+  },
+
+  getFinanceInstallmentPlans: (filters?: {
+    status?: ApiFinanceInstallmentPlan['status'];
+    clientId?: number;
+    processId?: number;
+  }) => {
+    const params = new URLSearchParams();
+    if (filters?.status) params.set('status', filters.status);
+    if (typeof filters?.clientId === 'number') params.set('clientId', String(filters.clientId));
+    if (typeof filters?.processId === 'number') params.set('processId', String(filters.processId));
+    const query = params.toString();
+    return apiClient<ApiFinanceInstallmentPlan[]>(query ? `/finance/installment-plans?${query}` : '/finance/installment-plans');
+  },
+
+  createFinanceInstallmentPlan: (data: {
+    description: string;
+    contractLabel: string;
+    clientId: number;
+    processId?: number | null;
+    categoryCode: string;
+    firstDueDate: string;
+    dayOfMonth: number;
+    installmentCount: number;
+    installmentAmountCents: number;
+    totalAmountCents?: number;
+    responsibleUserId?: number | null;
+    notes?: string | null;
+    idempotencyKey?: string | null;
+  }) =>
+    apiClient<{ plan: ApiFinanceInstallmentPlan }>('/finance/installment-plans', {
+      method: 'POST',
+      body: {
+        ...data,
+        dueDay: data.dayOfMonth,
+      },
+    }),
+
   getProcesses: () =>
     apiClient<ApiProcess[]>('/processes'),
 
@@ -867,6 +1169,13 @@ export const api = {
     pendingForAdvance?: boolean;
     mimeType?: 'application/pdf' | 'image/png' | 'image/jpeg' | 'application/octet-stream';
     previewUrl?: string;
+    metadata?: Record<string, unknown>;
+    file?: {
+      fileName: string;
+      contentBase64: string;
+      mimeType?: string;
+      sizeInBytes?: number;
+    };
   }) =>
     apiClient<ApiDocument>('/documents', { method: 'POST', body: data }),
 
@@ -882,6 +1191,8 @@ export const api = {
     mimeType: 'application/pdf' | 'image/png' | 'image/jpeg' | 'application/octet-stream';
     previewUrl: string;
     createNewVersion: boolean;
+    metadata: Record<string, unknown>;
+    approvalReason: string;
   }>) =>
     apiClient<ApiDocument>(`/documents/${id}`, { method: 'PUT', body: data }),
 

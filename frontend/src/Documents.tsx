@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useMemo, useState } from 'react';
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -95,6 +95,7 @@ export function Documents({ user }: DocumentsProps) {
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
 
   const [checklist, setChecklist] = useState<ChecklistItem[]>([
     { id: 'chk-1', title: 'Documento de identidade', required: true, received: false, linkedDocumentId: null },
@@ -171,12 +172,90 @@ export function Documents({ user }: DocumentsProps) {
     setSuccess('Filtro salvo.');
   }
 
+  function resolveUploadProcessId() {
+    if (selectedDocument?.processId) return selectedDocument.processId;
+    if (filters.process) return Number(filters.process);
+    if (pagedDocuments.length === 1) return pagedDocuments[0].processId;
+    return null;
+  }
+
   function uploadDocumentMock() {
-    setSuccess('Upload iniciado. Documento em processamento.');
+    const processId = resolveUploadProcessId();
+    if (!processId) {
+      setError('Selecione um documento, um processo no filtro ou deixe apenas um processo no recorte antes do upload.');
+      return;
+    }
+
+    uploadInputRef.current?.click();
+  }
+
+  async function handleUploadFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    const processId = resolveUploadProcessId();
+    if (!processId) {
+      setError('Não foi possível identificar o processo do upload.');
+      return;
+    }
+
+    const contentBase64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = typeof reader.result === 'string' ? reader.result : '';
+        resolve(result.includes(',') ? result.split(',')[1] ?? '' : result);
+      };
+      reader.onerror = () => reject(reader.error ?? new Error('Falha ao ler arquivo.'));
+      reader.readAsDataURL(file);
+    });
+
+    const res = await api.createDocument({
+      title: file.name,
+      processId,
+      category: 'Checklist',
+      status: 'pendente',
+      origin: 'upload',
+      notes: `Upload real via painel documental em ${new Date().toLocaleString('pt-BR')}.`,
+      mimeType: (file.type as DocumentItem['mimeType']) || 'application/octet-stream',
+      metadata: {
+        fileName: file.name,
+        documentType: 'procuracao',
+        proceduralType: 'default',
+        tags: ['upload-real', 'epic-g'],
+      },
+      file: {
+        fileName: file.name,
+        contentBase64,
+        mimeType: file.type || 'application/octet-stream',
+        sizeInBytes: file.size,
+      },
+    });
+
+    if (res.status !== 201 || !res.data) {
+      setError(res.error || 'Nao foi possivel concluir o upload.');
+      return;
+    }
+
+    setDocuments((prev) => [res.data!, ...prev]);
+    setSelectedDocument(res.data);
+    setSuccess('Upload concluído com persistência real.');
+    trackEvent('documents_uploaded', { processId, mimeType: file.type || 'application/octet-stream' });
   }
 
   function requestDocumentMock() {
-    setSuccess('Solicitacao de documento enviada ao cliente.');
+    if (!selectedDocument) {
+      setSuccess('Abra um documento para encaminhar a solicitação de reenvio.');
+      return;
+    }
+
+    if (selectedDocument.clientId) {
+      navigate(`/clientes?clientId=${selectedDocument.clientId}`);
+      setSuccess('Abrindo o cliente vinculado para registrar a comunicação.');
+      return;
+    }
+
+    setSuccess('Documento sem clientId no payload atual. Use a carteira de clientes para registrar a solicitação.');
   }
 
   function exportCsv(items: DocumentItem[]) {
@@ -419,6 +498,13 @@ export function Documents({ user }: DocumentsProps) {
 
   return (
     <section className="documents-page" aria-label="Documentos">
+      <input
+        ref={uploadInputRef}
+        type="file"
+        hidden
+        onChange={handleUploadFile}
+        aria-hidden="true"
+      />
       <header className="documents-header-card">
         <div className="documents-header-main">
           <p className="documents-eyebrow">Gestao documental</p>
@@ -929,6 +1015,8 @@ export function Documents({ user }: DocumentsProps) {
                 <div><dt>Origem</dt><dd>{selectedDocument.origin}</dd></div>
                 <div><dt>Data de upload</dt><dd>{formatDate(selectedDocument.uploadedAt)}</dd></div>
                 <div><dt>Observacoes</dt><dd>{selectedDocument.notes}</dd></div>
+                <div><dt>Aprovacao</dt><dd>{selectedDocument.approval?.decision ? `${selectedDocument.approval.decision} · ${selectedDocument.approval.reason || 'sem motivo'}` : 'Sem decisão formal'}</dd></div>
+                <div><dt>Vinculos</dt><dd>{selectedDocument.links?.length ? selectedDocument.links.map((link) => `${link.entityType} #${link.entityId}`).join(', ') : 'Sem vínculos adicionais'}</dd></div>
               </dl>
 
               <div className="documents-drawer-actions">

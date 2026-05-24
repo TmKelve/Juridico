@@ -9,6 +9,8 @@
   "entities": [
     "financeEntry",
     "financeCharge",
+    "financeInstallmentPlan",
+    "financeDelinquencyContact",
     "financeReconciliationRun",
     "financeCollectionSchedule",
     "financeAuditEvent"
@@ -104,7 +106,7 @@
     },
     "finance.billing.webhookUpdate": {
       "input": {
-        "provider": "mock",
+        "provider": "mock|asaas|provider_name",
         "providerEventId": "string",
         "chargeExternalId": "string",
         "status": "pending|paid|failed|cancelled|expired",
@@ -120,6 +122,9 @@
       "errors": [
         "FIN_CHARGE_NOT_FOUND",
         "FIN_WEBHOOK_INVALID",
+        "FIN_PROVIDER_CONFIG_INVALID",
+        "FIN_PROVIDER_INVALID_RESPONSE",
+        "FIN_PROVIDER_ERROR",
         "IDEMPOTENCY_CONFLICT"
       ],
       "idempotency": {
@@ -186,6 +191,54 @@
         ]
       }
     },
+    "finance.installmentPlan.create": {
+      "input": {
+        "description": "string",
+        "clientId": "number|null",
+        "processId": "number|null",
+        "categoryCode": "string",
+        "installmentCount": "number",
+        "installmentAmountCents": "number",
+        "dueDay": "number(1-31)",
+        "firstDueDate": "YYYY-MM-DD",
+        "responsibleUserId": "number|null",
+        "notes": "string|null",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "plan": "financeInstallmentPlan",
+        "entries": "financeEntry[]",
+        "auditEvent": "financeAuditEvent",
+        "idempotency": "created|replayed"
+      },
+      "errors": [
+        "FIN_INSTALLMENT_PLAN_INVALID",
+        "FIN_CATEGORY_NOT_FOUND",
+        "FIN_CLIENT_NOT_FOUND",
+        "FIN_PROCESS_NOT_FOUND",
+        "IDEMPOTENCY_CONFLICT"
+      ],
+      "idempotency": {
+        "scope": "finance.installmentPlan.create",
+        "dedupeBy": [
+          "scope",
+          "idempotencyKey"
+        ]
+      }
+    },
+    "finance.delinquency.contacts": {
+      "input": {
+        "status": "implicit overdue receivables",
+        "groupBy": "clientId+processId"
+      },
+      "output": {
+        "items": "financeDelinquencyContact[]"
+      },
+      "errors": [],
+      "idempotency": {
+        "scope": "read-only"
+      }
+    },
     "finance.report.cashflow": {
       "input": {
         "from": "YYYY-MM-DD",
@@ -223,7 +276,7 @@
     "finance.audit.event": {
       "input": {
         "scope": "string",
-        "entityType": "entry|charge|reconciliation|collection|report|permission",
+        "entityType": "entry|charge|reconciliation|collection|report|permission|installment_plan",
         "entityId": "number|string|null",
         "action": "string",
         "status": "success|warning|error",
@@ -253,8 +306,12 @@
     "FIN_CHARGE_DUPLICATE",
     "FIN_CHARGE_NOT_FOUND",
     "FIN_WEBHOOK_INVALID",
+    "FIN_PROVIDER_CONFIG_INVALID",
+    "FIN_PROVIDER_INVALID_RESPONSE",
+    "FIN_PROVIDER_ERROR",
     "FIN_RECONCILIATION_INVALID",
     "FIN_COLLECTION_INVALID",
+    "FIN_INSTALLMENT_PLAN_INVALID",
     "FIN_REPORT_INVALID_RANGE",
     "FIN_AUDIT_INVALID",
     "IDEMPOTENCY_CONFLICT"

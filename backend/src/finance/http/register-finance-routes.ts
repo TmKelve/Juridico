@@ -5,9 +5,12 @@ import { InMemoryFinanceEntryRepository, PrismaFinanceEntryRepository } from '..
 import { FinanceBillingService, InMemoryFinanceBillingRepository, PrismaFinanceBillingRepository } from '../billing/billing.service';
 import { InMemoryFinanceCategoryRepository, PrismaFinanceCategoryRepository } from '../categories/finance-category.repository';
 import { FinanceCollectionsService, InMemoryFinanceCollectionsRepository, PrismaFinanceCollectionsRepository } from '../collections/finance-collections.service';
+import { FinanceDelinquencyContactsService } from '../delinquency/delinquency-contacts.service';
 import { FinanceAgingReportService } from '../reports/aging-report.service';
 import { FinanceCashflowReportService } from '../reports/cashflow-report.service';
+import { FinanceInstallmentPlanService, InMemoryFinanceInstallmentPlanRepository, PrismaFinanceInstallmentPlanRepository } from '../installments/finance-installment-plan.service';
 import { FinanceEntryService } from '../ledger/finance-entry.service';
+import { createFinancePaymentProviderFromEnv } from '../payment-links/http-payment-provider';
 import { MockFinancePaymentProvider } from '../payment-links/mock-payment-provider';
 import { FinanceReconciliationService, InMemoryFinanceReconciliationRepository, PrismaFinanceReconciliationRepository } from '../reconciliation/reconciliation.service';
 import { FinanceAuditService, InMemoryFinanceAuditRepository, PrismaFinanceAuditRepository } from '../shared/audit';
@@ -32,8 +35,9 @@ export function registerFinanceRoutes(input: {
   const categoryRepository = new PrismaFinanceCategoryRepository(input.prisma);
   const billingRepository = new PrismaFinanceBillingRepository(input.prisma);
   const collectionsRepository = new PrismaFinanceCollectionsRepository(input.prisma);
+  const installmentPlanRepository = new PrismaFinanceInstallmentPlanRepository(input.prisma);
   const reconciliationRepository = new PrismaFinanceReconciliationRepository(input.prisma);
-  const paymentProvider = new MockFinancePaymentProvider();
+  const paymentProvider = createFinancePaymentProviderFromEnv();
   const entryService = new FinanceEntryService({ repository: entryRepository, categories: categoryRepository, auditService });
   const billingService = new FinanceBillingService({ repository: billingRepository, paymentProvider, auditService });
   const webhookService = new FinanceWebhookService({ repository: billingRepository, paymentProvider, auditService });
@@ -41,6 +45,13 @@ export function registerFinanceRoutes(input: {
   const reconciliationService = new FinanceReconciliationService({ repository: reconciliationRepository as any, auditService });
   const cashflowService = new FinanceCashflowReportService();
   const agingService = new FinanceAgingReportService();
+  const delinquencyContactsService = new FinanceDelinquencyContactsService();
+  const installmentPlanService = new FinanceInstallmentPlanService({
+    plans: installmentPlanRepository,
+    entries: entryRepository,
+    categories: categoryRepository,
+    auditService,
+  });
   const fallback = createFallbackFinanceRuntime();
 
   void seedFinanceCategories(input.prisma);
@@ -225,6 +236,56 @@ export function registerFinanceRoutes(input: {
     }
   });
 
+  input.app.post('/finance/webhooks/payment', async (req, res) => {
+    try {
+      const payload = req.body ?? {};
+      if (paymentProvider.verifyWebhook) {
+        await paymentProvider.verifyWebhook({
+          payload,
+          headers: req.headers as Record<string, unknown>,
+          providerEventId: typeof payload.eventId === 'string' ? payload.eventId : typeof payload.id === 'string' ? payload.id : null,
+        });
+      }
+      const normalized = paymentProvider.normalizeWebhook
+        ? await paymentProvider.normalizeWebhook({
+            payload,
+            headers: req.headers as Record<string, unknown>,
+            providerEventId: typeof payload.eventId === 'string' ? payload.eventId : typeof payload.id === 'string' ? payload.id : null,
+          })
+        : null;
+
+      if (!normalized) {
+        return res.status(400).send({ message: 'Provider financeiro não suporta webhook normalizado' });
+      }
+
+      const result = await withFallback(
+        () => webhookService.handle({
+          provider: normalized.provider,
+          providerEventId: normalized.providerEventId,
+          chargeExternalId: normalized.chargeExternalId,
+          status: normalized.status === 'draft' ? 'pending' : normalized.status,
+          paidAt: normalized.paidAt,
+          amountPaidCents: normalized.amountPaidCents,
+          idempotencyKey: normalized.providerEventId,
+          actor: { source: 'api', email: 'webhook@lexora.local', role: 'system' } as const,
+        }),
+        () => fallback.webhookService.handle({
+          provider: normalized.provider,
+          providerEventId: normalized.providerEventId,
+          chargeExternalId: normalized.chargeExternalId,
+          status: normalized.status === 'draft' ? 'pending' : normalized.status,
+          paidAt: normalized.paidAt,
+          amountPaidCents: normalized.amountPaidCents,
+          idempotencyKey: normalized.providerEventId,
+          actor: { source: 'api', email: 'webhook@lexora.local', role: 'system' } as const,
+        }),
+      );
+      res.json(result);
+    } catch (error: any) {
+      res.status(error?.statusCode ?? 500).send({ message: error?.message ?? 'Falha ao processar webhook financeiro', code: error?.code });
+    }
+  });
+
   input.app.post('/finance/reconciliation/run', async (req, res) => {
     const decoded = requireFinance(req, res, 'finance:reconciliation');
     if (!decoded) return;
@@ -329,6 +390,97 @@ export function registerFinanceRoutes(input: {
     res.json(report);
   });
 
+  input.app.get('/finance/delinquency/contacts', async (req, res) => {
+    const decoded = requireFinance(req, res, 'finance:view');
+    if (!decoded) return;
+    const items = await withFallback(
+      async () => {
+        const entries = await input.prisma.financeEntry.findMany({
+          include: {
+            category: true,
+            charges: { orderBy: { createdAt: 'desc' }, take: 1 },
+            clientRecord: { select: { id: true, name: true, email: true, phone: true } },
+            process: { select: { id: true, title: true, processNumber: true } },
+          },
+          where: { type: 'receivable', status: 'overdue' },
+          orderBy: [{ dueDate: 'asc' }, { id: 'desc' }],
+        });
+        const schedules = await input.prisma.financeCollectionSchedule.findMany({
+          where: { entryId: { in: entries.map((entry: any) => entry.id) } },
+          include: {
+            attempts: {
+              orderBy: { attemptNumber: 'desc' },
+              take: 1,
+            },
+          },
+        });
+        return delinquencyContactsService.build(entries, schedules);
+      },
+      async () => {
+        const entries = await fallback.entryService.listEntries({ type: 'receivable', status: 'overdue' });
+        return fallback.delinquencyContactsService.build(entries.map((entry: any) => ({
+          ...entry,
+          dueDate: new Date(`${entry.dueDate}T00:00:00.000Z`),
+          settlementDate: entry.settlementDate ? new Date(`${entry.settlementDate}T00:00:00.000Z`) : null,
+          clientRecord: entry.clientName ? { id: entry.clientId, name: entry.clientName, email: entry.clientEmail, phone: entry.clientPhone } : null,
+          process: entry.processTitle ? { id: entry.processId, title: entry.processTitle, processNumber: entry.processNumber } : null,
+          category: { code: entry.categoryCode, label: entry.categoryLabel },
+          charges: entry.chargeStatus ? [{ status: entry.chargeStatus, method: entry.billingMethod }] : [],
+        })));
+      },
+    );
+    res.json(items);
+  });
+
+  input.app.post('/finance/installment-plans', async (req, res) => {
+    const decoded = requireFinance(req, res, 'finance:entry');
+    if (!decoded) return;
+    try {
+      const actor = { source: 'user', userId: decoded.sub, email: decoded.email, role: decoded.role } as const;
+      const result = await withFallback(
+        () => installmentPlanService.createPlan({
+          description: req.body.description,
+          clientId: req.body.clientId ?? null,
+          processId: req.body.processId ?? null,
+          categoryCode: req.body.categoryCode,
+          installmentCount: Number(req.body.installmentCount),
+          installmentAmountCents: Number(req.body.installmentAmountCents),
+          dueDay: Number(req.body.dueDay),
+          firstDueDate: req.body.firstDueDate,
+          responsibleUserId: req.body.responsibleUserId ?? null,
+          notes: req.body.notes ?? null,
+          idempotencyKey: req.body.idempotencyKey ?? null,
+        }, actor),
+        () => fallback.installmentPlanService.createPlan({
+          description: req.body.description,
+          clientId: req.body.clientId ?? null,
+          processId: req.body.processId ?? null,
+          categoryCode: req.body.categoryCode,
+          installmentCount: Number(req.body.installmentCount),
+          installmentAmountCents: Number(req.body.installmentAmountCents),
+          dueDay: Number(req.body.dueDay),
+          firstDueDate: req.body.firstDueDate,
+          responsibleUserId: req.body.responsibleUserId ?? null,
+          notes: req.body.notes ?? null,
+          idempotencyKey: req.body.idempotencyKey ?? null,
+        }, actor),
+      );
+      res.status(201).json(result);
+    } catch (error: any) {
+      res.status(error?.statusCode ?? 500).send({ message: error?.message ?? 'Falha ao criar parcelamento', code: error?.code });
+    }
+  });
+
+  input.app.get('/finance/installment-plans', async (req, res) => {
+    const decoded = requireFinance(req, res, 'finance:view');
+    if (!decoded) return;
+    const items = await withFallback(
+      () => installmentPlanService.listPlans(),
+      () => fallback.installmentPlanService.listPlans(),
+    );
+    res.json(items);
+  });
+
   input.app.get('/finance/audit', async (req, res) => {
     const decoded = requireFinance(req, res, 'finance:view');
     if (!decoded) return;
@@ -388,12 +540,20 @@ function createFallbackFinanceRuntime() {
   const billingRepository = new InMemoryFinanceBillingRepository();
   const reconciliationRepository = new InMemoryFinanceReconciliationRepository();
   const collectionsRepository = new InMemoryFinanceCollectionsRepository();
+  const installmentPlanRepository = new InMemoryFinanceInstallmentPlanRepository();
   const paymentProvider = new MockFinancePaymentProvider();
   const entryService = new FinanceEntryService({ repository: entryRepository, categories: categoryRepository, auditService });
   const billingService = new FinanceBillingService({ repository: billingRepository, paymentProvider, auditService });
   const webhookService = new FinanceWebhookService({ repository: billingRepository, paymentProvider, auditService });
   const reconciliationService = new FinanceReconciliationService({ repository: reconciliationRepository, auditService });
   const collectionsService = new FinanceCollectionsService({ repository: collectionsRepository, auditService });
+  const delinquencyContactsService = new FinanceDelinquencyContactsService();
+  const installmentPlanService = new FinanceInstallmentPlanService({
+    plans: installmentPlanRepository,
+    entries: entryRepository,
+    categories: categoryRepository,
+    auditService,
+  });
 
   const seedEntries = [
     {
@@ -410,6 +570,8 @@ function createFallbackFinanceRuntime() {
       clientId: 1,
       processId: 1,
       categoryCode: 'honorarios',
+      clientRecord: { id: 1, name: 'Cliente Atlas', email: 'atlas@cliente.local', phone: '+5511999990001' },
+      process: { id: 1, title: 'Reclamatoria Trabalhista Cliente Atlas', processNumber: '50011234520263010022' },
       category: { code: 'honorarios', label: 'Honorários' },
       responsibleUserId: 3,
       notes: 'Fallback dev',
@@ -431,6 +593,8 @@ function createFallbackFinanceRuntime() {
       clientId: 2,
       processId: 7,
       categoryCode: 'acordo',
+      clientRecord: { id: 2, name: 'Cliente Boreal', email: 'boreal@cliente.local', phone: '+5511999990002' },
+      process: { id: 7, title: 'Defesa Administrativa Cliente Orbe', processNumber: '30055443320265010034' },
       category: { code: 'acordo', label: 'Acordo' },
       responsibleUserId: 5,
       notes: 'Fallback dev',
@@ -452,6 +616,7 @@ function createFallbackFinanceRuntime() {
       clientId: null,
       processId: 14,
       categoryCode: 'custas',
+      process: { id: 14, title: 'Processo Financeiro Interno', processNumber: 'FIN-00014' },
       category: { code: 'custas', label: 'Custas' },
       responsibleUserId: 3,
       notes: 'Fallback dev',
@@ -494,6 +659,8 @@ function createFallbackFinanceRuntime() {
     webhookService,
     reconciliationService,
     collectionsService,
+    delinquencyContactsService,
+    installmentPlanService,
     syncEntry(entry: any) {
       const row = {
         id: entry.id,
@@ -507,7 +674,11 @@ function createFallbackFinanceRuntime() {
         paymentMethod: entry.paymentMethod,
         currency: entry.currency,
         clientId: entry.clientId,
+        clientRecord: entry.clientName ? { id: entry.clientId, name: entry.clientName, email: entry.clientEmail, phone: entry.clientPhone } : null,
         processId: entry.processId,
+        process: entry.processTitle ? { id: entry.processId, title: entry.processTitle, processNumber: entry.processNumber } : null,
+        installmentPlanId: entry.installmentPlanId ?? null,
+        installmentNumber: entry.installmentNumber ?? null,
         categoryCode: entry.categoryCode,
         category: { code: entry.categoryCode, label: entry.categoryLabel },
         responsibleUserId: entry.responsibleUserId,

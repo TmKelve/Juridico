@@ -24,6 +24,8 @@ async function loginAsFinanceiro(page: Page) {
 
 test('FIN consegue executar o fluxo criar lancamento, cobrar e baixar no Financeiro', async ({ page }) => {
   const description = `Smoke financeiro ${Date.now()}`
+  const contractLabel = `Contrato smoke ${Date.now()}`
+  const planDescription = `Parcelamento smoke ${Date.now()}`
 
   await loginAsFinanceiro(page)
 
@@ -52,4 +54,20 @@ test('FIN consegue executar o fluxo criar lancamento, cobrar e baixar no Finance
 
   await row.getByRole('button', { name: 'Baixar' }).click()
   await expect(row).toContainText('paid')
+
+  await page.getByRole('button', { name: 'Parcelamentos' }).click()
+  await expect(page.getByRole('heading', { level: 3, name: 'Novo parcelamento' })).toBeVisible()
+
+  const sidebar = page.locator('.finance-panel--sidebar')
+  await sidebar.getByLabel('Cliente').selectOption({ index: 1 })
+  await sidebar.getByLabel('Rótulo do contrato').fill(contractLabel)
+  await sidebar.getByLabel('Descrição').fill(planDescription)
+  await sidebar.getByLabel('Parcelas').fill('3')
+  await sidebar.getByLabel('Valor por parcela (centavos)').fill('40000')
+  await sidebar.getByRole('button', { name: 'Criar parcelamento' }).click()
+
+  await expect(page.getByText(planDescription)).toBeVisible()
+  await expect(page.locator('.finance-plan-detail')).toContainText('1/3')
+  await expect(page.locator('.finance-plan-detail')).toContainText('2/3')
+  await expect(page.locator('.finance-plan-detail')).toContainText('3/3')
 })

@@ -4,7 +4,9 @@ import type {
   FinanceAuditEventPayload,
   FinanceCashflowPoint,
   FinanceChargePayload,
+  FinanceDelinquencyContactPayload,
   FinanceEntryPayload,
+  FinanceInstallmentPlanPayload,
 } from './finance/shared';
 
 type RawFinanceCategory = {
@@ -24,7 +26,11 @@ type RawFinanceEntry = {
   paymentMethod?: string | null;
   currency?: string | null;
   clientId?: number | null;
+  clientRecord?: { id: number; name: string; email?: string | null; phone?: string | null } | null;
   processId?: number | null;
+  process?: { id: number; title: string; processNumber?: string | null } | null;
+  installmentPlanId?: number | null;
+  installmentNumber?: number | null;
   categoryCode: string;
   category?: RawFinanceCategory | null;
   responsibleUserId?: number | null;
@@ -82,10 +88,18 @@ export function buildFinanceEntryPayload(entry: RawFinanceEntry): FinanceEntryPa
     paymentMethod: (entry.paymentMethod ?? null) as FinanceEntryPayload['paymentMethod'],
     currency: entry.currency ?? 'BRL',
     clientId: entry.clientId ?? null,
+    clientName: entry.clientRecord?.name ?? null,
+    clientEmail: entry.clientRecord?.email ?? null,
+    clientPhone: entry.clientRecord?.phone ?? null,
     processId: entry.processId ?? null,
+    processTitle: entry.process?.title ?? null,
+    processNumber: entry.process?.processNumber ?? null,
     categoryCode: entry.categoryCode,
     categoryLabel: entry.category?.label ?? entry.categoryCode,
     responsibleUserId: entry.responsibleUserId ?? null,
+    installmentPlanId: entry.installmentPlanId ?? null,
+    installmentNumber: entry.installmentNumber ?? null,
+    installmentLabel: entry.installmentNumber ? `${entry.installmentNumber}a parcela` : null,
     chargeStatus: (latestCharge?.status ?? null) as FinanceEntryPayload['chargeStatus'],
     billingMethod: (latestCharge?.method ?? null) as FinanceEntryPayload['billingMethod'],
     notes: entry.notes ?? '',
@@ -163,4 +177,96 @@ export function buildFinanceAgingPayload(referenceDate: string, buckets: Finance
     buckets,
     summary,
   };
+}
+
+type RawFinanceInstallmentPlan = {
+  id: number;
+  description: string;
+  clientId?: number | null;
+  clientRecord?: { name: string; email?: string | null; phone?: string | null } | null;
+  processId?: number | null;
+  process?: { title: string; processNumber?: string | null } | null;
+  categoryCode: string;
+  installmentCount: number;
+  installmentAmountCents: number;
+  totalAmountCents: number;
+  dueDay: number;
+  firstDueDate: Date;
+  active: boolean;
+  notes?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  entries?: Array<RawFinanceEntry> | null;
+};
+
+export function buildFinanceInstallmentPlanPayload(plan: RawFinanceInstallmentPlan): FinanceInstallmentPlanPayload {
+  const entries = plan.entries ?? [];
+  const paidInstallments = entries.filter((entry) => entry.status === 'paid' || entry.status === 'reconciled').length;
+  const overdueInstallments = entries.filter((entry) => entry.status === 'overdue').length;
+  const openInstallments = entries.filter((entry) => entry.status === 'open' || entry.status === 'partially_paid').length;
+  const onTimeInstallments = entries.filter((entry) => entry.status === 'open').length;
+  const remainingAmountCents = entries.reduce((acc, entry) => {
+    if (entry.status === 'paid' || entry.status === 'reconciled') return acc;
+    return acc + Math.max(0, entry.amountCents - (entry.settledAmountCents ?? 0));
+  }, 0);
+  const overdueAmountCents = entries.reduce((acc, entry) => {
+    if (entry.status !== 'overdue') return acc;
+    return acc + Math.max(0, entry.amountCents - (entry.settledAmountCents ?? 0));
+  }, 0);
+  const nextDueEntry = entries
+    .filter((entry) => entry.status !== 'paid' && entry.status !== 'reconciled' && entry.status !== 'cancelled')
+    .sort((left, right) => left.dueDate.getTime() - right.dueDate.getTime())[0];
+  const status = overdueInstallments > 0
+    ? 'defaulted'
+    : paidInstallments === plan.installmentCount
+      ? 'completed'
+      : plan.active
+        ? 'active'
+        : 'cancelled';
+
+  return {
+    id: plan.id,
+    contractLabel: plan.description,
+    description: plan.description,
+    clientId: plan.clientId ?? null,
+    clientName: plan.clientRecord?.name ?? 'Cliente não vinculado',
+    processId: plan.processId ?? null,
+    processTitle: plan.process?.title ?? null,
+    processNumber: plan.process?.processNumber ?? null,
+    categoryCode: plan.categoryCode,
+    dayOfMonth: plan.dueDay,
+    status,
+    installments: entries
+      .sort((left, right) => (left.installmentNumber ?? 0) - (right.installmentNumber ?? 0))
+      .map((entry) => ({
+        entryId: entry.id,
+        installmentNumber: entry.installmentNumber ?? 0,
+        status: (entry.status === 'reconciled' ? 'paid' : entry.status) as FinanceInstallmentPlanPayload['installments'][number]['status'],
+        amountCents: entry.amountCents,
+        dueDate: entry.dueDate.toISOString().slice(0, 10),
+        settlementDate: entry.settlementDate ? entry.settlementDate.toISOString().slice(0, 10) : null,
+        chargeStatus: (entry.charges?.[0]?.status ?? null) as FinanceInstallmentPlanPayload['installments'][number]['chargeStatus'],
+      })),
+    metrics: {
+      paidCount: paidInstallments,
+      onTimeCount: onTimeInstallments,
+      overdueCount: overdueInstallments,
+      openCount: openInstallments,
+      remainingCount: Math.max(0, plan.installmentCount - paidInstallments),
+      overdueAmountCents,
+      remainingAmountCents,
+    },
+    installmentCount: plan.installmentCount,
+    installmentAmountCents: plan.installmentAmountCents,
+    totalAmountCents: plan.totalAmountCents,
+    firstDueDate: plan.firstDueDate.toISOString().slice(0, 10),
+    nextDueDate: nextDueEntry ? nextDueEntry.dueDate.toISOString().slice(0, 10) : null,
+    notes: plan.notes ?? '',
+    createdAt: plan.createdAt.toISOString(),
+    updatedAt: plan.updatedAt.toISOString(),
+  };
+}
+
+export function buildFinanceDelinquencyContactPayload(input: FinanceDelinquencyContactPayload) {
+  return input;
 }
