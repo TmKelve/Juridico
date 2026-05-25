@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useMemo, useState, type FormEvent } from 'react';
-import { AlertTriangle, CheckCircle2, Clock3, Mail, MessageSquare, Send, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock3, Mail, MessageSquare, RefreshCw, Send, ShieldCheck } from 'lucide-react';
 
 import { api, type ApiClientCommunicationHistoryItem, type ApiClientConsent } from '@/api';
 import { Badge, Button } from '@/components/ui';
@@ -88,6 +88,10 @@ function mapChannelLabel(channel: HistoryChannel) {
   return 'Todos';
 }
 
+function mapAttemptKindLabel(attemptKind: ApiClientCommunicationHistoryItem['attemptKind']) {
+  return attemptKind === 'retry' ? 'Retentativa' : 'Envio inicial';
+}
+
 export function ClientCommunicationPanel({
   client,
   userEmail,
@@ -101,6 +105,9 @@ export function ClientCommunicationPanel({
   const [historyItems, setHistoryItems] = useState<ApiClientCommunicationHistoryItem[]>(EMPTY_HISTORY);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [historyError, setHistoryError] = useState('');
+  const [historyActionError, setHistoryActionError] = useState('');
+  const [historyActionSuccess, setHistoryActionSuccess] = useState('');
+  const [retryingCommunicationId, setRetryingCommunicationId] = useState<string | null>(null);
 
   const [sendError, setSendError] = useState('');
   const [sendSuccess, setSendSuccess] = useState('');
@@ -155,6 +162,29 @@ export function ClientCommunicationPanel({
       setHistoryItems(EMPTY_HISTORY);
     } finally {
       setHistoryLoading(false);
+    }
+  }
+
+  async function retryCommunication(item: ApiClientCommunicationHistoryItem) {
+    if (item.status !== 'failed') return;
+
+    setRetryingCommunicationId(item.communicationId);
+    setHistoryActionError('');
+    setHistoryActionSuccess('');
+
+    try {
+      const response = await api.retryClientCommunication(client.id, item.communicationId);
+      if (response.status !== 200 && response.status !== 201) {
+        setHistoryActionError(response.error || 'Não foi possível reenfileirar a comunicação.');
+        return;
+      }
+
+      setHistoryActionSuccess(`Retentativa registrada como ${mapStatusLabel(response.data.deliveryStatus).toLowerCase()}.`);
+      await loadHistory();
+    } catch (err) {
+      setHistoryActionError((err as Error).message || 'Não foi possível reenfileirar a comunicação.');
+    } finally {
+      setRetryingCommunicationId(null);
     }
   }
 
@@ -425,7 +455,7 @@ export function ClientCommunicationPanel({
           <div className="client-comm-section-head">
             <div>
               <h5><Clock3 size={14} aria-hidden="true" /> Histórico</h5>
-              <p>Últimos disparos para o cliente, por canal.</p>
+              <p>Últimos envios e retentativas para o cliente, por canal.</p>
             </div>
             <select value={historyChannel} onChange={(event) => setHistoryChannel(event.target.value as HistoryChannel)}>
               <option value="all">Todos</option>
@@ -434,6 +464,16 @@ export function ClientCommunicationPanel({
               <option value="portal">Portal</option>
             </select>
           </div>
+
+          {(historyActionError || historyActionSuccess) && (
+            <div
+              className={`client-comm-feedback${historyActionError ? ' client-comm-feedback--error' : ' client-comm-feedback--success'}`}
+              role={historyActionError ? 'alert' : 'status'}
+            >
+              {historyActionError ? <AlertTriangle size={14} aria-hidden="true" /> : <CheckCircle2 size={14} aria-hidden="true" />}
+              <span>{historyActionError || historyActionSuccess}</span>
+            </div>
+          )}
 
           {historyLoading ? (
             <div className="client-comm-empty">Carregando histórico…</div>
@@ -451,6 +491,7 @@ export function ClientCommunicationPanel({
                   <div className="client-comm-history-head">
                     <div className="client-comm-history-tags">
                       <Badge variant="neutral">{mapChannelLabel(item.channel)}</Badge>
+                      <Badge variant="neutral">{mapAttemptKindLabel(item.attemptKind)}</Badge>
                       <Badge
                         className={`client-comm-status client-comm-status--${item.status}`}
                         variant="neutral"
@@ -461,7 +502,31 @@ export function ClientCommunicationPanel({
                     <span>{formatDateTime(item.deliveredAt || item.sentAt)}</span>
                   </div>
                   <strong>{item.summary}</strong>
-                  <p>ID {item.communicationId}</p>
+                  <div className="client-comm-history-meta">
+                    <p>ID {item.communicationId}</p>
+                    <p>Tentativa {item.retryCount + 1}</p>
+                    {item.providerMessageId ? <p>Provider {item.providerMessageId}</p> : null}
+                  </div>
+                  {item.failureMessage ? (
+                    <div className="client-comm-feedback client-comm-feedback--error" role="alert">
+                      <AlertTriangle size={14} aria-hidden="true" />
+                      <span>{item.failureMessage}</span>
+                    </div>
+                  ) : null}
+                  {item.status === 'failed' ? (
+                    <div className="client-comm-history-actions">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={retryingCommunicationId === item.communicationId}
+                        onClick={() => retryCommunication(item)}
+                      >
+                        <RefreshCw size={14} aria-hidden="true" />
+                        {retryingCommunicationId === item.communicationId ? 'Reenfileirando...' : 'Tentar novamente'}
+                      </Button>
+                    </div>
+                  ) : null}
                 </article>
               ))}
             </div>

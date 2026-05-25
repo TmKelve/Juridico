@@ -1,6 +1,7 @@
 import type { ClientConsentSnapshot } from '../clients/consent';
 import type {
   ClientCommunicationHistoryItem,
+  CommunicationRecord,
   CommunicationClientRecord,
   CommunicationHistoryChannel,
   CommunicationRepository,
@@ -48,7 +49,58 @@ function toHistoryItem(row: RecordMap): ClientCommunicationHistoryItem {
     sentAt: details.sentAt ? String(details.sentAt) : null,
     deliveredAt: details.deliveredAt ? String(details.deliveredAt) : null,
     summary: String(details.message ?? row.summary),
+    retryCount: typeof details.retryCount === 'number' ? details.retryCount : 0,
+    attemptKind: String(details.attemptKind ?? 'send') as ClientCommunicationHistoryItem['attemptKind'],
+    providerMessageId: typeof details.providerMessageId === 'string' ? details.providerMessageId : null,
+    failureMessage: typeof details.failureMessage === 'string' ? details.failureMessage : null,
   };
+}
+
+function toCommunicationRecord(row: RecordMap): CommunicationRecord {
+  const item = toHistoryItem(row);
+  const details = (row.details as RecordMap | undefined) ?? {};
+  return {
+    clientId: item.clientId,
+    communicationId: item.communicationId,
+    channel: item.channel,
+    subject: typeof details.subject === 'string' ? details.subject : null,
+    message: String(details.message ?? row.summary ?? ''),
+    templateCode: typeof details.templateCode === 'string' ? details.templateCode : null,
+    contextEntityType: String(details.contextEntityType ?? 'crm') as CommunicationRecord['contextEntityType'],
+    contextEntityId: typeof details.contextEntityId === 'number' || typeof details.contextEntityId === 'string'
+      ? details.contextEntityId
+      : null,
+    deliveryStatus: item.status,
+    retryCount: item.retryCount,
+    providerMessageId: item.providerMessageId,
+    sentAt: item.sentAt,
+    deliveredAt: item.deliveredAt,
+    summary: item.summary,
+    attemptKind: item.attemptKind,
+    failureMessage: item.failureMessage,
+  };
+}
+
+async function readCommunicationAuditRows(
+  prisma: {
+    crmAuditEvent: {
+      findMany(args: { where: Record<string, unknown>; orderBy: Record<string, unknown>; take: number; skip?: number }): Promise<RecordMap[]>;
+    };
+  },
+  clientId: number,
+  take: number,
+  skip = 0,
+) {
+  return prisma.crmAuditEvent.findMany({
+    where: {
+      scope: 'communication',
+      action: { in: ['client.communication.send', 'client.communication.retry'] },
+      entityId: clientId,
+    },
+    orderBy: { occurredAt: 'desc' },
+    take,
+    skip,
+  });
 }
 
 export function createPrismaCommunicationRepository(prisma: {
@@ -56,7 +108,7 @@ export function createPrismaCommunicationRepository(prisma: {
     findUnique(args: { where: { id: number }; select: Record<string, boolean> }): Promise<RecordMap | null>;
   };
   crmAuditEvent: {
-    findMany(args: { where: Record<string, unknown>; orderBy: Record<string, unknown>; take: number }): Promise<RecordMap[]>;
+    findMany(args: { where: Record<string, unknown>; orderBy: Record<string, unknown>; take: number; skip?: number }): Promise<RecordMap[]>;
   };
 }): CommunicationRepository {
   return {
@@ -82,20 +134,55 @@ export function createPrismaCommunicationRepository(prisma: {
       return toConsent(rows[0]);
     },
 
-    async listCommunicationHistory(clientId, channel, limit) {
-      const rows = await prisma.crmAuditEvent.findMany({
-        where: {
-          scope: 'communication',
-          action: 'client.communication.send',
-          entityId: clientId,
-        },
-        orderBy: { occurredAt: 'desc' },
-        take: limit,
-      });
+    async findCommunicationById(clientId, communicationId) {
+      const pageSize = 100;
+      let skip = 0;
 
-      return rows
-        .map(toHistoryItem)
-        .filter((item) => channel === 'all' || item.channel === channel);
+      while (skip < 500) {
+        const rows = await readCommunicationAuditRows(prisma, clientId, pageSize, skip);
+        if (!rows.length) return null;
+
+        const found = rows.find((row) => {
+          const details = (row.details as RecordMap | undefined) ?? {};
+          return String(details.communicationId ?? row.id) === communicationId;
+        });
+
+        if (found) {
+          return toCommunicationRecord(found);
+        }
+
+        if (rows.length < pageSize) return null;
+        skip += rows.length;
+      }
+
+      return null;
+    },
+
+    async listCommunicationHistory(clientId, channel, limit) {
+      if (channel === 'all') {
+        const rows = await readCommunicationAuditRows(prisma, clientId, limit);
+        return rows.map(toHistoryItem);
+      }
+
+      const pageSize = Math.max(limit, 20);
+      const items: ClientCommunicationHistoryItem[] = [];
+      let skip = 0;
+
+      while (items.length < limit && skip < 500) {
+        const rows = await readCommunicationAuditRows(prisma, clientId, pageSize, skip);
+        if (!rows.length) break;
+
+        items.push(
+          ...rows
+            .map(toHistoryItem)
+            .filter((item) => item.channel === channel),
+        );
+
+        if (rows.length < pageSize) break;
+        skip += rows.length;
+      }
+
+      return items.slice(0, limit);
     },
   };
 }

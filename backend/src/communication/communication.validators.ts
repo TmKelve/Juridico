@@ -2,6 +2,7 @@ import { CrmContractError } from '../crm/opportunities/crm-opportunity.types';
 import { normalizePositiveInt, requireText } from '../crm/opportunities/crm-opportunity.utils';
 import type {
   ClientCommunicationHistoryQuery,
+  ClientCommunicationRetryInput,
   ClientCommunicationSendInput,
   CommunicationChannel,
   CommunicationContextEntityType,
@@ -56,5 +57,16 @@ export function validateClientCommunicationHistoryQuery(input: Record<string, un
     clientId: normalizePositiveInt('clientId', input.clientId, 'Cliente'),
     channel,
     limit: rawLimit,
+  };
+}
+
+export function validateClientCommunicationRetryInput(input: Record<string, unknown>): ClientCommunicationRetryInput {
+  const communicationId = requireText('communicationId', input.communicationId, 'Comunicação');
+  const idempotencyKey = requireText('idempotencyKey', input.idempotencyKey, 'Idempotency key');
+
+  return {
+    clientId: normalizePositiveInt('clientId', input.clientId, 'Cliente'),
+    communicationId,
+    idempotencyKey,
   };
 }

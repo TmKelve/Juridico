@@ -109,3 +109,67 @@ test('DocumentArtifactsService supports idempotent replay through injected port'
   assert.equal(result.idempotent, true);
   assert.equal(result.documentId, null);
 });
+
+test('createPrismaDocumentArtifactsRepository persists document rows without metadata or storage columns', async () => {
+  const { createPrismaDocumentArtifactsRepository } = require(artifactsModulePath);
+
+  const createdRows = [];
+  const repository = createPrismaDocumentArtifactsRepository({
+    process: {
+      async findUnique({ where }) {
+        return where.id === 19 ? { id: 19 } : null;
+      },
+    },
+    auditEvent: {
+      async create({ data }) {
+        return {
+          ...data,
+          occurredAt: data.occurredAt,
+          details: data.details,
+        };
+      },
+    },
+    document: {
+      async create({ data }) {
+        createdRows.push(data);
+        return {
+          id: 88,
+          processId: data.processId,
+          title: data.title,
+          version: 1,
+          isLatestVersion: true,
+          status: data.status,
+          category: data.category,
+        };
+      },
+    },
+  });
+
+  const document = await repository.createDocument({
+    processId: 19,
+    title: 'Petição Gerada',
+    category: 'Peticao',
+    status: 'gerado',
+    origin: 'interno',
+    mimeType: 'application/pdf',
+    previewUrl: null,
+    createdBy: 'adv@juridico.local',
+    metadata: { templateId: 'peticao-template' },
+    storage: {
+      storageKey: 'documents/19/artifacts/peticao-gerada.pdf',
+      mimeType: 'application/pdf',
+      sizeInBytes: 2048,
+      checksum: 'sha256:abc',
+      previewUrl: null,
+    },
+  });
+
+  assert.equal(createdRows.length, 1);
+  assert.equal(createdRows[0].title, 'Petição Gerada');
+  assert.equal(createdRows[0].mimeType, 'application/pdf');
+  assert.equal('metadata' in createdRows[0], false);
+  assert.equal('storage' in createdRows[0], false);
+  assert.equal(document.id, 88);
+  assert.deepEqual(document.metadata, { templateId: 'peticao-template' });
+  assert.equal(document.storage.storageKey, 'documents/19/artifacts/peticao-gerada.pdf');
+});

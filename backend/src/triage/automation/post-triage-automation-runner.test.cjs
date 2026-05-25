@@ -56,3 +56,33 @@ test('executePostTriageAutomation skips duplicates and reports executor failures
   ]);
 });
 
+test('executePostTriageAutomation reports executed commands in contract shape', async () => {
+  const { executePostTriageAutomation } = require(modulePath);
+
+  const result = await executePostTriageAutomation({
+    triageItemId: 34,
+    existingDedupeKeys: new Set(),
+    commands: [
+      {
+        commandId: 'create_task:34:new:key',
+        type: 'create_task',
+        dedupeKey: 'new:key',
+        payload: {},
+      },
+    ],
+    executor: {
+      async execute() {
+        return { entityId: 'task-501' };
+      },
+    },
+  });
+
+  assert.deepEqual(result.executed, [
+    {
+      commandType: 'create_task',
+      entityId: 'task-501',
+    },
+  ]);
+  assert.deepEqual(result.skippedDuplicates, []);
+  assert.deepEqual(result.failed, []);
+});

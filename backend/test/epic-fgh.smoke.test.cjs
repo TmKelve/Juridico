@@ -201,7 +201,7 @@ test('smoke: cliente -> comunicacao -> historico', async () => {
   const auditService = {
     async record(input) {
       auditEvents.push(input);
-      if (input.action === 'client.communication.send') {
+      if (input.action === 'client.communication.send' || input.action === 'client.communication.retry') {
         history.unshift({
           clientId: input.details.clientId,
           communicationId: input.details.communicationId,
@@ -210,6 +210,10 @@ test('smoke: cliente -> comunicacao -> historico', async () => {
           sentAt: input.details.sentAt,
           deliveredAt: input.details.deliveredAt,
           summary: input.details.message,
+          retryCount: input.details.retryCount,
+          providerMessageId: input.details.providerMessageId,
+          attemptKind: input.details.attemptKind,
+          failureMessage: input.details.failureMessage,
         });
       }
       return { id: `audit-${auditEvents.length}`, ...input };
@@ -248,14 +252,34 @@ test('smoke: cliente -> comunicacao -> historico', async () => {
       async findLatestConsentByClientId(clientId) {
         return consentSnapshot && consentSnapshot.clientId === clientId ? { ...consentSnapshot } : null;
       },
+      async findCommunicationById(clientId, communicationId) {
+        const item = history.find((entry) => entry.clientId === clientId && entry.communicationId === communicationId);
+        return item
+          ? {
+              ...item,
+              subject: 'Checklist pendente',
+              message: item.summary,
+              templateCode: 'doc-pendente',
+              contextEntityType: 'document',
+              contextEntityId: 1001,
+              providerMessageId: item.providerMessageId ?? null,
+              attemptKind: item.attemptKind ?? 'send',
+              failureMessage: item.failureMessage ?? null,
+            }
+          : null;
+      },
       async listCommunicationHistory(clientId, channel, limit) {
         return history.filter((item) => item.clientId === clientId && (channel === 'all' || item.channel === channel)).slice(0, limit);
       },
     },
     auditService,
     {
-      async dispatch() {
-        return { deliveryStatus: 'queued', retryCount: 0, providerMessageId: 'provider-queued' };
+      async dispatch(input) {
+        return {
+          deliveryStatus: input.attemptKind === 'retry' ? 'sent' : 'queued',
+          retryCount: input.retryCount,
+          providerMessageId: input.attemptKind === 'retry' ? 'provider-retry' : 'provider-queued',
+        };
       },
     },
   );
@@ -277,7 +301,21 @@ test('smoke: cliente -> comunicacao -> historico', async () => {
     limit: 10,
   });
 
+  const retried = await communicationService.retry({
+    clientId: 44,
+    communicationId: sent.communicationId,
+    idempotencyKey: 'comm-smoke-44-retry',
+  });
+
+  const listedAfterRetry = await communicationService.history({
+    clientId: 44,
+    channel: 'email',
+    limit: 10,
+  });
+
   assert.equal(consentSnapshot.preferences.email, true);
   assert.equal(sent.deliveryStatus, 'queued');
   assert.equal(listed.items.length, 1);
+  assert.equal(retried.retryCount, 1);
+  assert.equal(listedAfterRetry.items.length, 2);
 });

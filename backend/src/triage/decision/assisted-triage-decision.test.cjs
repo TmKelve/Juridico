@@ -89,3 +89,42 @@ test('assistTriageDecision rejects invalid escalated decisions without assigned 
   );
 });
 
+test('assistTriageDecision keeps escalated status and produces coherent explanation without automation', async () => {
+  const { assistTriageDecision } = require(modulePath);
+
+  const assisted = assistTriageDecision({
+    triageItem: {
+      id: 91,
+      queueType: 'normal',
+      suggestedAction: 'criar_tarefa',
+      suggestedReason: 'Caso exige analise especializada.',
+      processId: 6,
+      clientId: 5,
+      assignedQueue: 'fila_operacional',
+      process: { phase: 'Conhecimento', client: 'Cliente Escala' },
+      clientRecord: { name: 'Cliente Escala' },
+      capture: {
+        normalizedText: 'Tema sensivel com necessidade de escalonamento.',
+        sourceReference: 'MANUAL-91',
+      },
+    },
+    decision: {
+      triageItemId: 91,
+      decisionType: 'escalado',
+      decisionReason: 'Escalar para fila especializada',
+      assignedQueue: 'fila_especializada',
+      idempotencyKey: 'triage:91:escalado',
+    },
+    actor: 'user:12',
+    now: new Date('2026-05-22T10:00:00.000Z'),
+  });
+
+  assert.equal(assisted.projection.status, 'escalado');
+  assert.equal(assisted.projection.automationPlanned, false);
+  assert.deepEqual(assisted.projection.automationCommandIds, []);
+  assert.equal(assisted.projection.itemUpdate.assignedQueue, 'fila_especializada');
+  assert.match(assisted.explanation.summary, /Decisao escalado para item 91/);
+  assert.ok(assisted.explanation.appliedRules.includes('decision:escalado'));
+  assert.ok(assisted.explanation.priorityReasons.includes('Escalar para fila especializada'));
+  assert.equal(assisted.automation.skippedReason, 'not_confirmed');
+});

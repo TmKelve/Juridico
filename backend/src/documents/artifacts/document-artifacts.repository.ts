@@ -166,8 +166,6 @@ export function createPrismaDocumentArtifactsRepository(dependencies: {
           pendingForAdvance: false,
           mimeType: input.mimeType,
           previewUrl: input.previewUrl,
-          metadata: input.metadata,
-          storage: input.storage,
         },
       });
 
@@ -179,8 +177,10 @@ export function createPrismaDocumentArtifactsRepository(dependencies: {
         isLatestVersion: Boolean(created.isLatestVersion ?? true),
         status: String(created.status),
         category: String(created.category),
-        metadata: (created.metadata as DocumentUploadMetadata) ?? {},
-        storage: normalizeStorage(created.storage as Record<string, unknown>),
+        metadata: (created.metadata as DocumentUploadMetadata) ?? input.metadata,
+        storage: created.storage && typeof created.storage === 'object'
+          ? normalizeStorage(created.storage as Record<string, unknown>)
+          : input.storage,
       };
     },
   };

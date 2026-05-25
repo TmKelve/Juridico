@@ -1,19 +1,7 @@
 import {
-  resolveOperationalBucket,
-} from '../core/triage-operational-state';
-import {
-  type TriageOperationalBucket,
   type TriageQueueItemSnapshot,
 } from '../core/triage-operational-model';
 import { prioritizeTriageItem } from './triage-prioritization';
-
-const bucketWeight: Record<TriageOperationalBucket, number> = {
-  fila_ativa: 500,
-  revisao_manual: 400,
-  fila_escalada: 450,
-  backlog_adiado: 100,
-  tratados: 0,
-};
 
 export function rankUnifiedTriageQueue(params: {
   items: TriageQueueItemSnapshot[];
@@ -35,7 +23,7 @@ export function rankUnifiedTriageQueue(params: {
       priorityLabel: prioritized.priorityLabel,
       priorityReasons: prioritized.priorityReasons,
       queueRank: 0,
-      sortWeight: bucketWeight[prioritized.operationalBucket] + prioritized.effectivePriorityScore,
+      sortWeight: prioritized.sortWeight,
     };
   });
 

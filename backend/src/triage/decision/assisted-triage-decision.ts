@@ -69,6 +69,11 @@ function toExplainableItem(triageItem: TriageDecisionItem): ExplainableTriageIte
   return triageItem as ExplainableTriageItem;
 }
 
+function resolveProjectedStatus(plannedStatus: string, decisionType: AssistedDecisionInput['decisionType']) {
+  if (decisionType === 'escalado') return 'escalado';
+  return plannedStatus;
+}
+
 export function assistTriageDecision(params: {
   triageItem: TriageDecisionItem;
   decision: AssistedDecisionInput;
@@ -97,6 +102,7 @@ export function assistTriageDecision(params: {
     existingDedupeKeys: params.existingDedupeKeys,
     decisionEngine: engine,
   });
+  const projectedStatus = resolveProjectedStatus(planned.itemUpdate.status, params.decision.decisionType);
 
   return {
     command: {
@@ -106,11 +112,11 @@ export function assistTriageDecision(params: {
     },
     projection: {
       triageItemId: params.decision.triageItemId,
-      status: planned.itemUpdate.status,
+      status: projectedStatus,
       automationPlanned: automation.automationPlanned,
       automationCommandIds: automation.commands.map((command) => command.commandId),
       itemUpdate: {
-        status: planned.itemUpdate.status,
+        status: projectedStatus,
         queueType: planned.itemUpdate.queueType,
         handledBy: planned.itemUpdate.handledBy,
         handledAt: planned.itemUpdate.handledAt.toISOString(),
@@ -130,4 +136,3 @@ export function assistTriageDecision(params: {
     automation,
   };
 }
-

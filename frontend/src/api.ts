@@ -320,6 +320,10 @@ export interface ApiClientCommunicationHistoryItem {
   communicationId: string;
   channel: 'email' | 'whatsapp' | 'portal';
   status: 'queued' | 'sent' | 'delivered' | 'failed';
+  attemptKind: 'send' | 'retry';
+  retryCount: number;
+  providerMessageId: string | null;
+  failureMessage: string | null;
   sentAt: string | null;
   deliveredAt: string | null;
   summary: string;
@@ -880,6 +884,11 @@ export const api = {
         contextEntityId: data.contextEntityId ?? null,
       },
       headers: data.idempotencyKey ? { 'Idempotency-Key': data.idempotencyKey } : undefined,
+    }),
+
+  retryClientCommunication: (id: number, communicationId: string) =>
+    apiClient<ApiClientCommunicationSendResult>(`/clients/${id}/communications/${communicationId}/retry`, {
+      method: 'POST',
     }),
 
   createClient: (data: {

@@ -49,7 +49,7 @@ export class DocumentApprovalService {
     return this.repository.saveDecision({
       documentId: normalized.documentId,
       decision: normalized.decision,
-      status: normalized.decision === 'approved' ? 'aprovado' : 'rejeitado',
+      status: normalized.decision === 'approved' ? 'validado' : 'rejeitado',
       reason: normalized.reason,
       actor: normalized.actor,
       checklist,

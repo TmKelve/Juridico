@@ -2,10 +2,11 @@ import type { CrmAuditActor } from '../../crm/audit';
 import type { ProceduralChecklistEvaluation } from '../checklist';
 
 export type DocumentApprovalDecision = 'approved' | 'rejected';
+export type DocumentApprovalDecisionAlias = DocumentApprovalDecision | 'aprovado' | 'rejeitado';
 
 export interface DocumentApprovalInput {
   documentId: number;
-  decision: DocumentApprovalDecision;
+  decision: DocumentApprovalDecisionAlias;
   reason?: string | null;
   actor: CrmAuditActor;
 }

@@ -22,6 +22,27 @@ test('normalizeDocumentApprovalInput requires reason when rejecting', async () =
   );
 });
 
+test('normalizeDocumentApprovalInput accepts portuguese contract decisions', async () => {
+  const { normalizeDocumentApprovalInput } = require(approvalModulePath);
+
+  const approved = normalizeDocumentApprovalInput({
+    documentId: 52,
+    decision: 'aprovado',
+    actor: { source: 'user', email: 'adv@juridico.com' },
+  });
+
+  const rejected = normalizeDocumentApprovalInput({
+    documentId: 53,
+    decision: 'rejeitado',
+    reason: 'Documento inválido',
+    actor: { source: 'user', email: 'adv@juridico.com' },
+  });
+
+  assert.equal(approved.decision, 'approved');
+  assert.equal(rejected.decision, 'rejected');
+  assert.equal(rejected.reason, 'Documento inválido');
+});
+
 test('DocumentApprovalService blocks approval while checklist has missing items', async () => {
   const { DocumentApprovalService } = require(approvalModulePath);
   const { ProceduralDocumentChecklistService } = require(checklistModulePath);
@@ -111,4 +132,53 @@ test('DocumentApprovalService persists rejection with reason', async () => {
   assert.equal(decisionSaved.reason, 'Arquivo ilegível');
   assert.equal(result.status, 'rejeitado');
   assert.equal(result.reason, 'Arquivo ilegível');
+});
+
+test('DocumentApprovalService persists approved decision with contract status validado', async () => {
+  const { DocumentApprovalService } = require(approvalModulePath);
+  const { ProceduralDocumentChecklistService } = require(checklistModulePath);
+
+  let decisionSaved = null;
+
+  const service = new DocumentApprovalService(
+    {
+      async findById(documentId) {
+        return {
+          id: documentId,
+          processId: 10,
+          title: 'Petição inicial',
+          status: 'aguardando_aprovacao',
+          version: 3,
+          isLatestVersion: true,
+          metadata: {
+            proceduralType: 'trabalhista',
+            documentType: 'peticao_inicial',
+            relatedDocumentTypes: [' PETICAO_INICIAL ', 'PROCURACAO', ' documentos_pessoais '],
+          },
+        };
+      },
+      async saveDecision(input) {
+        decisionSaved = input;
+        return {
+          documentId: input.documentId,
+          status: input.status,
+          decidedAt: '2026-05-25T12:00:00.000Z',
+          decision: input.decision,
+          reason: input.reason,
+          checklist: input.checklist,
+        };
+      },
+    },
+    new ProceduralDocumentChecklistService(),
+  );
+
+  const result = await service.decide({
+    documentId: 88,
+    decision: 'aprovado',
+    actor: { source: 'user', email: 'adv@juridico.com' },
+  });
+
+  assert.equal(decisionSaved.status, 'validado');
+  assert.equal(result.status, 'validado');
+  assert.equal(result.checklist.complete, true);
 });

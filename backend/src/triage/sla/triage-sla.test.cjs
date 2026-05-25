@@ -33,3 +33,19 @@ test('computes SLA targets, aging hours and breach flag by queue type', async ()
   assert.equal(normal.breached, false);
   assert.equal(normal.slaTargetAt, '2026-05-24T12:00:00.000Z');
 });
+
+test('uses explicit escalated SLA profile when the triage status is escalado', async () => {
+  const { computeTriageSla } = require(modulePath);
+
+  const escalated = computeTriageSla({
+    queueType: 'normal',
+    status: 'escalado',
+    createdAt: '2026-05-22T07:00:00.000Z',
+    now: new Date('2026-05-22T12:00:00.000Z'),
+  });
+
+  assert.equal(escalated.slaProfile, 'escalado');
+  assert.equal(escalated.slaHours, 2);
+  assert.equal(escalated.slaTargetAt, '2026-05-22T09:00:00.000Z');
+  assert.equal(escalated.breached, true);
+});

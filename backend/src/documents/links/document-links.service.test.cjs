@@ -55,3 +55,63 @@ test('DocumentLinksService rejects missing target entities', async () => {
     },
   );
 });
+
+test('createPrismaDocumentLinksRepository rehydrates and persists links through audit sidecar events', async () => {
+  const { createPrismaDocumentLinksRepository } = require(linksModulePath);
+
+  const createdEvents = [];
+  const repository = createPrismaDocumentLinksRepository({
+    document: {
+      async findUnique({ where }) {
+        return where.id === 53 ? { id: 53, processId: 19 } : null;
+      },
+    },
+    process: {
+      async findUnique({ where }) {
+        return where.id === 19 ? { id: 19 } : null;
+      },
+    },
+    auditEvent: {
+      async findMany() {
+        return [
+          {
+            action: 'document.link.bindEntities',
+            details: {
+              links: [
+                { entityType: 'process', entityId: 19, boundAt: '2026-05-24T10:00:00.000Z', boundBy: { source: 'user', email: 'old@juridico.local' } },
+              ],
+            },
+          },
+          {
+            action: 'document.link.bindEntities',
+            details: {
+              links: [
+                { entityType: 'process', entityId: 19, boundAt: '2026-05-24T11:00:00.000Z', boundBy: { source: 'user', email: 'adv@juridico.local' } },
+                { entityType: 'deadline', entityId: 88, boundAt: '2026-05-24T11:00:00.000Z', boundBy: { source: 'user', email: 'adv@juridico.local' } },
+              ],
+            },
+          },
+        ];
+      },
+      async create({ data }) {
+        createdEvents.push(data);
+        return data;
+      },
+    },
+  });
+
+  const links = await repository.listLinks(53);
+  assert.equal(links.length, 2);
+  assert.equal(links[1].entityType, 'deadline');
+  assert.equal(links[1].boundBy.email, 'adv@juridico.local');
+
+  await repository.saveLinks({
+    documentId: 53,
+    links,
+  });
+
+  assert.equal(createdEvents.length, 1);
+  assert.equal(createdEvents[0].action, 'document.link.bindEntities');
+  assert.equal(createdEvents[0].entityId, 53);
+  assert.equal(createdEvents[0].details.links.length, 2);
+});

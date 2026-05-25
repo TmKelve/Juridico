@@ -9,11 +9,19 @@ import type {
 
 interface DocumentDelegate {
   findUnique(args: { where: { id: number } }): Promise<Record<string, unknown> | null>;
-  update(args: { where: { id: number }; data: Record<string, unknown> }): Promise<Record<string, unknown>>;
+  update?(args: { where: { id: number }; data: Record<string, unknown> }): Promise<Record<string, unknown>>;
 }
 
 interface EntityLookupDelegate {
   findUnique(args: { where: { id: number } }): Promise<Record<string, unknown> | null>;
+}
+
+interface AuditEventDelegate {
+  findMany(args: {
+    where: Record<string, unknown>;
+    orderBy?: Record<string, 'asc' | 'desc'>;
+  }): Promise<Array<Record<string, unknown>>>;
+  create(args: { data: Record<string, unknown> }): Promise<Record<string, unknown>>;
 }
 
 function normalizeActor(value: unknown): CrmAuditActor {
@@ -69,6 +77,29 @@ function writeLinksToMetadata(metadata: unknown, links: DocumentEntityLink[]) {
   return current;
 }
 
+function serializeLinks(links: DocumentEntityLink[]) {
+  return links.map((link) => ({
+    entityType: link.entityType,
+    entityId: link.entityId,
+    boundAt: link.boundAt,
+    boundBy: link.boundBy,
+  }));
+}
+
+function readLinksFromAuditEvents(rows: Array<Record<string, unknown>>): DocumentEntityLink[] {
+  let latest: DocumentEntityLink[] = [];
+  for (const row of rows) {
+    const details = row.details;
+    if (!details || typeof details !== 'object' || Array.isArray(details)) continue;
+    const links = readLinksFromMetadata({ documentLinksSidecar: (details as Record<string, unknown>).links });
+    if (links.length > 0) {
+      latest = links;
+    }
+  }
+
+  return latest;
+}
+
 export class InMemoryDocumentLinksRepository implements DocumentLinksRepository {
   private readonly documents = new Map<number, DocumentLinksDocumentRecord>();
   private readonly links = new Map<number, DocumentEntityLink[]>();
@@ -107,6 +138,7 @@ export function createPrismaDocumentLinksRepository(dependencies: {
   attendance?: EntityLookupDelegate;
   triageItem?: EntityLookupDelegate;
   crmOpportunity?: EntityLookupDelegate;
+  auditEvent?: AuditEventDelegate;
 }): DocumentLinksRepository {
   const lookups: Record<DocumentLinkEntityType, EntityLookupDelegate | undefined> = {
     process: dependencies.process,
@@ -136,13 +168,55 @@ export function createPrismaDocumentLinksRepository(dependencies: {
     },
 
     async listLinks(documentId: number) {
+      if (dependencies.auditEvent) {
+        const rows = await dependencies.auditEvent.findMany({
+          where: {
+            scope: 'documents',
+            entityType: 'crm_opportunity_document',
+            entityId: documentId,
+            action: 'document.link.bindEntities',
+          },
+          orderBy: { occurredAt: 'desc' },
+        });
+        return readLinksFromAuditEvents(rows);
+      }
+
       const row = await dependencies.document.findUnique({ where: { id: documentId } });
       return readLinksFromMetadata(row?.metadata);
     },
 
     async saveLinks(input) {
+      if (dependencies.auditEvent) {
+        const document = await dependencies.document.findUnique({ where: { id: input.documentId } });
+        await dependencies.auditEvent.create({
+          data: {
+            id: `doc_link_${input.documentId}_${Date.now()}`,
+            scope: 'documents',
+            entityType: 'crm_opportunity_document',
+            entityId: input.documentId,
+            action: 'document.link.bindEntities',
+            status: 'success',
+            summary: `Vínculos do documento #${input.documentId} atualizados`,
+            details: {
+              documentId: input.documentId,
+              processId: document?.processId === null || document?.processId === undefined ? null : Number(document.processId),
+              links: serializeLinks(input.links),
+            },
+            actor: { source: 'system' },
+            occurredAt: input.links[0]?.boundAt ?? new Date().toISOString(),
+            correlationId: null,
+            idempotencyKey: null,
+            createdAt: new Date().toISOString(),
+          },
+        });
+        return input.links;
+      }
+
       const row = await dependencies.document.findUnique({ where: { id: input.documentId } });
       const metadata = writeLinksToMetadata(row?.metadata, input.links);
+      if (!dependencies.document.update) {
+        throw new Error('Document update delegate is required for metadata-backed link persistence.');
+      }
       await dependencies.document.update({
         where: { id: input.documentId },
         data: { metadata },

@@ -57,3 +57,37 @@ test('ranks unified triage queue with dynamic priority and SLA breach precedence
   assert.equal(queue[2].operationalBucket, 'backlog_adiado');
   assert.equal(queue[2].queueRank, 3);
 });
+
+test('keeps escalated items ahead of regular active work when priority is otherwise close', async () => {
+  const { rankUnifiedTriageQueue } = require(modulePath);
+
+  const queue = rankUnifiedTriageQueue({
+    now: new Date('2026-05-22T12:00:00.000Z'),
+    items: [
+      {
+        id: 21,
+        queueType: 'normal',
+        status: 'pendente',
+        createdAt: '2026-05-22T11:00:00.000Z',
+        priorityScore: 83,
+        priorityReasons: ['fila geral'],
+        sourceType: 'manual',
+      },
+      {
+        id: 22,
+        queueType: 'normal',
+        status: 'escalado',
+        createdAt: '2026-05-22T07:00:00.000Z',
+        priorityScore: 70,
+        priorityReasons: ['subiu para especialista'],
+        sourceType: 'manual',
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    queue.map((item) => item.id),
+    [22, 21],
+  );
+  assert.equal(queue[0].operationalBucket, 'fila_escalada');
+});

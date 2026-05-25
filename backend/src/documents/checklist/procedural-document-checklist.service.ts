@@ -20,17 +20,21 @@ const checklistByProceduralType: Record<string, ProceduralChecklistItem[]> = {
   ],
 };
 
+function normalizeChecklistToken(value: string) {
+  return value.trim().toLowerCase();
+}
+
 export class ProceduralDocumentChecklistService {
   evaluate(input: ProceduralChecklistEvaluationInput): ProceduralChecklistEvaluation {
     const proceduralType = typeof input.proceduralType === 'string' && input.proceduralType.trim()
-      ? input.proceduralType.trim().toLowerCase()
+      ? normalizeChecklistToken(input.proceduralType)
       : 'default';
 
     const requiredItems = checklistByProceduralType[proceduralType] ?? checklistByProceduralType.default;
     const provided = new Set(
       (input.providedDocumentTypes ?? [])
         .filter((item) => typeof item === 'string')
-        .map((item) => item.trim())
+        .map((item) => normalizeChecklistToken(item))
         .filter(Boolean),
     );
 
