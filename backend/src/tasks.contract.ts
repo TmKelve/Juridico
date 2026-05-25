@@ -1,3 +1,5 @@
+import { toLegacyTaskStatus } from './tasks/integrations/task-frontend-status.adapter';
+
 type RawTaskRecord = {
   id: number;
   title: string;
@@ -32,6 +34,9 @@ type RawTaskRecord = {
 export function buildTaskPayload(task: RawTaskRecord) {
   const process = task.process ?? null;
   const client = task.clientRecord ?? process?.clientRecord ?? null;
+  const status = ['backlog', 'triagem', 'em_execucao', 'aguardando_cliente', 'aguardando_interno', 'concluida', 'cancelada', 'atrasada'].includes(task.status)
+    ? toLegacyTaskStatus(task.status as any)
+    : task.status;
 
   return {
     id: task.id,
@@ -44,7 +49,7 @@ export function buildTaskPayload(task: RawTaskRecord) {
     client: client?.name ?? task.clientName ?? process?.client ?? 'Cliente não informado',
     origin: task.origin,
     dueDate: task.dueDate.toISOString().slice(0, 10),
-    status: task.status,
+    status,
     priority: task.priority,
     owner: task.owner,
     createdBy: task.createdBy,

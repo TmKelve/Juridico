@@ -60,11 +60,14 @@ import {
 import { resolveTriageTarget } from './triage.matcher';
 import { registerFinanceRoutes } from './finance/http/register-finance-routes';
 import { listFinancePermissions } from './authz/finance/permissions';
+import { listAuthzPermissions } from './authz/rbac/permissions';
+import { checkAuthorization } from './authz/policies/authz.check';
 import { FinanceAuditService, PrismaFinanceAuditRepository } from './finance/shared/audit';
 import { PrismaFinanceCollectionsRepository } from './finance/collections/finance-collections.service';
 import { FinanceCollectionDispatchJob } from './jobs/finance/finance-collection-dispatch.job';
 import { MockFinanceTransport } from './jobs/finance/mock-finance-transport';
 import { registerFinanceSchedulers } from './shared/scheduler/finance-scheduler-registry';
+import { registerEpicIjRoutes } from './epic-ij/register-epic-ij-routes';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -6189,13 +6192,40 @@ app.get('/permissions', (req, res) => {
   const decoded = getUserFromReq(req);
   if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
 
-  const perms: Record<'ADM' | 'ADV' | 'FIN', string[]> = {
-    ADM: ['processes:*', 'users:*', 'dashboard:*', ...listFinancePermissions('ADM')],
-    ADV: ['processes:read,write', 'documents:read,write', 'clients:read'],
-    FIN: ['clients:read', ...listFinancePermissions('FIN')]
+  const perms: Record<'ADM' | 'ADV' | 'FIN' | 'ATD', string[]> = {
+    ADM: ['processes:*', 'users:*', 'dashboard:*', ...listFinancePermissions('ADM'), ...listAuthzPermissions('ADM')],
+    ADV: ['processes:read,write', 'documents:read,write', 'clients:read', ...listAuthzPermissions('ADV')],
+    FIN: ['clients:read', ...listFinancePermissions('FIN'), ...listAuthzPermissions('FIN')],
+    ATD: ['clients:read', ...listAuthzPermissions('ATD')],
   };
 
-  res.json(perms[decoded.role as 'ADM' | 'ADV' | 'FIN'] || []);
+  res.json(Array.from(new Set(perms[decoded.role as 'ADM' | 'ADV' | 'FIN' | 'ATD'] || [])));
+});
+
+app.post('/authz/check', (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const { permissionKey, resourceType, resourceId, context } = req.body ?? {};
+
+  if (typeof permissionKey !== 'string' || typeof resourceType !== 'string') {
+    return res.status(400).send({ message: 'permissionKey e resourceType sao obrigatorios' });
+  }
+
+  const decision = checkAuthorization({
+    actor: {
+      userId: decoded.sub,
+      role: decoded.role,
+      teamIds: Array.isArray(req.body?.teamIds) ? req.body.teamIds : [],
+      portfolioIds: Array.isArray(req.body?.portfolioIds) ? req.body.portfolioIds : [],
+    },
+    permissionKey,
+    resourceType: resourceType as any,
+    resourceId: resourceId ?? null,
+    context: context && typeof context === 'object' ? context : undefined,
+  });
+
+  res.json({ decision });
 });
 
 app.get('/home', (req, res) => {
@@ -7229,6 +7259,12 @@ registerFinanceRoutes({
   prisma,
   getUserFromReq,
   devMockEnabled,
+});
+
+registerEpicIjRoutes({
+  app,
+  prisma,
+  getUserFromReq,
 });
 
 app.get('/', (req, res) => {

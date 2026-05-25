@@ -1,0 +1,545 @@
+{
+  "epic": "Epic I/J — Tarefas, Atendimentos, Equipe e Permissoes",
+  "version": "2026-05-25",
+  "compatibility": {
+    "rules": [
+      "Preservar as rotas atuais de /tasks, /attendances, /permissions, /processes e payloads ja consumidos pelo frontend.",
+      "Novos campos devem ser aditivos e opcionais enquanto as telas antigas coexistirem com os modulos novos.",
+      "Acoes sensiveis exigem validacao explicita no backend com deny-by-default.",
+      "Toda mutacao operacional precisa registrar audit.event com actor, occurredAt, scope, action, status e diff essencial.",
+      "Toda automacao, conversao ou redistribuicao em lote precisa carregar idempotencyKey ou dedupeKey auditavel."
+    ]
+  },
+  "entities": {
+    "taskAggregate": {
+      "fields": {
+        "taskId": "number",
+        "title": "string",
+        "description": "string",
+        "status": "backlog|triagem|em_execucao|aguardando_cliente|aguardando_interno|concluida|cancelada|atrasada",
+        "priority": "baixa|media|alta|critica",
+        "dueDate": "YYYY-MM-DD|null",
+        "slaDueAt": "ISO-8601 datetime|null",
+        "ownerUserId": "number|null",
+        "ownerLabel": "string",
+        "portfolioId": "number|null",
+        "teamId": "number|null",
+        "linkedEntities": "Array<{ entityType: process|deadline|publication|attendance|document, entityId: number }>",
+        "workflowStage": "captura|planejamento|execucao|aguardando|conclusao",
+        "breached": "boolean",
+        "followupState": "idle|scheduled|pending_dispatch|dispatched|acknowledged",
+        "createdByUserId": "number|null",
+        "createdAt": "ISO-8601 datetime",
+        "updatedAt": "ISO-8601 datetime"
+      }
+    },
+    "attendanceAggregate": {
+      "fields": {
+        "attendanceId": "number",
+        "status": "aberto|triagem|em_atendimento|aguardando_cliente|resolvido|fechado_fora_sla|cancelado",
+        "priority": "baixa|media|alta|critica",
+        "channel": "whatsapp|telefone|email|presencial|portal|interno",
+        "type": "consulta|urgencia|rotina|triagem|acompanhamento",
+        "subject": "string",
+        "summary": "string",
+        "ownerUserId": "number|null",
+        "portfolioId": "number|null",
+        "teamId": "number|null",
+        "slaPolicyCode": "default|urgent|vip|custom",
+        "slaTargetAt": "ISO-8601 datetime|null",
+        "slaBreached": "boolean",
+        "conversionState": "nao_aplicavel|elegivel_tarefa|elegivel_prazo|convertido_tarefa|convertido_prazo",
+        "derivedTaskId": "number|null",
+        "derivedDeadlineId": "number|null",
+        "createdAt": "ISO-8601 datetime",
+        "updatedAt": "ISO-8601 datetime"
+      }
+    },
+    "portfolioOwnership": {
+      "fields": {
+        "portfolioId": "number",
+        "name": "string",
+        "teamId": "number",
+        "primaryOwnerUserId": "number",
+        "backupOwnerUserId": "number|null",
+        "memberUserIds": "number[]",
+        "active": "boolean"
+      }
+    },
+    "authzDecision": {
+      "fields": {
+        "allowed": "boolean",
+        "permissionKey": "string",
+        "scope": "own|team|portfolio|global|denied",
+        "reason": "string",
+        "sensitive": "boolean",
+        "requiresAudit": "boolean"
+      }
+    },
+    "productivitySnapshot": {
+      "fields": {
+        "referenceDate": "YYYY-MM-DD",
+        "scopeType": "user|team|portfolio",
+        "scopeId": "number|string",
+        "tasksCompleted": "number",
+        "tasksOverdue": "number",
+        "attendancesHandled": "number",
+        "slaBreaches": "number",
+        "avgResolutionHours": "number|null",
+        "reassignments": "number",
+        "generatedAt": "ISO-8601 datetime"
+      }
+    },
+    "auditEvent": {
+      "fields": {
+        "id": "string",
+        "scope": "task|attendance|team|portfolio|authz|productivity",
+        "action": "string",
+        "status": "success|warning|error",
+        "entityType": "string",
+        "entityId": "number|string|null",
+        "actor": "user:<id>|system|scheduler",
+        "occurredAt": "ISO-8601 datetime",
+        "context": "object",
+        "diff": "object|null",
+        "idempotencyKey": "string|null",
+        "correlationId": "string|null"
+      }
+    }
+  },
+  "commands": {
+    "task.create": {
+      "input": {
+        "title": "string",
+        "description": "string|null",
+        "processId": "number|null",
+        "clientId": "number|null",
+        "origin": "processo|prazo|documento|publicacao|atendimento|interno",
+        "ownerUserId": "number|null",
+        "ownerLabel": "string|null",
+        "portfolioId": "number|null",
+        "priority": "baixa|media|alta|critica",
+        "dueDate": "YYYY-MM-DD|null",
+        "workflowStage": "captura|planejamento|execucao|aguardando|conclusao",
+        "linkedEntities": "Array<{ entityType: process|deadline|publication|attendance|document, entityId: number }>",
+        "notes": "string|null",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "task": "taskAggregate",
+        "auditEvent": "auditEvent",
+        "idempotency": "created|replayed"
+      },
+      "errors": [
+        "TASK_INVALID",
+        "TASK_PROCESS_NOT_FOUND",
+        "TASK_CLIENT_NOT_FOUND",
+        "TASK_OWNER_NOT_FOUND",
+        "TASK_PERMISSION_DENIED",
+        "IDEMPOTENCY_CONFLICT"
+      ],
+      "idempotency": {
+        "scope": "task.create",
+        "dedupeBy": [
+          "scope",
+          "idempotencyKey"
+        ]
+      }
+    },
+    "task.updateStatus": {
+      "input": {
+        "taskId": "number",
+        "fromStatus": "optional current status",
+        "toStatus": "backlog|triagem|em_execucao|aguardando_cliente|aguardando_interno|concluida|cancelada|atrasada",
+        "transitionReason": "string|null",
+        "actorUserId": "number",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "task": "taskAggregate",
+        "auditEvent": "auditEvent"
+      },
+      "errors": [
+        "TASK_NOT_FOUND",
+        "TASK_TRANSITION_INVALID",
+        "TASK_PERMISSION_DENIED",
+        "IDEMPOTENCY_CONFLICT"
+      ],
+      "idempotency": {
+        "scope": "task.updateStatus",
+        "dedupeBy": [
+          "scope",
+          "idempotencyKey"
+        ]
+      }
+    },
+    "task.linkEntities": {
+      "input": {
+        "taskId": "number",
+        "links": "Array<{ entityType: process|deadline|publication|attendance|document, entityId: number }>",
+        "actorUserId": "number",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "task": "taskAggregate",
+        "auditEvent": "auditEvent"
+      },
+      "errors": [
+        "TASK_NOT_FOUND",
+        "TASK_LINK_TARGET_NOT_FOUND",
+        "TASK_LINK_DUPLICATE",
+        "TASK_PERMISSION_DENIED",
+        "IDEMPOTENCY_CONFLICT"
+      ],
+      "idempotency": {
+        "scope": "task.linkEntities",
+        "dedupeBy": [
+          "scope",
+          "taskId",
+          "links"
+        ]
+      }
+    },
+    "task.followup.schedule": {
+      "input": {
+        "taskId": "number",
+        "followupAt": "ISO-8601 datetime",
+        "reason": "overdue|sla_risk|manual",
+        "channel": "in_app|internal_feed",
+        "actor": "user:<id>|system|scheduler",
+        "dedupeKey": "string"
+      },
+      "output": {
+        "task": "taskAggregate",
+        "scheduled": "boolean",
+        "auditEvent": "auditEvent"
+      },
+      "errors": [
+        "TASK_NOT_FOUND",
+        "TASK_FOLLOWUP_INVALID",
+        "TASK_FOLLOWUP_DUPLICATE"
+      ],
+      "idempotency": {
+        "scope": "task.followup.schedule",
+        "dedupeBy": [
+          "scope",
+          "dedupeKey"
+        ]
+      }
+    },
+    "task.followup.execute": {
+      "input": {
+        "referenceAt": "ISO-8601 datetime",
+        "batchSize": "number",
+        "actor": "scheduler|system",
+        "dedupeKey": "string"
+      },
+      "output": {
+        "processed": "number",
+        "dispatched": "number",
+        "skipped": "number",
+        "auditEvents": "auditEvent[]"
+      },
+      "errors": [
+        "TASK_FOLLOWUP_EXECUTION_FAILED"
+      ],
+      "idempotency": {
+        "scope": "task.followup.execute",
+        "dedupeBy": [
+          "scope",
+          "dedupeKey"
+        ]
+      }
+    },
+    "attendance.create": {
+      "input": {
+        "processId": "number|null",
+        "clientId": "number|null",
+        "channel": "whatsapp|telefone|email|presencial|portal|interno",
+        "type": "consulta|urgencia|rotina|triagem|acompanhamento",
+        "subject": "string",
+        "summary": "string|null",
+        "notes": "string|null",
+        "ownerUserId": "number|null",
+        "portfolioId": "number|null",
+        "priority": "baixa|media|alta|critica",
+        "occurredAt": "ISO-8601 datetime|null",
+        "nextStep": "string|null",
+        "scheduledReturnAt": "ISO-8601 datetime|null",
+        "slaPolicyCode": "default|urgent|vip|custom",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "attendance": "attendanceAggregate",
+        "auditEvent": "auditEvent",
+        "idempotency": "created|replayed"
+      },
+      "errors": [
+        "ATTENDANCE_INVALID",
+        "ATTENDANCE_PROCESS_NOT_FOUND",
+        "ATTENDANCE_CLIENT_NOT_FOUND",
+        "ATTENDANCE_PERMISSION_DENIED",
+        "IDEMPOTENCY_CONFLICT"
+      ],
+      "idempotency": {
+        "scope": "attendance.create",
+        "dedupeBy": [
+          "scope",
+          "idempotencyKey"
+        ]
+      }
+    },
+    "attendance.updateSla": {
+      "input": {
+        "attendanceId": "number",
+        "status": "aberto|triagem|em_atendimento|aguardando_cliente|resolvido|fechado_fora_sla|cancelado",
+        "slaTargetAt": "ISO-8601 datetime|null",
+        "allowCloseOutOfSla": "boolean",
+        "justification": "string|null",
+        "actorUserId": "number",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "attendance": "attendanceAggregate",
+        "auditEvent": "auditEvent"
+      },
+      "errors": [
+        "ATTENDANCE_NOT_FOUND",
+        "ATTENDANCE_SLA_POLICY_INVALID",
+        "ATTENDANCE_CLOSE_OUT_OF_SLA_DENIED",
+        "ATTENDANCE_PERMISSION_DENIED",
+        "IDEMPOTENCY_CONFLICT"
+      ],
+      "idempotency": {
+        "scope": "attendance.updateSla",
+        "dedupeBy": [
+          "scope",
+          "idempotencyKey"
+        ]
+      }
+    },
+    "attendance.convertToTask": {
+      "input": {
+        "attendanceId": "number",
+        "title": "string",
+        "dueDate": "YYYY-MM-DD|null",
+        "priority": "baixa|media|alta|critica",
+        "ownerUserId": "number|null",
+        "actorUserId": "number",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "attendance": "attendanceAggregate",
+        "task": "taskAggregate",
+        "auditEvent": "auditEvent"
+      },
+      "errors": [
+        "ATTENDANCE_NOT_FOUND",
+        "ATTENDANCE_CONVERSION_INVALID",
+        "TASK_PERMISSION_DENIED",
+        "IDEMPOTENCY_CONFLICT"
+      ],
+      "idempotency": {
+        "scope": "attendance.convertToTask",
+        "dedupeBy": [
+          "scope",
+          "attendanceId"
+        ]
+      }
+    },
+    "attendance.convertToDeadline": {
+      "input": {
+        "attendanceId": "number",
+        "title": "string",
+        "dueDate": "YYYY-MM-DD",
+        "priority": "baixa|media|alta",
+        "responsible": "string|null",
+        "actorUserId": "number",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "attendance": "attendanceAggregate",
+        "deadlineId": "number",
+        "auditEvent": "auditEvent"
+      },
+      "errors": [
+        "ATTENDANCE_NOT_FOUND",
+        "ATTENDANCE_CONVERSION_INVALID",
+        "DEADLINE_PROCESS_REQUIRED",
+        "DEADLINE_PERMISSION_DENIED",
+        "IDEMPOTENCY_CONFLICT"
+      ],
+      "idempotency": {
+        "scope": "attendance.convertToDeadline",
+        "dedupeBy": [
+          "scope",
+          "attendanceId"
+        ]
+      }
+    },
+    "authz.check": {
+      "input": {
+        "actorUserId": "number",
+        "permissionKey": "string",
+        "resourceType": "task|attendance|portfolio|team|productivity|export",
+        "resourceId": "number|string|null",
+        "context": "object"
+      },
+      "output": {
+        "decision": "authzDecision"
+      },
+      "errors": [
+        "AUTHZ_ACTOR_NOT_FOUND",
+        "AUTHZ_PERMISSION_UNKNOWN"
+      ],
+      "idempotency": {
+        "scope": "read-only"
+      }
+    },
+    "team.assignOwnership": {
+      "input": {
+        "portfolioId": "number",
+        "primaryOwnerUserId": "number",
+        "backupOwnerUserId": "number|null",
+        "teamId": "number",
+        "memberUserIds": "number[]",
+        "actorUserId": "number",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "portfolio": "portfolioOwnership",
+        "auditEvent": "auditEvent"
+      },
+      "errors": [
+        "TEAM_NOT_FOUND",
+        "PORTFOLIO_NOT_FOUND",
+        "OWNERSHIP_INVALID",
+        "AUTHZ_PERMISSION_DENIED",
+        "IDEMPOTENCY_CONFLICT"
+      ],
+      "idempotency": {
+        "scope": "team.assignOwnership",
+        "dedupeBy": [
+          "scope",
+          "portfolioId",
+          "idempotencyKey"
+        ]
+      }
+    },
+    "team.reassignPortfolio": {
+      "input": {
+        "portfolioId": "number",
+        "fromOwnerUserId": "number|null",
+        "toOwnerUserId": "number",
+        "reason": "string",
+        "includeBacklog": "boolean",
+        "includeOpenTasks": "boolean",
+        "actorUserId": "number",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "portfolio": "portfolioOwnership",
+        "movedTasks": "number",
+        "auditEvent": "auditEvent"
+      },
+      "errors": [
+        "PORTFOLIO_NOT_FOUND",
+        "PORTFOLIO_REASSIGN_DENIED",
+        "PORTFOLIO_OWNER_NOT_FOUND",
+        "IDEMPOTENCY_CONFLICT"
+      ],
+      "idempotency": {
+        "scope": "team.reassignPortfolio",
+        "dedupeBy": [
+          "scope",
+          "portfolioId",
+          "idempotencyKey"
+        ]
+      }
+    },
+    "productivity.snapshot": {
+      "input": {
+        "referenceDate": "YYYY-MM-DD",
+        "scopeType": "user|team|portfolio",
+        "scopeId": "number|string",
+        "includeClosedTasks": "boolean",
+        "includeAttendances": "boolean",
+        "actorUserId": "number",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "snapshot": "productivitySnapshot",
+        "auditEvent": "auditEvent|null"
+      },
+      "errors": [
+        "PRODUCTIVITY_SCOPE_INVALID",
+        "PRODUCTIVITY_EXPORT_DENIED",
+        "AUTHZ_PERMISSION_DENIED"
+      ],
+      "idempotency": {
+        "scope": "productivity.snapshot",
+        "dedupeBy": [
+          "scope",
+          "referenceDate",
+          "scopeType",
+          "scopeId"
+        ]
+      }
+    },
+    "audit.event": {
+      "input": {
+        "scope": "task|attendance|team|portfolio|authz|productivity",
+        "action": "string",
+        "status": "success|warning|error",
+        "entityType": "string",
+        "entityId": "number|string|null",
+        "actor": "user:<id>|system|scheduler",
+        "occurredAt": "ISO-8601 datetime",
+        "context": "object",
+        "diff": "object|null",
+        "idempotencyKey": "string|null",
+        "correlationId": "string|null"
+      },
+      "output": {
+        "event": "auditEvent"
+      },
+      "errors": [
+        "AUDIT_INVALID"
+      ],
+      "idempotency": {
+        "scope": "audit.event",
+        "dedupeBy": [
+          "scope",
+          "idempotencyKey"
+        ]
+      }
+    }
+  },
+  "security": {
+    "denyByDefaultSensitiveActions": [
+      "team.reassignPortfolio",
+      "task.bulkReassignOwner",
+      "attendance.closeOutOfSla",
+      "productivity.export"
+    ],
+    "backendEnforcementRequired": true,
+    "requiredAuditFields": [
+      "actor",
+      "occurredAt",
+      "action",
+      "scope",
+      "status",
+      "context",
+      "diff"
+    ]
+  },
+  "integrationOrder": [
+    "contracts",
+    "backend.tasks.attendances.automation",
+    "backend.authz.team.productivity",
+    "frontend.tasks.attendances",
+    "frontend.team.permissions",
+    "tests.security",
+    "docs.evidence"
+  ]
+}

@@ -8,11 +8,81 @@ datasource db {
 }
 
 model User {
-  id        Int           @id @default(autoincrement())
-  email     String        @unique
-  password  String
+  id                     Int                 @id @default(autoincrement())
+  email                  String              @unique
+  password               String
+  role                   String
+  processes              Process[]
+  ownedTasks             Task[]              @relation("TaskOwnerUser")
+  responsibleAttendances Atendimento[]       @relation("AttendanceResponsibleUser")
+  teamMemberships        TeamMember[]
+  primaryPortfolios      Portfolio[]         @relation("PortfolioPrimaryOwner")
+  backupPortfolios       Portfolio[]         @relation("PortfolioBackupOwner")
+  portfolioMemberships   PortfolioMember[]
+}
+
+model Team {
+  id          Int               @id @default(autoincrement())
+  name        String            @unique
+  slug        String            @unique
+  description String?
+  active      Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  memberships TeamMember[]
+  portfolios  Portfolio[]
+  tasks       Task[]
+  attendances Atendimento[]
+}
+
+model TeamMember {
+  id        Int      @id @default(autoincrement())
+  teamId    Int
+  team      Team     @relation(fields: [teamId], references: [id])
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
   role      String
-  processes Process[]
+  isActive  Boolean  @default(true)
+  joinedAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([teamId, userId])
+}
+
+model Portfolio {
+  id                 Int               @id @default(autoincrement())
+  name               String
+  code               String            @unique
+  teamId             Int
+  team               Team              @relation(fields: [teamId], references: [id])
+  primaryOwnerUserId Int
+  primaryOwner       User              @relation("PortfolioPrimaryOwner", fields: [primaryOwnerUserId], references: [id])
+  backupOwnerUserId  Int?
+  backupOwner        User?             @relation("PortfolioBackupOwner", fields: [backupOwnerUserId], references: [id])
+  active             Boolean           @default(true)
+  metadata           Json?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  memberships        PortfolioMember[]
+  tasks              Task[]
+  attendances        Atendimento[]
+
+  @@unique([teamId, name])
+}
+
+model PortfolioMember {
+  id          Int       @id @default(autoincrement())
+  portfolioId Int
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id])
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id])
+  role        String    @default("member")
+  isBackup    Boolean   @default(false)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([portfolioId, userId])
 }
 
 model Client {
@@ -369,6 +439,12 @@ model Atendimento {
   process           Process?  @relation(fields: [processId], references: [id])
   clientId          Int?
   clientRecord      Client?   @relation(fields: [clientId], references: [id])
+  responsibleUserId Int?
+  responsibleUser   User?     @relation("AttendanceResponsibleUser", fields: [responsibleUserId], references: [id])
+  teamId            Int?
+  team              Team?     @relation(fields: [teamId], references: [id])
+  portfolioId       Int?
+  portfolio         Portfolio? @relation(fields: [portfolioId], references: [id])
   subject           String    @map("title")
   summary           String    @map("description")
   notes             String?
@@ -381,10 +457,16 @@ model Atendimento {
   nextStep          String?
   scheduledReturnAt DateTime?
   critical          Boolean   @default(false)
+  slaPolicyCode     String    @default("default")
+  slaTargetAt       DateTime?
+  slaBreachedAt     DateTime?
+  convertedTaskId   Int?
+  convertedDeadlineId Int?
   actorEmail        String
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   agendaEvents      AgendaEvent[]
+  history           AttendanceHistory[]
 }
 
 model Task {
@@ -395,11 +477,18 @@ model Task {
   process           Process?  @relation(fields: [processId], references: [id])
   clientId          Int?
   clientRecord      Client?   @relation(fields: [clientId], references: [id])
+  ownerUserId       Int?
+  ownerUser         User?     @relation("TaskOwnerUser", fields: [ownerUserId], references: [id])
+  teamId            Int?
+  team              Team?     @relation(fields: [teamId], references: [id])
+  portfolioId       Int?
+  portfolio         Portfolio? @relation(fields: [portfolioId], references: [id])
   clientName        String?
   origin            String    @default("interno")
   dueDate           DateTime
   status            String    @default("pendente")
   priority          String    @default("media")
+  workflowStage     String    @default("captura")
   owner             String
   createdBy         String
   notes             String?
@@ -407,9 +496,136 @@ model Task {
   linkedToPublication Boolean @default(false)
   linkedToDocument  Boolean   @default(false)
   immediateAction   Boolean   @default(false)
+  slaTargetAt       DateTime?
+  followupState     String    @default("idle")
+  lastFollowupAt    DateTime?
+  breachedAt        DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   agendaEvents      AgendaEvent[]
+  links             TaskLink[]
+  followupSchedules TaskFollowupSchedule[]
+  history           TaskHistory[]
+}
+
+model TaskLink {
+  id         Int      @id @default(autoincrement())
+  taskId      Int
+  task        Task     @relation(fields: [taskId], references: [id])
+  entityType  String
+  entityId    Int
+  createdAt   DateTime @default(now())
+
+  @@unique([taskId, entityType, entityId])
+}
+
+model TaskFollowupSchedule {
+  id           Int      @id @default(autoincrement())
+  taskId        Int
+  task          Task     @relation(fields: [taskId], references: [id])
+  followupAt    DateTime
+  reason        String
+  channel       String   @default("in_app")
+  state         String   @default("scheduled")
+  dedupeKey     String   @unique
+  dispatchedAt  DateTime?
+  acknowledgedAt DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([state, followupAt])
+}
+
+model TaskHistory {
+  id              Int      @id @default(autoincrement())
+  taskId           Int
+  task             Task     @relation(fields: [taskId], references: [id])
+  eventType        String
+  fromStatus       String?
+  toStatus         String?
+  fromOwnerUserId  Int?
+  toOwnerUserId    Int?
+  fromTeamId       Int?
+  toTeamId         Int?
+  actor            String
+  details          Json?
+  correlationId    String?
+  idempotencyKey   String?
+  occurredAt       DateTime @default(now())
+
+  @@index([taskId, occurredAt])
+}
+
+model AttendanceHistory {
+  id                   Int      @id @default(autoincrement())
+  attendanceId         Int
+  attendance           Atendimento @relation(fields: [attendanceId], references: [id])
+  eventType            String
+  fromStatus           String?
+  toStatus             String?
+  fromResponsibleUserId Int?
+  toResponsibleUserId  Int?
+  fromTeamId           Int?
+  toTeamId             Int?
+  actor                String
+  details              Json?
+  correlationId        String?
+  idempotencyKey       String?
+  occurredAt           DateTime @default(now())
+
+  @@index([attendanceId, occurredAt])
+}
+
+model WorkAuditEvent {
+  id             String   @id
+  scope          String
+  entityType     String
+  entityId       String?
+  action         String
+  status         String
+  summary        String
+  details        Json
+  actor          Json
+  occurredAt     DateTime
+  correlationId  String?
+  idempotencyKey String?
+  createdAt      DateTime @default(now())
+
+  @@index([scope, occurredAt])
+  @@index([entityType, entityId])
+}
+
+model WorkIdempotencyRequest {
+  id           Int      @id @default(autoincrement())
+  key          String
+  scope        String
+  entityType   String
+  entityId     String?
+  action       String
+  payloadHash  String
+  responseCode Int
+  responseBody Json
+  auditEventId String?
+  createdAt    DateTime @default(now())
+
+  @@unique([scope, key], name: "work_scope_key")
+}
+
+model ProductivitySnapshot {
+  id                 Int      @id @default(autoincrement())
+  referenceDate      DateTime
+  scopeType          String
+  scopeId            String
+  tasksCompleted     Int      @default(0)
+  tasksOverdue       Int      @default(0)
+  attendancesHandled Int      @default(0)
+  slaBreaches        Int      @default(0)
+  avgResolutionHours Float?
+  reassignments      Int      @default(0)
+  metrics            Json
+  createdAt          DateTime @default(now())
+
+  @@unique([referenceDate, scopeType, scopeId], name: "productivity_snapshot_scope")
 }
 
 model AgendaEvent {
