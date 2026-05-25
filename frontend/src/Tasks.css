@@ -495,6 +495,30 @@
   text-overflow: ellipsis;
 }
 
+.tsk-operational-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.tsk-operational-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 10px;
+  background: var(--brand-100);
+  color: var(--brand-700);
+  max-width: none;
+  white-space: nowrap;
+}
+
+.tsk-operational-chip.is-danger {
+  background: var(--error-100);
+  color: var(--error-700);
+}
+
 .tsk-col-context strong,
 .tsk-process {
   display: block;

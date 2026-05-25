@@ -25,7 +25,7 @@ import {
   User,
   X,
 } from 'lucide-react';
-import { api, type ApiAttendance } from './api';
+import { api, apiClient, type ApiAttendance } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import { ProcessCombobox } from './ProcessCombobox';
 import './Atendimentos.css';
@@ -47,9 +47,12 @@ interface ProcessRecord {
 type AtendStatus = 'aberto' | 'resolvido' | 'aguardando_cliente' | 'sem_resposta' | 'agendado';
 type Canal = 'whatsapp' | 'telefone' | 'email' | 'presencial' | 'portal' | 'interno';
 type TipoAtendimento = 'consulta' | 'urgencia' | 'rotina' | 'triagem' | 'acompanhamento';
-type Priority = 'alta' | 'media' | 'baixa';
+type Priority = 'alta' | 'media' | 'baixa' | 'critica';
 type ViewMode = 'lista' | 'conversa' | 'timeline';
 type SortField = 'data' | 'status' | 'cliente' | 'prioridade';
+type RawAttendanceStatus = AtendStatus | 'triagem' | 'em_atendimento' | 'fechado_fora_sla' | 'cancelado';
+type AttendanceConversionState = 'nao_aplicavel' | 'elegivel_tarefa' | 'elegivel_prazo' | 'convertido_tarefa' | 'convertido_prazo';
+type AttendanceOperationalState = 'novo' | 'em_triagem' | 'em_atendimento' | 'pendente_cliente' | 'resolvido' | 'encerrado_fora_sla' | 'cancelado';
 
 interface AtendimentoItem {
   id: string;
@@ -63,6 +66,7 @@ interface AtendimentoItem {
   resumo: string;
   observacoes: string;
   status: AtendStatus;
+  rawStatus: RawAttendanceStatus;
   priority: Priority;
   responsavel: string;
   area: string;
@@ -70,6 +74,13 @@ interface AtendimentoItem {
   proximoPasso: string;
   retornoAgendado: string | null;
   critico: boolean;
+  slaTargetAt: string | null;
+  slaBreached: boolean;
+  slaPolicyCode: string | null;
+  conversionState: AttendanceConversionState;
+  derivedTaskId: number | null;
+  derivedDeadlineId: number | null;
+  operationalState: AttendanceOperationalState | null;
 }
 
 interface AtendimentoFilters {
@@ -179,7 +190,62 @@ function formatDateShort(iso: string) {
   return new Date(`${iso}T00:00:00`).toLocaleDateString('pt-BR');
 }
 
+function getRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
+}
+
+function readString(record: Record<string, unknown> | null, key: string) {
+  const value = record?.[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function readBoolean(record: Record<string, unknown> | null, key: string) {
+  const value = record?.[key];
+  return typeof value === 'boolean' ? value : null;
+}
+
+function readNumber(record: Record<string, unknown> | null, key: string) {
+  const value = record?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function normalizeAttendanceStatus(rawStatus: string | null | undefined, slaBreached: boolean, hasScheduledReturn: boolean): AtendStatus {
+  switch (rawStatus) {
+    case 'triagem':
+    case 'em_atendimento':
+    case 'aberto':
+      return 'aberto';
+    case 'aguardando_cliente':
+      return 'aguardando_cliente';
+    case 'fechado_fora_sla':
+      return 'resolvido';
+    case 'cancelado':
+      return 'sem_resposta';
+    case 'agendado':
+      return 'agendado';
+    case 'sem_resposta':
+      return 'sem_resposta';
+    case 'resolvido':
+      return hasScheduledReturn ? 'agendado' : 'resolvido';
+    default:
+      return slaBreached ? 'sem_resposta' : 'aberto';
+  }
+}
+
+function normalizeAttendancePriority(rawPriority: string | null | undefined, critical: boolean): Priority {
+  if (rawPriority === 'alta' || rawPriority === 'media' || rawPriority === 'baixa' || rawPriority === 'critica') {
+    return rawPriority;
+  }
+  return critical ? 'critica' : 'media';
+}
+
 function mapApiAttendance(item: ApiAttendance): AtendimentoItem {
+  const raw = getRecord(item);
+  const retornoAgendado = readString(raw, 'retornoAgendado') ?? item.retornoAgendado;
+  const slaBreached = readBoolean(raw, 'slaBreached') ?? false;
+  const rawStatus = (readString(raw, 'status') ?? item.status) as RawAttendanceStatus;
+  const critico = item.critico || slaBreached || (readBoolean(raw, 'critical') ?? false);
+
   return {
     id: String(item.id),
     processId: item.processId ?? 0,
@@ -191,14 +257,22 @@ function mapApiAttendance(item: ApiAttendance): AtendimentoItem {
     assunto: item.assunto,
     resumo: item.resumo,
     observacoes: item.observacoes,
-    status: item.status,
-    priority: item.priority,
+    status: normalizeAttendanceStatus(rawStatus, slaBreached, Boolean(retornoAgendado)),
+    rawStatus,
+    priority: normalizeAttendancePriority(readString(raw, 'priority') ?? item.priority, critico),
     responsavel: item.responsavel,
     area: item.area,
     dataHora: item.dataHora,
     proximoPasso: item.proximoPasso,
-    retornoAgendado: item.retornoAgendado,
-    critico: item.critico,
+    retornoAgendado,
+    critico,
+    slaTargetAt: readString(raw, 'slaTargetAt'),
+    slaBreached,
+    slaPolicyCode: readString(raw, 'slaPolicyCode'),
+    conversionState: (readString(raw, 'conversionState') as AttendanceConversionState | null) ?? 'nao_aplicavel',
+    derivedTaskId: readNumber(raw, 'derivedTaskId'),
+    derivedDeadlineId: readNumber(raw, 'derivedDeadlineId'),
+    operationalState: readString(raw, 'operationalState') as AttendanceOperationalState | null,
   };
 }
 
@@ -225,7 +299,7 @@ function StatusBadge({ status }: { status: AtendStatus }) {
 }
 
 function PriorityDot({ priority }: { priority: Priority }) {
-  const labels: Record<Priority, string> = { alta: 'Alta', media: 'Média', baixa: 'Baixa' };
+  const labels: Record<Priority, string> = { alta: 'Alta', media: 'Média', baixa: 'Baixa', critica: 'Crítica' };
   return (
     <span className={`atend-priority-dot atend-priority-dot--${priority}`} title={`Prioridade ${labels[priority]}`} aria-label={`Prioridade ${labels[priority]}`} />
   );
@@ -245,6 +319,48 @@ function CanalIcon({ canal, hideLabel = false }: { canal: Canal; hideLabel?: boo
       {icons[canal]}
       {!hideLabel && <span>{CANAL_LABEL[canal]}</span>}
     </span>
+  );
+}
+
+const CONVERSION_LABEL: Record<AttendanceConversionState, string> = {
+  nao_aplicavel: 'Sem conversão',
+  elegivel_tarefa: 'Elegível para tarefa',
+  elegivel_prazo: 'Elegível para prazo',
+  convertido_tarefa: 'Convertido em tarefa',
+  convertido_prazo: 'Convertido em prazo',
+};
+
+const OPERATIONAL_LABEL: Record<AttendanceOperationalState, string> = {
+  novo: 'Novo',
+  em_triagem: 'Em triagem',
+  em_atendimento: 'Em atendimento',
+  pendente_cliente: 'Pendente do cliente',
+  resolvido: 'Resolvido',
+  encerrado_fora_sla: 'Encerrado fora do SLA',
+  cancelado: 'Cancelado',
+};
+
+const RAW_STATUS_LABEL: Record<Exclude<RawAttendanceStatus, AtendStatus>, string> = {
+  triagem: 'Triagem',
+  em_atendimento: 'Em atendimento',
+  fechado_fora_sla: 'Fechado fora do SLA',
+  cancelado: 'Cancelado',
+};
+
+function AttendanceContextBadges({ item }: { item: AtendimentoItem }) {
+  const chips: Array<{ label: string; danger?: boolean }> = [];
+  if (item.slaTargetAt) chips.push({ label: `SLA ${new Date(item.slaTargetAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`, danger: item.slaBreached });
+  if (item.rawStatus in RAW_STATUS_LABEL) chips.push({ label: RAW_STATUS_LABEL[item.rawStatus as Exclude<RawAttendanceStatus, AtendStatus>] });
+  if (item.operationalState) chips.push({ label: OPERATIONAL_LABEL[item.operationalState] });
+  if (item.conversionState !== 'nao_aplicavel') chips.push({ label: CONVERSION_LABEL[item.conversionState] });
+  if (!chips.length) return null;
+
+  return (
+    <div className="atend-context-badges">
+      {chips.map((chip) => (
+        <span key={chip.label} className={`atend-context-chip${chip.danger ? ' atend-context-chip--danger' : ''}`}>{chip.label}</span>
+      ))}
+    </div>
   );
 }
 
@@ -417,11 +533,143 @@ export function Atendimentos({ user }: AtendimentosProps) {
     setSuccess('Retorno agendado para amanhã.');
   }
 
-  function createTask(id: string) {
+  function replaceAttendanceItem(next: AtendimentoItem) {
+    setAtendimentos((prev) => prev.map((item) => item.id === next.id ? next : item));
+    if (selectedItem?.id === next.id) setSelectedItem(next);
+  }
+
+  function deriveTaskDueDate(item: AtendimentoItem) {
+    if (item.slaTargetAt) return item.slaTargetAt.slice(0, 10);
+    if (item.retornoAgendado) return item.retornoAgendado;
+    return toIsoDate(addDays(new Date(), item.critico ? 0 : 1));
+  }
+
+  function deriveDeadlineDueDate(item: AtendimentoItem) {
+    if (item.slaTargetAt) return item.slaTargetAt.slice(0, 10);
+    if (item.retornoAgendado) return item.retornoAgendado;
+    return toIsoDate(addDays(new Date(), 1));
+  }
+
+  async function tryConventionalAttendanceAction<T>(id: string, paths: string[], body: Record<string, unknown>) {
+    for (const path of paths) {
+      const response = await apiClient<T>(path.replace(':id', id), { method: 'POST', body });
+      if (response.status !== 404) return { ...response, path };
+    }
+
+    return { status: 404, data: {} as T, error: 'Endpoint de conversão ainda não publicado.', path: paths[0] };
+  }
+
+  async function createTask(id: string) {
     const atd = atendimentos.find((a) => a.id === id);
-    trackEvent('atd_create_task', { id, processId: atd?.processId ?? 0 });
+    if (!atd) return;
+
+    setError('');
+    trackEvent('atd_create_task', { id, processId: atd.processId ?? 0, conversionState: atd.conversionState });
+    const dueDate = deriveTaskDueDate(atd);
+    const conventional = await tryConventionalAttendanceAction<{ attendance?: ApiAttendance; task?: ApiAttendance | { id?: number } }>(
+      id,
+      ['/attendances/:id/convert-to-task', '/attendances/:id/convert-task', '/attendances/:id/convertToTask'],
+      {
+        title: atd.assunto,
+        dueDate,
+        priority: atd.priority === 'critica' ? 'critica' : atd.priority,
+        ownerLabel: atd.responsavel,
+      },
+    );
+
+    if (conventional.status >= 200 && conventional.status < 300) {
+      const responseRecord = getRecord(conventional.data);
+      const attendancePayload = getRecord(responseRecord?.attendance) ?? responseRecord;
+      if (attendancePayload && readNumber(attendancePayload, 'id')) {
+        replaceAttendanceItem(mapApiAttendance(attendancePayload as unknown as ApiAttendance));
+      }
+      setOpenMenuId(null);
+      setSuccess('Atendimento convertido em tarefa pela rota convencional.');
+      return;
+    }
+
+    const fallback = await api.createTask({
+      title: atd.assunto,
+      description: atd.resumo || atd.proximoPasso || atd.observacoes,
+      processId: atd.processId || undefined,
+      client: atd.client,
+      origin: 'atendimento',
+      owner: atd.responsavel,
+      priority: atd.priority === 'critica' ? 'critica' : atd.priority,
+      dueDate,
+      notes: `Atendimento #${atd.id} convertido via fallback legado.\n${atd.observacoes || atd.proximoPasso || atd.resumo}`.trim(),
+      immediateAction: atd.critico,
+    });
+
+    if (fallback.status !== 201 || !fallback.data) {
+      setError(fallback.error || conventional.error || 'Não foi possível criar a tarefa a partir do atendimento.');
+      return;
+    }
+
+    replaceAttendanceItem({
+      ...atd,
+      conversionState: 'convertido_tarefa',
+      derivedTaskId: readNumber(getRecord(fallback.data), 'id'),
+    });
     setOpenMenuId(null);
-    setSuccess('Tarefa criada vinculada ao atendimento.');
+    setSuccess('Tarefa criada pelo fluxo legado. O vínculo persistente depende do endpoint convencional em api.ts/rotas.');
+  }
+
+  async function createDeadline(id: string) {
+    const atd = atendimentos.find((a) => a.id === id);
+    if (!atd) return;
+    if (!atd.processId) {
+      setError('Só é possível gerar prazo para atendimento com processo vinculado.');
+      return;
+    }
+
+    setError('');
+    trackEvent('atd_create_deadline', { id, processId: atd.processId, conversionState: atd.conversionState });
+    const dueDate = deriveDeadlineDueDate(atd);
+    const conventional = await tryConventionalAttendanceAction<{ attendance?: ApiAttendance; deadline?: { id?: number } }>(
+      id,
+      ['/attendances/:id/convert-to-deadline', '/attendances/:id/convert-deadline', '/attendances/:id/convertToDeadline'],
+      {
+        title: atd.assunto,
+        dueDate,
+        priority: atd.priority === 'critica' ? 'alta' : atd.priority,
+        responsible: atd.responsavel,
+      },
+    );
+
+    if (conventional.status >= 200 && conventional.status < 300) {
+      const responseRecord = getRecord(conventional.data);
+      const attendancePayload = getRecord(responseRecord?.attendance) ?? responseRecord;
+      if (attendancePayload && readNumber(attendancePayload, 'id')) {
+        replaceAttendanceItem(mapApiAttendance(attendancePayload as unknown as ApiAttendance));
+      }
+      setOpenMenuId(null);
+      setSuccess('Atendimento convertido em prazo pela rota convencional.');
+      return;
+    }
+
+    const fallback = await api.createDeadline({
+      processId: atd.processId,
+      title: atd.assunto,
+      dueDate,
+      priority: atd.priority === 'critica' ? 'alta' : atd.priority,
+      origin: 'cliente',
+      responsible: atd.responsavel,
+      notes: `Prazo derivado do atendimento #${atd.id}. ${atd.proximoPasso || atd.resumo || atd.observacoes}`.trim(),
+    });
+
+    if (fallback.status !== 200 && fallback.status !== 201) {
+      setError(fallback.error || conventional.error || 'Não foi possível criar o prazo a partir do atendimento.');
+      return;
+    }
+
+    replaceAttendanceItem({
+      ...atd,
+      conversionState: 'convertido_prazo',
+      derivedDeadlineId: readNumber(getRecord(fallback.data), 'id'),
+    });
+    setOpenMenuId(null);
+    setSuccess('Prazo criado pelo fluxo legado. A conversão persistente depende do endpoint convencional em api.ts/rotas.');
   }
 
   function exportCsv(items: AtendimentoItem[]) {
@@ -494,7 +742,7 @@ export function Atendimentos({ user }: AtendimentosProps) {
     return atendimentos.filter((a) => {
       if (filters.query) {
         const q = filters.query.toLowerCase();
-        const hay = `${a.client} ${a.processLabel} ${a.canal} ${a.assunto} ${a.resumo} ${a.observacoes}`.toLowerCase();
+        const hay = `${a.client} ${a.processLabel} ${a.canal} ${a.assunto} ${a.resumo} ${a.observacoes} ${a.rawStatus} ${a.operationalState ?? ''} ${a.conversionState}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       if (filters.client    && a.client       !== filters.client)            return false;
@@ -528,7 +776,7 @@ export function Atendimentos({ user }: AtendimentosProps) {
       else if (sortBy === 'cliente') cmp = a.client.localeCompare(b.client);
       else if (sortBy === 'status') cmp = a.status.localeCompare(b.status);
       else if (sortBy === 'prioridade') {
-        const order: Record<Priority, number> = { alta: 0, media: 1, baixa: 2 };
+        const order: Record<Priority, number> = { critica: 0, alta: 1, media: 2, baixa: 3 };
         cmp = order[a.priority] - order[b.priority];
       }
       return sortDesc ? -cmp : cmp;
@@ -577,6 +825,7 @@ export function Atendimentos({ user }: AtendimentosProps) {
             {item.processLabel} · {item.processTitle}
           </span>
           <span className="atend-client-area">{item.area}</span>
+          <AttendanceContextBadges item={item} />
         </td>
         <td><CanalIcon canal={item.canal} /></td>
         <td className="atend-td-assunto">
@@ -590,7 +839,7 @@ export function Atendimentos({ user }: AtendimentosProps) {
         <td className="atend-td-priority">
           <span className={`atend-priority-pill atend-priority-pill--${item.priority}`}>
             <PriorityDot priority={item.priority} />
-            {item.priority === 'alta' ? 'Alta' : item.priority === 'media' ? 'Média' : 'Baixa'}
+            {item.priority === 'critica' ? 'Crítica' : item.priority === 'alta' ? 'Alta' : item.priority === 'media' ? 'Média' : 'Baixa'}
           </span>
         </td>
         <td><StatusBadge status={item.status} /></td>
@@ -636,11 +885,16 @@ export function Atendimentos({ user }: AtendimentosProps) {
                 </li>
                 <li role="none">
                   <button role="menuitem" onClick={() => createTask(item.id)}>
-                    <ClipboardList size={13} /> Criar tarefa
+                    <ClipboardList size={13} /> {item.conversionState === 'convertido_tarefa' ? 'Recriar tarefa' : 'Criar tarefa'}
                   </button>
                 </li>
                 <li role="none">
-                  <button role="menuitem" onClick={() => { navigate(`/processos/${item.processId}`); setOpenMenuId(null); }}>
+                  <button role="menuitem" onClick={() => createDeadline(item.id)} disabled={!item.processId}>
+                    <Calendar size={13} /> {item.conversionState === 'convertido_prazo' ? 'Recriar prazo' : 'Criar prazo'}
+                  </button>
+                </li>
+                <li role="none">
+                  <button role="menuitem" onClick={() => { navigate(`/processos/${item.processId}`); setOpenMenuId(null); }} disabled={!item.processId}>
                     <ExternalLink size={13} /> Abrir processo
                   </button>
                 </li>
@@ -1042,6 +1296,7 @@ export function Atendimentos({ user }: AtendimentosProps) {
                         </div>
                         <p className="atend-conversa-assunto">{item.assunto}</p>
                         <p className="atend-conversa-resumo">{item.resumo}</p>
+                        <AttendanceContextBadges item={item} />
                         {item.proximoPasso && (
                           <p className="atend-conversa-next">
                             <strong>Próx.:</strong> {item.proximoPasso}
@@ -1089,6 +1344,7 @@ export function Atendimentos({ user }: AtendimentosProps) {
                           </div>
                           <p className="atend-timeline-assunto">{item.assunto}</p>
                           <p className="atend-timeline-resumo">{item.resumo}</p>
+                          <AttendanceContextBadges item={item} />
                           {item.proximoPasso && (
                             <p className="atend-timeline-next">
                               <strong>Próx.:</strong> {item.proximoPasso}
@@ -1144,6 +1400,7 @@ export function Atendimentos({ user }: AtendimentosProps) {
                 </div>
                 <p className="atend-drawer-hero-subject">{selectedItem.assunto}</p>
                 <p className="atend-drawer-hero-summary">{selectedItem.resumo}</p>
+                <AttendanceContextBadges item={selectedItem} />
               </div>
 
               <div className="atend-drawer-next-card">
@@ -1172,6 +1429,14 @@ export function Atendimentos({ user }: AtendimentosProps) {
                   <span className="atend-drawer-label">Tipo</span>
                   <span className="atend-drawer-value">{selectedItem.tipo}</span>
                 </div>
+                <div className="atend-drawer-section">
+                  <span className="atend-drawer-label">Conversão</span>
+                  <span className="atend-drawer-value">{CONVERSION_LABEL[selectedItem.conversionState]}</span>
+                </div>
+                <div className="atend-drawer-section">
+                  <span className="atend-drawer-label">Estado operacional</span>
+                  <span className="atend-drawer-value">{selectedItem.operationalState ? OPERATIONAL_LABEL[selectedItem.operationalState] : 'Compatível com legado'}</span>
+                </div>
               </div>
 
               {selectedItem.observacoes && (
@@ -1185,6 +1450,14 @@ export function Atendimentos({ user }: AtendimentosProps) {
                   <span className="atend-drawer-label">Retorno agendado</span>
                   <span className="atend-drawer-value">
                     <Calendar size={13} aria-hidden="true" /> {formatDateShort(selectedItem.retornoAgendado)}
+                  </span>
+                </div>
+              )}
+              {selectedItem.slaTargetAt && (
+                <div className="atend-drawer-section">
+                  <span className="atend-drawer-label">SLA alvo</span>
+                  <span className={`atend-drawer-value${selectedItem.slaBreached ? ' atend-drawer-value--danger' : ''}`}>
+                    <Clock size={13} aria-hidden="true" /> {new Date(selectedItem.slaTargetAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
                   </span>
                 </div>
               )}
@@ -1216,7 +1489,15 @@ export function Atendimentos({ user }: AtendimentosProps) {
                   onClick={() => createTask(selectedItem.id)}
                   aria-label="Criar tarefa a partir deste atendimento"
                 >
-                  <ClipboardList size={13} /> Criar tarefa
+                  <ClipboardList size={13} /> {selectedItem.conversionState === 'convertido_tarefa' ? 'Recriar tarefa' : 'Criar tarefa'}
+                </button>
+                <button
+                  className="btn-secondary"
+                  onClick={() => createDeadline(selectedItem.id)}
+                  aria-label="Criar prazo a partir deste atendimento"
+                  disabled={!selectedItem.processId}
+                >
+                  <Calendar size={13} /> {selectedItem.conversionState === 'convertido_prazo' ? 'Recriar prazo' : 'Criar prazo'}
                 </button>
               </div>
 
@@ -1226,6 +1507,7 @@ export function Atendimentos({ user }: AtendimentosProps) {
                   className="btn-ghost"
                   onClick={() => navigate(`/processos/${selectedItem.processId}`)}
                   aria-label={`Abrir processo ${selectedItem.processLabel}`}
+                  disabled={!selectedItem.processId}
                 >
                   <ExternalLink size={12} /> Processo
                 </button>

@@ -361,8 +361,16 @@ export interface ApiAttendance {
   proximoPasso: string;
   retornoAgendado: string | null;
   critico: boolean;
+  critical?: boolean;
   actorEmail: string;
   owner?: ApiUser;
+  slaTargetAt?: string | null;
+  slaBreached?: boolean;
+  conversionState?: 'nao_aplicavel' | 'elegivel_tarefa' | 'elegivel_prazo' | 'convertido_tarefa' | 'convertido_prazo';
+  derivedTaskId?: number | null;
+  derivedDeadlineId?: number | null;
+  operationalState?: string;
+  operationalStatus?: string;
 }
 
 export interface ApiTask {
@@ -385,6 +393,12 @@ export interface ApiTask {
   linkedToPublication: boolean;
   linkedToDocument: boolean;
   immediateAction: boolean;
+  workflowStage?: string;
+  followupState?: string;
+  ownerUserId?: number | null;
+  teamId?: number | null;
+  portfolioId?: number | null;
+  slaTargetAt?: string | null;
 }
 
 export interface ApiAgendaEvent {
@@ -713,6 +727,15 @@ export interface ApiAuditEvent {
   createdAt: string;
 }
 
+export interface ApiAuthzDecision {
+  allowed: boolean;
+  permissionKey: string;
+  scope: string;
+  reason: string;
+  sensitive: boolean;
+  requiresAudit: boolean;
+}
+
 interface LoginResponse {
   user: ApiUser;
 }
@@ -812,6 +835,16 @@ export const api = {
 
   getPermissions: () =>
     apiClient<string[]>('/permissions'),
+
+  checkAuthorization: (data: {
+    permissionKey: string;
+    resourceType: 'task' | 'attendance' | 'team' | 'portfolio' | 'productivity' | 'export';
+    resourceId?: number | string | null;
+    context?: Record<string, unknown>;
+    teamIds?: Array<number | string>;
+    portfolioIds?: Array<number | string>;
+  }) =>
+    apiClient<{ decision: ApiAuthzDecision }>('/authz/check', { method: 'POST', body: data }),
 
   getUsers: () =>
     apiClient<ApiUser[]>('/users'),
@@ -1349,6 +1382,36 @@ export const api = {
   }>) =>
     apiClient<ApiAttendance>(`/attendances/${id}`, { method: 'PUT', body: data }),
 
+  updateAttendanceSla: (id: number, data: {
+    status: string;
+    slaTargetAt?: string | null;
+    allowCloseOutOfSla?: boolean;
+    justification?: string | null;
+    idempotencyKey?: string | null;
+  }) =>
+    apiClient<{ attendance: ApiAttendance; auditEvent: ApiAuditEvent }>(`/attendances/${id}/update-sla`, { method: 'POST', body: data }),
+
+  convertAttendanceToTask: (id: number, data: {
+    title: string;
+    dueDate?: string | null;
+    priority?: ApiAttendance['priority'];
+    ownerUserId?: number | null;
+    idempotencyKey?: string | null;
+  }) =>
+    apiClient<{ attendance: ApiAttendance; task: ApiTask; auditEvent: ApiAuditEvent }>(`/attendances/${id}/convert-task`, { method: 'POST', body: data }),
+
+  convertAttendanceToDeadline: (id: number, data: {
+    title: string;
+    dueDate: string;
+    priority?: ApiAttendance['priority'];
+    responsible?: string | null;
+    idempotencyKey?: string | null;
+  }) =>
+    apiClient<{ attendance: ApiAttendance; deadline: ApiDeadline; auditEvent: ApiAuditEvent }>(`/attendances/${id}/convert-deadline`, { method: 'POST', body: data }),
+
+  getAttendanceAudit: (id: number) =>
+    apiClient<ApiAuditEvent[]>(`/attendances/${id}/audit`),
+
   getAtendimentos: (processId: number) =>
     apiClient<ApiAttendance[]>(`/processes/${processId}/atendimentos`),
 
@@ -1387,6 +1450,90 @@ export const api = {
     immediateAction: boolean;
   }>) =>
     apiClient<ApiTask>(`/tasks/${id}`, { method: 'PUT', body: data }),
+
+  updateTaskStatus: (id: number, data: {
+    fromStatus?: string;
+    toStatus: string;
+    transitionReason?: string | null;
+    idempotencyKey?: string | null;
+  }) =>
+    apiClient<{ task: ApiTask; workflow: Record<string, unknown>; auditEvent: ApiAuditEvent }>(`/tasks/${id}/status`, { method: 'POST', body: data }),
+
+  linkTaskEntities: (id: number, data: {
+    links: Array<{ entityType: 'process' | 'deadline' | 'publication' | 'attendance' | 'document'; entityId: number }>;
+    idempotencyKey?: string | null;
+  }) =>
+    apiClient<{ task: Record<string, unknown>; auditEvent: ApiAuditEvent }>(`/tasks/${id}/links`, { method: 'POST', body: data }),
+
+  scheduleTaskFollowup: (id: number, data: {
+    followupAt: string;
+    reason?: 'overdue' | 'sla_risk' | 'manual';
+    channel?: 'in_app' | 'internal_feed';
+    dedupeKey?: string;
+  }) =>
+    apiClient<{ task: Record<string, unknown>; scheduled: boolean; auditEvent: ApiAuditEvent }>(`/tasks/${id}/followups`, { method: 'POST', body: data }),
+
+  executeTaskFollowups: (data: {
+    referenceAt?: string;
+    batchSize?: number;
+    dedupeKey?: string;
+  }) =>
+    apiClient<{ processed: number; dispatched: number; skipped: number; auditEvents: ApiAuditEvent[] }>('/tasks/followups/execute', { method: 'POST', body: data }),
+
+  getTaskAudit: (id: number) =>
+    apiClient<ApiAuditEvent[]>(`/tasks/${id}/audit`),
+
+  assignTeamOwnership: (data: {
+    portfolioId: number;
+    primaryOwnerUserId: number;
+    backupOwnerUserId?: number | null;
+    teamId: number;
+    memberUserIds: number[];
+    idempotencyKey?: string | null;
+  }) =>
+    apiClient<Record<string, unknown>>('/team/ownership', { method: 'POST', body: data }),
+
+  reassignPortfolio: (data: {
+    portfolioId: number;
+    fromOwnerUserId?: number | null;
+    toOwnerUserId: number;
+    reason: string;
+    includeBacklog: boolean;
+    includeOpenTasks: boolean;
+    idempotencyKey?: string | null;
+  }) =>
+    apiClient<Record<string, unknown>>('/team/portfolio-reassign', { method: 'POST', body: data }),
+
+  getProductivitySnapshot: (filters?: {
+    referenceDate?: string;
+    scopeType?: 'user' | 'team' | 'portfolio';
+    scopeId?: number;
+    includeClosedTasks?: boolean;
+    includeAttendances?: boolean;
+    idempotencyKey?: string;
+  }) => {
+    const params = new URLSearchParams();
+    if (filters?.referenceDate) params.set('referenceDate', filters.referenceDate);
+    if (filters?.scopeType) params.set('scopeType', filters.scopeType);
+    if (typeof filters?.scopeId === 'number') params.set('scopeId', String(filters.scopeId));
+    if (typeof filters?.includeClosedTasks === 'boolean') params.set('includeClosedTasks', String(filters.includeClosedTasks));
+    if (typeof filters?.includeAttendances === 'boolean') params.set('includeAttendances', String(filters.includeAttendances));
+    if (filters?.idempotencyKey) params.set('idempotencyKey', filters.idempotencyKey);
+    const query = params.toString();
+    return apiClient<Record<string, unknown>>(query ? `/productivity/snapshot?${query}` : '/productivity/snapshot');
+  },
+
+  recordManagementAudit: (data: Record<string, unknown>) =>
+    apiClient<Record<string, unknown>>('/management/audit/event', { method: 'POST', body: data }),
+
+  getManagementAudit: (filters?: { scope?: string; entityId?: string; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (filters?.scope) params.set('scope', filters.scope);
+    if (filters?.entityId) params.set('entityId', filters.entityId);
+    if (typeof filters?.limit === 'number') params.set('limit', String(filters.limit));
+    const query = params.toString();
+    return apiClient<ApiAuditEvent[]>(query ? `/management/audit?${query}` : '/management/audit');
+  },
 
   getAgenda: () =>
     apiClient<ApiAgendaEvent[]>('/agenda'),

@@ -48,6 +48,9 @@ type ViewMode = 'lista' | 'kanban';
 type SortField = 'prazo' | 'prioridade' | 'status' | 'responsavel';
 
 type TaskOrigin = 'processo' | 'prazo' | 'documento' | 'publicacao' | 'atendimento' | 'interno';
+type TaskWorkflowStage = 'captura' | 'planejamento' | 'execucao' | 'aguardando' | 'conclusao';
+type TaskFollowupState = 'idle' | 'scheduled' | 'pending_dispatch' | 'dispatched' | 'acknowledged';
+type RawTaskStatus = TaskStatus | 'backlog' | 'triagem' | 'em_execucao' | 'aguardando_cliente' | 'aguardando_interno' | 'cancelada';
 
 interface TaskItem {
   id: string;
@@ -58,8 +61,9 @@ interface TaskItem {
   processTitle: string;
   client: string;
   origin: TaskOrigin;
-  dueDate: string;
+  dueDate: string | null;
   status: TaskStatus;
+  rawStatus: RawTaskStatus;
   priority: TaskPriority;
   owner: string;
   createdBy: string;
@@ -70,6 +74,12 @@ interface TaskItem {
   linkedToPublication: boolean;
   linkedToDocument: boolean;
   immediateAction: boolean;
+  linkedToAttendance: boolean;
+  linkedAttendanceId: number | null;
+  workflowStage: TaskWorkflowStage | null;
+  followupState: TaskFollowupState | null;
+  slaDueAt: string | null;
+  breached: boolean;
 }
 
 interface TaskFilters {
@@ -152,26 +162,102 @@ function toIsoDate(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
-function formatDate(iso: string) {
+function formatDate(iso: string | null | undefined) {
+  if (!iso) return 'Sem data';
   return new Date(`${iso}T00:00:00`).toLocaleDateString('pt-BR');
 }
 
-function isToday(iso: string) {
+function isToday(iso: string | null | undefined) {
+  if (!iso) return false;
   return iso === toIsoDate(new Date());
 }
 
-function isOverdue(iso: string) {
+function isOverdue(iso: string | null | undefined) {
+  if (!iso) return false;
   return new Date(`${iso}T00:00:00`).getTime() < new Date(toIsoDate(new Date())).getTime();
 }
 
-function daysDiffFromToday(iso: string) {
+function daysDiffFromToday(iso: string | null | undefined) {
+  if (!iso) return Number.POSITIVE_INFINITY;
   const due = new Date(`${iso}T00:00:00`).getTime();
   const now = new Date(`${toIsoDate(new Date())}T00:00:00`).getTime();
   return Math.floor((due - now) / 86400000);
 }
 
+function getRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
+}
+
+function readString(record: Record<string, unknown> | null, key: string) {
+  const value = record?.[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function readBoolean(record: Record<string, unknown> | null, key: string) {
+  const value = record?.[key];
+  return typeof value === 'boolean' ? value : null;
+}
+
+function readNumber(record: Record<string, unknown> | null, key: string) {
+  const value = record?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function normalizeTaskStatus(rawStatus: string | null | undefined, breached: boolean): TaskStatus {
+  switch (rawStatus) {
+    case 'backlog':
+    case 'triagem':
+      return 'pendente';
+    case 'em_execucao':
+      return 'em_andamento';
+    case 'aguardando_cliente':
+    case 'aguardando_interno':
+      return 'aguardando';
+    case 'cancelada':
+      return 'concluida';
+    case 'concluida':
+      return 'concluida';
+    case 'atrasada':
+      return 'atrasada';
+    case 'pendente':
+    case 'em_andamento':
+    case 'aguardando':
+      return rawStatus;
+    default:
+      return breached ? 'atrasada' : 'pendente';
+  }
+}
+
+function normalizeTaskPriority(rawPriority: string | null | undefined): TaskPriority {
+  if (rawPriority === 'baixa' || rawPriority === 'media' || rawPriority === 'alta' || rawPriority === 'critica') {
+    return rawPriority;
+  }
+  return 'media';
+}
+
+function extractLinkedEntity(record: Record<string, unknown> | null, entityType: string) {
+  const links = record?.linkedEntities;
+  if (!Array.isArray(links)) return null;
+
+  for (const entry of links) {
+    const link = getRecord(entry);
+    if (readString(link, 'entityType') === entityType) {
+      return readNumber(link, 'entityId');
+    }
+  }
+
+  return null;
+}
+
 function mapApiTask(task: ApiTask, userEmail: string): TaskItem {
   const actorLabel = userEmail.split('@')[0];
+  const raw = getRecord(task);
+  const breached = readBoolean(raw, 'breached') ?? false;
+  const rawStatus = (readString(raw, 'status') ?? task.status) as RawTaskStatus;
+  const dueDate = readString(raw, 'dueDate') ?? task.dueDate ?? null;
+  const linkedAttendanceId = extractLinkedEntity(raw, 'attendance');
+  const owner = readString(raw, 'ownerLabel') ?? task.owner;
+  const createdBy = readString(raw, 'createdBy') ?? task.createdBy;
 
   return {
     id: String(task.id),
@@ -182,18 +268,25 @@ function mapApiTask(task: ApiTask, userEmail: string): TaskItem {
     processTitle: task.processTitle,
     client: task.client,
     origin: task.origin,
-    dueDate: task.dueDate,
-    status: task.status,
-    priority: task.priority,
-    owner: task.owner,
-    createdBy: task.createdBy,
-    delegatedByMe: task.createdBy === actorLabel && task.owner !== actorLabel,
-    isMine: task.owner === actorLabel,
+    dueDate,
+    status: normalizeTaskStatus(rawStatus, breached || isOverdue(dueDate)),
+    rawStatus,
+    priority: normalizeTaskPriority(readString(raw, 'priority') ?? task.priority),
+    owner,
+    createdBy,
+    delegatedByMe: createdBy === actorLabel && owner !== actorLabel,
+    isMine: owner === actorLabel,
     notes: task.notes,
-    linkedToDeadline: task.linkedToDeadline,
-    linkedToPublication: task.linkedToPublication,
-    linkedToDocument: task.linkedToDocument,
-    immediateAction: task.immediateAction,
+    linkedToDeadline: readBoolean(raw, 'linkedToDeadline') ?? task.linkedToDeadline,
+    linkedToPublication: readBoolean(raw, 'linkedToPublication') ?? task.linkedToPublication,
+    linkedToDocument: readBoolean(raw, 'linkedToDocument') ?? task.linkedToDocument,
+    immediateAction: task.immediateAction || breached,
+    linkedToAttendance: linkedAttendanceId !== null || task.origin === 'atendimento',
+    linkedAttendanceId,
+    workflowStage: readString(raw, 'workflowStage') as TaskWorkflowStage | null,
+    followupState: readString(raw, 'followupState') as TaskFollowupState | null,
+    slaDueAt: readString(raw, 'slaDueAt'),
+    breached,
   };
 }
 
@@ -229,7 +322,9 @@ function AutomationContext({ task }: { task: TaskItem }) {
   if (task.linkedToPublication) tags.push('Publicação');
   if (task.linkedToDeadline) tags.push('Prazo');
   if (task.linkedToDocument) tags.push('Documento');
+  if (task.linkedToAttendance) tags.push('Atendimento');
   if (task.immediateAction) tags.push('Ação imediata');
+  if (task.breached) tags.push('SLA rompido');
 
   if (!tags.length) return null;
 
@@ -238,6 +333,54 @@ function AutomationContext({ task }: { task: TaskItem }) {
       {tags.map((tag) => (
         <span key={tag} className="tsk-origin-chip">{tag}</span>
       ))}
+    </div>
+  );
+}
+
+const WORKFLOW_STAGE_LABEL: Record<TaskWorkflowStage, string> = {
+  captura: 'Captura',
+  planejamento: 'Planejamento',
+  execucao: 'Execução',
+  aguardando: 'Aguardando',
+  conclusao: 'Conclusão',
+};
+
+const FOLLOWUP_STATE_LABEL: Record<TaskFollowupState, string> = {
+  idle: 'Sem follow-up',
+  scheduled: 'Follow-up agendado',
+  pending_dispatch: 'Follow-up pendente',
+  dispatched: 'Follow-up disparado',
+  acknowledged: 'Follow-up confirmado',
+};
+
+const RAW_STATUS_LABEL: Record<Exclude<RawTaskStatus, TaskStatus>, string> = {
+  backlog: 'Backlog',
+  triagem: 'Triagem',
+  em_execucao: 'Em execução',
+  aguardando_cliente: 'Aguardando cliente',
+  aguardando_interno: 'Aguardando interno',
+  cancelada: 'Cancelada',
+};
+
+function OperationalContext({ task }: { task: TaskItem }) {
+  const chips: string[] = [];
+
+  if (task.workflowStage) chips.push(WORKFLOW_STAGE_LABEL[task.workflowStage]);
+  if (task.followupState) chips.push(FOLLOWUP_STATE_LABEL[task.followupState]);
+  if (task.rawStatus in RAW_STATUS_LABEL) chips.push(RAW_STATUS_LABEL[task.rawStatus as Exclude<RawTaskStatus, TaskStatus>]);
+
+  if (!chips.length && !task.slaDueAt) return null;
+
+  return (
+    <div className="tsk-operational-meta">
+      {chips.map((chip) => (
+        <span key={chip} className="tsk-operational-chip">{chip}</span>
+      ))}
+      {task.slaDueAt && (
+        <span className={`tsk-operational-chip${task.breached ? ' is-danger' : ''}`}>
+          SLA {new Date(task.slaDueAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+        </span>
+      )}
     </div>
   );
 }
@@ -441,7 +584,7 @@ export function Tasks({ user }: TasksProps) {
     return tasks.filter((t) => {
       if (filters.query) {
         const q = filters.query.toLowerCase();
-        const hay = `${t.title} ${t.client} ${t.processTitle} ${t.owner} ${t.notes} ${ORIGIN_LABEL[t.origin]}`.toLowerCase();
+        const hay = `${t.title} ${t.client} ${t.processTitle} ${t.owner} ${t.notes} ${ORIGIN_LABEL[t.origin]} ${t.rawStatus} ${t.workflowStage ?? ''} ${t.followupState ?? ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       if (filters.status && t.status !== filters.status) return false;
@@ -458,6 +601,7 @@ export function Tasks({ user }: TasksProps) {
       if (filters.vinculada === 'prazo' && !t.linkedToDeadline) return false;
       if (filters.vinculada === 'publicacao' && !t.linkedToPublication) return false;
       if (filters.vinculada === 'documento' && !t.linkedToDocument) return false;
+      if (filters.vinculada === 'atendimento' && !t.linkedToAttendance) return false;
 
       if (filters.period === 'hoje' && !isToday(t.dueDate)) return false;
       if (filters.period === '7' && Math.abs(daysDiffFromToday(t.dueDate)) > 7) return false;
@@ -471,7 +615,7 @@ export function Tasks({ user }: TasksProps) {
     const arr = [...filtered];
     arr.sort((a, b) => {
       let cmp = 0;
-      if (sortBy === 'prazo') cmp = a.dueDate.localeCompare(b.dueDate);
+      if (sortBy === 'prazo') cmp = (a.dueDate ?? '9999-12-31').localeCompare(b.dueDate ?? '9999-12-31');
       else if (sortBy === 'prioridade') {
         const o: Record<TaskPriority, number> = { baixa: 0, media: 1, alta: 2, critica: 3 };
         cmp = o[a.priority] - o[b.priority];
@@ -531,6 +675,7 @@ export function Tasks({ user }: TasksProps) {
         <td className="tsk-col-task">
           <strong>{t.title}</strong>
           {t.description && <span>{t.description}</span>}
+          <OperationalContext task={t} />
         </td>
         <td className="tsk-col-context">
           <strong>{t.client || '—'}</strong>
@@ -649,7 +794,7 @@ export function Tasks({ user }: TasksProps) {
             <div className="tsk-field"><label htmlFor="tsk-client">Cliente</label><select id="tsk-client" value={filters.client} onChange={(e) => updateFilter('client', e.target.value)}><option value="">Todos</option>{uniqueClients.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
             <div className="tsk-field"><label htmlFor="tsk-prazo">Prazo</label><select id="tsk-prazo" value={filters.prazo} onChange={(e) => updateFilter('prazo', e.target.value)}><option value="">Todos</option><option value="hoje">Hoje</option><option value="atrasado">Atrasado</option></select></div>
             <div className="tsk-field"><label htmlFor="tsk-origin">Origem</label><select id="tsk-origin" value={filters.origin} onChange={(e) => updateFilter('origin', e.target.value)}><option value="">Todas</option>{(Object.entries(ORIGIN_LABEL) as Array<[TaskOrigin, string]>).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
-            <div className="tsk-field"><label htmlFor="tsk-link">Vinculada a</label><select id="tsk-link" value={filters.vinculada} onChange={(e) => updateFilter('vinculada', e.target.value)}><option value="">Todas</option><option value="prazo">Prazo</option><option value="publicacao">Publicação</option><option value="documento">Documento</option></select></div>
+            <div className="tsk-field"><label htmlFor="tsk-link">Vinculada a</label><select id="tsk-link" value={filters.vinculada} onChange={(e) => updateFilter('vinculada', e.target.value)}><option value="">Todas</option><option value="prazo">Prazo</option><option value="publicacao">Publicação</option><option value="documento">Documento</option><option value="atendimento">Atendimento</option></select></div>
             <div className="tsk-field"><label htmlFor="tsk-period">Período</label><select id="tsk-period" value={filters.period} onChange={(e) => updateFilter('period', e.target.value)}><option value="">Todos</option><option value="hoje">Hoje</option><option value="7">7 dias</option><option value="30">30 dias</option></select></div>
           </div>
         </FilterBar>
@@ -785,6 +930,7 @@ export function Tasks({ user }: TasksProps) {
                           <span>{t.owner}</span>
                           <OriginChip origin={t.origin} />
                         </div>
+                        <OperationalContext task={t} />
                       </article>
                     ))}
                   </div>
@@ -824,6 +970,16 @@ export function Tasks({ user }: TasksProps) {
                 <div><span className="tsk-label">Criador</span><span className="tsk-value">{selected.createdBy}</span></div>
                 <div><span className="tsk-label">Ação imediata</span><span className={`tsk-value${selected.immediateAction ? ' tsk-value--alert' : ''}`}>{selected.immediateAction ? 'Sim' : 'Não'}</span></div>
               </div>
+              <div className="tsk-drawer-row2">
+                <div><span className="tsk-label">Fluxo</span><span className="tsk-value">{selected.workflowStage ? WORKFLOW_STAGE_LABEL[selected.workflowStage] : 'Compatível com legado'}</span></div>
+                <div><span className="tsk-label">Follow-up</span><span className="tsk-value">{selected.followupState ? FOLLOWUP_STATE_LABEL[selected.followupState] : 'Sem contexto novo'}</span></div>
+              </div>
+              {(selected.slaDueAt || selected.rawStatus !== selected.status) && (
+                <div className="tsk-drawer-row2">
+                  <div><span className="tsk-label">Status de origem</span><span className="tsk-value">{selected.rawStatus in RAW_STATUS_LABEL ? RAW_STATUS_LABEL[selected.rawStatus as Exclude<RawTaskStatus, TaskStatus>] : STATUS_CFG[selected.status].label}</span></div>
+                  <div><span className={`tsk-label${selected.breached ? ' tsk-label--alert' : ''}`}>SLA</span><span className={`tsk-value${selected.breached ? ' tsk-value--alert' : ''}`}>{selected.slaDueAt ? new Date(selected.slaDueAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : 'Sem SLA publicado'}</span></div>
+                </div>
+              )}
               <AutomationContext task={selected} />
               <div><span className="tsk-label">Observações</span><p className="tsk-notes">{selected.notes}</p></div>
             </div>

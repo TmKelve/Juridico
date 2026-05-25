@@ -5,6 +5,7 @@ import { api } from './api'
 import { initMonitoring, trackAuthEvent, trackPageView, trackEvent } from './monitoring'
 import { Sidebar } from './sidebar/Sidebar'
 import { Topbar } from './topbar/Topbar'
+import { UsersWorkspace } from './UsersWorkspace'
 import './tokens.css'
 import './App.css'
 
@@ -168,7 +169,7 @@ function getPageMeta(pathname: string, role: string) {
   }
 }
 
-function UsersList({ users, onRefresh }: { users: User[]; onRefresh: () => Promise<void> }) {
+function UsersList({ users, permissions, onRefresh }: { users: User[]; permissions: string[]; onRefresh: () => Promise<void> }) {
   const handleRefresh = useEffectEvent(() => {
     void onRefresh()
   })
@@ -177,45 +178,26 @@ function UsersList({ users, onRefresh }: { users: User[]; onRefresh: () => Promi
     handleRefresh()
   }, [])
 
-  return (
-    <div className="page-content">
-      <h2>Usuários</h2>
-      <table className="table">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Email</th>
-            <th>Perfil</th>
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((u) => (
-            <tr key={u.id}>
-              <td>{u.id}</td>
-              <td>{u.email}</td>
-              <td>{u.role}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {users.length === 0 && <p>Nenhum usuário disponível.</p>}
-    </div>
-  )
+  return <UsersWorkspace users={users} permissions={permissions} />
 }
 
 function AppShell({
   user,
   users,
+  permissions,
   error,
   fetchHome,
   fetchUsers,
+  fetchPermissions,
   onLogout,
 }: {
   user: User
   users: User[]
+  permissions: string[]
   error: string
   fetchHome: () => Promise<void>
   fetchUsers: () => Promise<void>
+  fetchPermissions: () => Promise<void>
   onLogout: () => void
 }) {
   const location = useLocation()
@@ -228,6 +210,7 @@ function AppShell({
   const loadUsersOnRoute = useEffectEvent(() => {
     if (location.pathname === '/usuarios' && user.role === 'ADM') {
       void fetchUsers()
+      void fetchPermissions()
     }
   })
 
@@ -334,7 +317,7 @@ function AppShell({
               <Route path="/triagem" element={<Triagem user={user} />} />
               <Route
                 path="/usuarios"
-                element={user.role === 'ADM' ? <UsersList users={users} onRefresh={fetchUsers} /> : <Navigate to="/" replace />}
+                element={user.role === 'ADM' ? <UsersList users={users} permissions={permissions} onRefresh={fetchUsers} /> : <Navigate to="/" replace />}
               />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
@@ -351,6 +334,7 @@ function App() {
   const [user, setUser] = useState<User | null>(null)
   const [home, setHome] = useState<HomePayload | null>(null)
   const [users, setUsers] = useState<User[]>([])
+  const [permissions, setPermissions] = useState<string[]>([])
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const hasRestoredSessionRef = useRef(false)
@@ -456,6 +440,21 @@ function App() {
       setUsers([])
       setError(errorMsg)
       trackEvent('users_error', { error: (err as Error).message })
+    }
+  }
+
+  const fetchPermissions = async () => {
+    try {
+      const res = await api.getPermissions()
+      if (res.status === 200 && Array.isArray(res.data)) {
+        setPermissions(res.data)
+        return
+      }
+
+      throw new Error(res.error || 'Erro ao carregar permissões')
+    } catch (err) {
+      setPermissions([])
+      trackEvent('permissions_error', { error: (err as Error).message })
     }
   }
 
@@ -574,15 +573,18 @@ function App() {
       <AppShell
         user={user}
         users={users}
+        permissions={permissions}
         error={error}
         fetchHome={fetchHome}
         fetchUsers={fetchUsers}
+        fetchPermissions={fetchPermissions}
         onLogout={async () => {
           trackEvent('logout', { role: user.role })
           await api.logout()
           setUser(null)
           setHome(null)
           setUsers([])
+          setPermissions([])
         }}
       />
     </Router>
