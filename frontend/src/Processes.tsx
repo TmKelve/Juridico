@@ -106,10 +106,10 @@ const TRIBUNAIS = ['TRT 2', 'TRF 3', 'TJSP', 'TST', 'STJ'];
 const PARTIES = ['Reclamante', 'Reclamada', 'Autor', 'Reu', 'Embargante'];
 const PHASES = ['Inicial', 'Contestacao', 'Instrucao', 'Sentenca', 'Recurso'];
 const KANBAN_COLUMNS: Array<{ key: KanbanStage; label: string }> = [
-  { key: 'aguardando_acao', label: 'Aguardando Acao' },
+  { key: 'aguardando_acao', label: 'Aguardando Ação' },
   { key: 'aguardando_documentos', label: 'Aguardando Documentos' },
   { key: 'protocolar', label: 'Protocolar' },
-  { key: 'aguardando_audiencia', label: 'Aguardando Audiencia' },
+  { key: 'aguardando_audiencia', label: 'Aguardando Audiência' },
   { key: 'em_acompanhamento', label: 'Em Acompanhamento' },
   { key: 'bloqueado', label: 'Bloqueado' },
   { key: 'encerrado', label: 'Encerrado' },
@@ -133,10 +133,10 @@ const SAVED_FILTERS_KEY = 'lexora_processes_saved_filter';
 const LEGACY_SAVED_FILTERS_KEY = 'lexora_adv_saved_filter';
 const FILTERS_COMPACT_KEY = 'lexora_processes_filters_compact';
 const FILTER_PRESETS: Array<{ key: FilterPresetKey; label: string }> = [
-  { key: 'critical_today', label: 'Criticos hoje' },
-  { key: 'stale_15', label: 'Sem atualizacao 15d' },
-  { key: 'pending_docs', label: 'Com pendencias docs' },
-  { key: 'new_publications', label: 'Com publicacao nova' },
+  { key: 'critical_today', label: 'Críticos hoje' },
+  { key: 'stale_15', label: 'Sem atualização 15d' },
+  { key: 'pending_docs', label: 'Com pendências' },
+  { key: 'new_publications', label: 'Com publicação nova' },
 ];
 
 function parseStoredFilters(rawValue: string | null): ProcessFilters | null {
@@ -754,9 +754,9 @@ export function Processes({ user }: ProcessesProps) {
     ?? null;
   const portfolioHealthTone = visibleCriticalCount > 0 ? 'critical' : visiblePendingDocsCount > 0 ? 'attention' : 'stable';
   const portfolioHealthLabel = visibleCriticalCount > 0
-    ? `${visibleCriticalCount} prazo(s) exigem prioridade imediata.`
+    ? `${visibleCriticalCount} ${visibleCriticalCount === 1 ? 'prazo exige' : 'prazos exigem'} prioridade imediata.`
     : visiblePendingDocsCount > 0
-      ? `${visiblePendingDocsCount} processo(s) pedem liberação documental.`
+      ? `${visiblePendingDocsCount} ${visiblePendingDocsCount === 1 ? 'processo pede' : 'processos pedem'} liberação documental.`
       : 'Carteira sem urgência imediata neste recorte.';
   const headerSummaryItems = [
     { label: 'Em exibição', value: sortedProcesses.length, tone: 'neutral' },
@@ -784,10 +784,10 @@ export function Processes({ user }: ProcessesProps) {
 
   function renderStatusBadge(status: KanbanStage) {
     const labels: Record<KanbanStage, string> = {
-      aguardando_acao: 'Aguardando acao',
+      aguardando_acao: 'Aguardando ação',
       aguardando_documentos: 'Aguardando documentos',
       protocolar: 'Protocolar',
-      aguardando_audiencia: 'Aguardando audiencia',
+      aguardando_audiencia: 'Aguardando audiência',
       em_acompanhamento: 'Em acompanhamento',
       bloqueado: 'Bloqueado',
       encerrado: 'Encerrado',
@@ -846,11 +846,6 @@ export function Processes({ user }: ProcessesProps) {
     <section className="my-processes-page" aria-label="Meus processos">
       <header className="my-processes-header">
         <div className="my-processes-header-main">
-          <p className="my-processes-eyebrow">Operacao juridica</p>
-          <h2>Carteira e prioridades</h2>
-          <p className="my-processes-subtitle">
-            Visualize sua carteira, priorize urgencias e avance cada caso com contexto rapido.
-          </p>
           <div className="my-processes-header-summary" aria-label="Pulso da carteira">
             {headerSummaryItems.map((item) => (
               <div key={item.label} className="my-processes-header-summary-card" data-tone={item.tone}>
@@ -862,11 +857,6 @@ export function Processes({ user }: ProcessesProps) {
           <div className="my-processes-header-status" data-tone={portfolioHealthTone}>
             <span className="my-processes-header-status-label">Pulso da carteira</span>
             <strong>{portfolioHealthLabel}</strong>
-            <small>
-              {hasActiveFilter
-                ? 'Os números consideram apenas o recorte filtrado atual.'
-                : 'Os números refletem toda a carteira disponível para este perfil.'}
-            </small>
           </div>
         </div>
         <div className="my-processes-header-side">
@@ -881,14 +871,6 @@ export function Processes({ user }: ProcessesProps) {
             >
               <Plus size={16} aria-hidden="true" />
               Novo Processo
-            </button>
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => setViewMode((prev) => (prev === 'table' ? 'kanban' : 'table'))}
-            >
-              <KanbanSquare size={16} aria-hidden="true" />
-              {viewMode === 'table' ? 'Ver Kanban' : 'Ver Tabela'}
             </button>
             <button type="button" className="btn-secondary" onClick={exportCsv}>
               <Download size={16} aria-hidden="true" />
@@ -1222,7 +1204,7 @@ export function Processes({ user }: ProcessesProps) {
           </div>
           <div className="filters-head-meta">
             {hasActiveFilter && <span className="filters-active-pill">Filtros ativos</span>}
-            <span className="filters-total-pill">{sortedProcesses.length} em exibicao</span>
+            <span className="filters-total-pill">{sortedProcesses.length} em exibição</span>
             <button
               type="button"
               className="btn-ghost btn-filter-viewmode"
@@ -1238,25 +1220,7 @@ export function Processes({ user }: ProcessesProps) {
           </div>
         </div>
 
-        <div className="filters-insights" aria-label="Resumo dos filtros">
-          <div className="filters-insight-card">
-            <span>Filtros ativos</span>
-            <strong>{activeFilterChips.length}</strong>
-            <small>{hasActiveFilter ? 'A carteira está refinada' : 'Nenhum recorte aplicado'}</small>
-          </div>
-          <div className="filters-insight-card">
-            <span>Visualizacao</span>
-            <strong>{viewMode === 'table' ? 'Tabela operacional' : 'Kanban operacional'}</strong>
-            <small>{viewMode === 'table' ? 'Leitura comparativa por linha' : 'Leitura por estágio de execução'}</small>
-          </div>
-          <div className="filters-insight-card">
-            <span>Ordenacao</span>
-            <strong>{sortBy === 'nextDeadline' ? 'Próximo prazo' : sortBy === 'priority' ? 'Prioridade' : 'Última movimentação'}</strong>
-            <small>{sortDirection === 'asc' ? 'Crescente' : 'Decrescente'}</small>
-          </div>
-        </div>
-
-        <div className="filter-presets" role="toolbar" aria-label="Presets de filtros rapidos">
+        <div className="filter-presets" role="toolbar" aria-label="Presets de filtros rápidos">
           {FILTER_PRESETS.map((preset) => (
             <button
               key={preset.key}
@@ -1268,24 +1232,6 @@ export function Processes({ user }: ProcessesProps) {
               {preset.label}
             </button>
           ))}
-        </div>
-
-        <div className="filters-priority-strip" aria-label="Leitura operacional do recorte">
-          <div className="filters-priority-strip-card" data-tone={visibleCriticalCount > 0 ? 'critical' : 'neutral'}>
-            <span>Recorte crítico</span>
-            <strong>{visibleCriticalCount}</strong>
-            <small>{visibleCriticalCount > 0 ? 'prazo(s) até amanhã' : 'sem prazo imediato'}</small>
-          </div>
-          <div className="filters-priority-strip-card" data-tone={visiblePendingDocsCount > 0 ? 'attention' : 'neutral'}>
-            <span>Dependência de documentos</span>
-            <strong>{visiblePendingDocsCount}</strong>
-            <small>{visiblePendingDocsCount > 0 ? 'processo(s) aguardando envio' : 'sem bloqueio documental'}</small>
-          </div>
-          <div className="filters-priority-strip-card" data-tone="info">
-            <span>Modo atual</span>
-            <strong>{viewMode === 'table' ? 'Tabela' : 'Kanban'}</strong>
-            <small>{densityMode === 'compact' ? 'leitura compacta' : 'leitura confortável'}</small>
-          </div>
         </div>
 
         <div className="filters-top-row filter-row-card">
@@ -1324,14 +1270,14 @@ export function Processes({ user }: ProcessesProps) {
         <div className="filters-bottom-row filter-row-card">
           <label htmlFor="filter-priority" className="filter-field filter-cascade-item"><span>Prioridade</span><select id="filter-priority" value={filters.priority} onChange={(event) => updateFilter('priority', event.target.value)}><option value="">Todas</option><option value="alta">Alta</option><option value="media">Media</option><option value="baixa">Baixa</option></select></label>
           <label htmlFor="filter-status" className="filter-field filter-cascade-item"><span>Status operacional</span><select id="filter-status" value={filters.status} onChange={(event) => updateFilter('status', event.target.value)}><option value="">Todos</option>{KANBAN_COLUMNS.map((column) => (<option key={column.key} value={column.key}>{column.label}</option>))}</select></label>
-          <label htmlFor="filter-prazo" className="filter-field filter-cascade-item"><span>Prazo</span><select id="filter-prazo" value={filters.prazo} onChange={(event) => updateFilter('prazo', event.target.value as PrazoFiltro)}><option value="todos">Todos</option><option value="critico">Critico</option><option value="hoje">Hoje</option><option value="7dias">Proximos 7 dias</option></select></label>
-          <label htmlFor="filter-stale" className="filter-field filter-cascade-item"><span>Sem atualizacao ha</span><select id="filter-stale" value={filters.staleDays} onChange={(event) => updateFilter('staleDays', event.target.value)}><option value="">Qualquer periodo</option><option value="7">7 dias</option><option value="15">15 dias</option><option value="30">30 dias</option></select></label>
+          <label htmlFor="filter-prazo" className="filter-field filter-cascade-item"><span>Prazo</span><select id="filter-prazo" value={filters.prazo} onChange={(event) => updateFilter('prazo', event.target.value as PrazoFiltro)}><option value="todos">Todos</option><option value="critico">Crítico</option><option value="hoje">Hoje</option><option value="7dias">Próximos 7 dias</option></select></label>
+          <label htmlFor="filter-stale" className="filter-field filter-cascade-item"><span>Sem atualização há</span><select id="filter-stale" value={filters.staleDays} onChange={(event) => updateFilter('staleDays', event.target.value)}><option value="">Qualquer periodo</option><option value="7">7 dias</option><option value="15">15 dias</option><option value="30">30 dias</option></select></label>
           <div className="filter-toggle-group filter-cascade-item" role="group" aria-label="Filtros booleanos">
             <label className="filter-toggle-chip"><input type="checkbox" checked={filters.pendingDocsOnly} onChange={(event) => updateFilter('pendingDocsOnly', event.target.checked)} /><span>Documento pendente</span></label>
             <label className="filter-toggle-chip"><input type="checkbox" checked={filters.newPublicationOnly} onChange={(event) => updateFilter('newPublicationOnly', event.target.checked)} /><span>Publicacao nova</span></label>
           </div>
-          <label htmlFor="filter-sort" className="filter-field filter-cascade-item"><span>Ordenacao</span><select id="filter-sort" value={sortBy} onChange={(event) => setSortBy(event.target.value as SortField)}><option value="nextDeadline">Prazo</option><option value="priority">Prioridade</option><option value="lastMovement">Ultima movimentacao</option></select></label>
-          <label htmlFor="filter-sort-direction" className="filter-field filter-cascade-item"><span>Direcao</span><select id="filter-sort-direction" value={sortDirection} onChange={(event) => setSortDirection(event.target.value as SortDirection)}><option value="asc">Ascendente</option><option value="desc">Descendente</option></select></label>
+          <label htmlFor="filter-sort" className="filter-field filter-cascade-item"><span>Ordenação</span><select id="filter-sort" value={sortBy} onChange={(event) => setSortBy(event.target.value as SortField)}><option value="nextDeadline">Prazo</option><option value="priority">Prioridade</option><option value="lastMovement">Última movimentação</option></select></label>
+          <label htmlFor="filter-sort-direction" className="filter-field filter-cascade-item"><span>Direção</span><select id="filter-sort-direction" value={sortDirection} onChange={(event) => setSortDirection(event.target.value as SortDirection)}><option value="asc">Ascendente</option><option value="desc">Descendente</option></select></label>
           <div className="filter-actions filter-cascade-item">
             <button type="button" className="btn-ghost btn-filter-clear" onClick={clearFilters}><Filter size={14} aria-hidden="true" />Limpar filtros</button>
             <button type="button" className="btn-ghost" onClick={saveCurrentFilter}><Save size={14} aria-hidden="true" />Salvar filtro</button>
@@ -1339,7 +1285,7 @@ export function Processes({ user }: ProcessesProps) {
         </div>
 
         <div className="filter-result-line">
-          <strong>{sortedProcesses.length}</strong> processo(s) na visao atual.
+          <strong>{sortedProcesses.length}</strong> {sortedProcesses.length === 1 ? 'processo' : 'processos'} na visão atual.
           {hasActiveFilter && <span className="filter-chip-active">Filtro ativo</span>}
         </div>
       </section>
@@ -1407,19 +1353,22 @@ export function Processes({ user }: ProcessesProps) {
               <tr>
                 <th scope="col">Processo</th>
                 <th scope="col">Fase</th>
-                <th scope="col">Proximo prazo</th>
+                <th scope="col">Próximo prazo</th>
                 <th scope="col">Situação</th>
-                <th scope="col">Ultima movimentacao</th>
+                <th scope="col">Última movimentação</th>
                 <th scope="col">Responsável</th>
-                <th scope="col">Acoes</th>
+                <th scope="col">Ações</th>
               </tr>
             </thead>
             <tbody>
-              {paginatedProcesses.map((process) => (
+              {paginatedProcesses.map((process) => {
+                const isUrgentRow = process.priority === 'alta' || dayDiff(process.nextDeadlineAt, new Date()) <= 0;
+                return (
                 <tr
                   key={process.id}
                   tabIndex={0}
                   role="button"
+                  className={isUrgentRow ? 'is-urgent-row' : undefined}
                   aria-label={`Abrir detalhe rapido do processo ${process.id} do cliente ${process.client}`}
                   onClick={() => {
                     setSelectedProcess(process);
@@ -1492,7 +1441,8 @@ export function Processes({ user }: ProcessesProps) {
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
 

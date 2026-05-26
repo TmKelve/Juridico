@@ -11,9 +11,9 @@
   border: 1px solid color-mix(in srgb, var(--neutral-200) 88%, var(--brand-200));
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-card);
-  padding: var(--space-5);
+  padding: var(--space-4) var(--space-5);
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
 }
@@ -1340,6 +1340,11 @@
 .my-processes-table tbody tr {
   cursor: pointer;
   transition: background-color 140ms ease;
+}
+
+.my-processes-table tbody tr.is-urgent-row > td:first-child {
+  border-left: 3px solid var(--error-600);
+  padding-left: calc(var(--space-3) - 2px);
 }
 
 .my-processes-table tbody tr:hover {
