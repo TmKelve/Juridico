@@ -204,6 +204,8 @@ function AppShell({
   const pageMeta = getPageMeta(location.pathname, user.role)
   const isDashboard = location.pathname === '/'
   const isCrmJuridico = location.pathname === '/crm-juridico'
+  // Rotas que gerenciam seu próprio refresh — não exibir "Atualizar dados" global
+  const isSelfManaged = ['/tarefas', '/processos', '/prazos', '/agenda', '/documentos', '/clientes', '/atendimentos', '/publicacoes-intimacoes', '/financeiro', '/triagem'].some(r => location.pathname === r || location.pathname.startsWith(r + '/'))
   const shortName = (user.email || getRoleLabel(user.role)).split('@')[0].slice(0, 12)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.innerWidth >= 768)
@@ -283,16 +285,18 @@ function AppShell({
               <p>{pageMeta.subtitle}</p>
             </div>
 
-            <div className="page-header-actions">
-              {isDashboard ? (
-                <>
-                  <button className="btn-primary" onClick={() => trackEvent('header_new_task_click')}>Nova Tarefa</button>
-                  <button className="btn-secondary" onClick={() => trackEvent('header_view_agenda_click')}>Ver Agenda</button>
-                </>
-              ) : (
-                <button className="btn-primary" onClick={() => fetchHome()}>Atualizar dados</button>
-              )}
-            </div>
+            {!isSelfManaged && (
+              <div className="page-header-actions">
+                {isDashboard ? (
+                  <>
+                    <button className="btn-primary" onClick={() => trackEvent('header_new_task_click')}>Nova Tarefa</button>
+                    <button className="btn-secondary" onClick={() => trackEvent('header_view_agenda_click')}>Ver Agenda</button>
+                  </>
+                ) : (
+                  <button className="btn-primary" onClick={() => fetchHome()}>Atualizar dados</button>
+                )}
+              </div>
+            )}
           </header>
         ) : null}
 

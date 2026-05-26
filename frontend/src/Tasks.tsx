@@ -314,8 +314,17 @@ function PriorityBadge({ priority }: { priority: TaskPriority }) {
   return <ProductPriorityBadge priority={levelByVariant[cfg.variant]} label={cfg.label} />;
 }
 
+const ORIGIN_CHIP_CLASS: Record<TaskOrigin, string> = {
+  processo:    'tsk-origin-chip tsk-origin-chip--processo',
+  prazo:       'tsk-origin-chip tsk-origin-chip--prazo',
+  documento:   'tsk-origin-chip tsk-origin-chip--documento',
+  publicacao:  'tsk-origin-chip tsk-origin-chip--publicacao',
+  atendimento: 'tsk-origin-chip tsk-origin-chip--atendimento',
+  interno:     'tsk-origin-chip tsk-origin-chip--interno',
+};
+
 function OriginChip({ origin }: { origin: TaskOrigin }) {
-  return <span className="tsk-origin-chip">{ORIGIN_LABEL[origin]}</span>;
+  return <span className={ORIGIN_CHIP_CLASS[origin]}>{ORIGIN_LABEL[origin]}</span>;
 }
 
 function AutomationContext({ task }: { task: TaskItem }) {
@@ -784,6 +793,7 @@ export function Tasks({ user }: TasksProps) {
             searchPlaceholder="Buscar por título, cliente, processo, responsável..."
             searchValue={filters.query}
             onSearchChange={(value) => updateFilter('query', value)}
+            actions={<></>}
           />
 
           <div className="tsk-quick-filters">
