@@ -109,6 +109,48 @@ test('authz matrix covers portfolio and export permissions explicitly', async ()
   );
 });
 
+test('authz matrix allows portfolio-scoped AI summary generation for ADV', async () => {
+  const { checkAuthorization } = require(authzCheckPath);
+
+  const decision = checkAuthorization({
+    actor: { userId: 60, role: 'ADV', portfolioIds: [901] },
+    permissionKey: 'ai.summary.generate',
+    resourceType: 'ai',
+    resourceId: 'publication:41',
+    context: { portfolioId: 901 },
+  });
+
+  assert.equal(decision.allowed, true);
+  assert.equal(decision.scope, 'portfolio');
+  assert.equal(decision.requiresAudit, true);
+});
+
+test('authz matrix grants BI export globally for FIN and denies timesheet approval for ATD', async () => {
+  const { checkAuthorization } = require(authzCheckPath);
+  const { listAuthzPermissions } = require(permissionsPath);
+
+  const biExportDecision = checkAuthorization({
+    actor: { userId: 3, role: 'FIN' },
+    permissionKey: 'bi.export.generate',
+    resourceType: 'bi',
+    resourceId: 'financial_consolidated',
+  });
+
+  const deniedTimesheetApproval = checkAuthorization({
+    actor: { userId: 42, role: 'ATD', teamIds: [7] },
+    permissionKey: 'timesheet.entry.approve',
+    resourceType: 'timesheet',
+    resourceId: 'entry-9',
+    context: { teamId: 7 },
+  });
+
+  assert.equal(biExportDecision.allowed, true);
+  assert.equal(biExportDecision.scope, 'global');
+  assert.ok(listAuthzPermissions('FIN').includes('bi.export.generate'));
+  assert.equal(deniedTimesheetApproval.allowed, false);
+  assert.equal(deniedTimesheetApproval.reason, 'AUTHZ_SENSITIVE_DENY_BY_DEFAULT');
+});
+
 test('guard throws with the computed decision when permission is denied', async () => {
   const { ensureAuthorized, AuthzForbiddenError } = require(guardPath);
 

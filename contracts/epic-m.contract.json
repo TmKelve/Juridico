@@ -1,0 +1,164 @@
+{
+  "epic": "Epic M - Mobile + Timesheet",
+  "version": "2026-05-26",
+  "compatibility": {
+    "preserveExistingRoutes": true,
+    "preserveExistingContracts": true,
+    "additiveOnly": true,
+    "rules": [
+      "Fluxos mobile devem priorizar leitura e acao rapida sem quebrar a semantica das rotas desktop.",
+      "Apontamentos de horas exigem auditoria, validacao de conflito e politica de fechamento.",
+      "Integracao financeira deve ocorrer por vinculacao explicita, sem alterar o source of truth financeiro existente."
+    ]
+  },
+  "entities": [
+    "timeEntry",
+    "timeEntryApproval",
+    "timesheetClosure",
+    "timeEntryConflict",
+    "mobileFeedItem",
+    "timesheetAuditEvent"
+  ],
+  "contracts": {
+    "timesheet.entry.create": {
+      "input": {
+        "userId": "number",
+        "processId": "number|null",
+        "clientId": "number|null",
+        "taskId": "number|null",
+        "attendanceId": "number|null",
+        "activityType": "analise|peticao|audiencia|reuniao|atendimento|administrativo|outro",
+        "startedAt": "ISO-8601",
+        "endedAt": "ISO-8601",
+        "billable": "boolean",
+        "billableMinutes": "number",
+        "notes": "string|null",
+        "source": "manual|mobile|timer|agenda",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "entry": "timeEntry",
+        "conflicts": "timeEntryConflict[]",
+        "auditEvent": "timesheetAuditEvent",
+        "idempotency": "created|replayed"
+      },
+      "errors": [
+        "TIMESHEET_INVALID",
+        "TIMESHEET_CONFLICT",
+        "TIMESHEET_PERMISSION_DENIED",
+        "TIMESHEET_PERIOD_CLOSED",
+        "IDEMPOTENCY_CONFLICT"
+      ],
+      "idempotency": {
+        "scope": "timesheet.entry.create",
+        "dedupeBy": [
+          "scope",
+          "idempotencyKey"
+        ]
+      }
+    },
+    "timesheet.entry.update": {
+      "input": {
+        "entryId": "string",
+        "startedAt": "ISO-8601|null",
+        "endedAt": "ISO-8601|null",
+        "billable": "boolean|null",
+        "billableMinutes": "number|null",
+        "notes": "string|null",
+        "status": "draft|submitted|approved|rejected|locked|null",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "entry": "timeEntry",
+        "conflicts": "timeEntryConflict[]",
+        "auditEvent": "timesheetAuditEvent"
+      },
+      "errors": [
+        "TIMESHEET_ENTRY_NOT_FOUND",
+        "TIMESHEET_CONFLICT",
+        "TIMESHEET_PERMISSION_DENIED",
+        "TIMESHEET_PERIOD_CLOSED",
+        "IDEMPOTENCY_CONFLICT"
+      ],
+      "idempotency": {
+        "scope": "timesheet.entry.update",
+        "dedupeBy": [
+          "scope",
+          "idempotencyKey"
+        ]
+      }
+    },
+    "timesheet.entry.approve": {
+      "input": {
+        "entryIds": "string[]",
+        "decision": "approved|rejected|reopened|closed",
+        "reason": "string|null",
+        "approverUserId": "number",
+        "periodStart": "YYYY-MM-DD|null",
+        "periodEnd": "YYYY-MM-DD|null",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "entries": "timeEntry[]",
+        "approvals": "timeEntryApproval[]",
+        "closure": "timesheetClosure|null",
+        "auditEvent": "timesheetAuditEvent"
+      },
+      "errors": [
+        "TIMESHEET_ENTRY_NOT_FOUND",
+        "TIMESHEET_APPROVAL_INVALID",
+        "TIMESHEET_PERMISSION_DENIED",
+        "TIMESHEET_PERIOD_CLOSED",
+        "IDEMPOTENCY_CONFLICT"
+      ],
+      "idempotency": {
+        "scope": "timesheet.entry.approve",
+        "dedupeBy": [
+          "scope",
+          "idempotencyKey"
+        ]
+      }
+    },
+    "timesheet.report.query": {
+      "input": {
+        "scopeType": "user|team|portfolio|client|process",
+        "scopeId": "number|string|null",
+        "from": "YYYY-MM-DD",
+        "to": "YYYY-MM-DD",
+        "groupBy": "day|week|month|client|team|activity|process",
+        "includeFinancialLink": "boolean"
+      },
+      "output": {
+        "summary": "object",
+        "series": "array",
+        "items": "timeEntry[]"
+      },
+      "errors": [
+        "TIMESHEET_REPORT_INVALID",
+        "TIMESHEET_PERMISSION_DENIED"
+      ],
+      "idempotency": {
+        "scope": "read-only"
+      }
+    },
+    "mobile.feed.fetch": {
+      "input": {
+        "userId": "number",
+        "scope": "today|next_7_days|critical_only",
+        "include": "tasks|deadlines|publications|attendances|agenda|timesheet_pending",
+        "timezone": "IANA timezone"
+      },
+      "output": {
+        "items": "mobileFeedItem[]",
+        "generatedAt": "ISO-8601"
+      },
+      "errors": [
+        "MOBILE_FEED_INVALID",
+        "MOBILE_PERMISSION_DENIED"
+      ],
+      "idempotency": {
+        "scope": "read-only"
+      }
+    }
+  }
+}

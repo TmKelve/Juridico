@@ -50,6 +50,11 @@ test('plans confirmed deadline automation with dedupeKey and handled state', asy
   assert.equal(planned.automation.dedupeKey, 'pub:551|process:3|deadline-and-task');
   assert.equal(planned.automation.task.priority, 'alta');
   assert.equal(planned.automation.deadline.dueDate, '2026-06-04');
+  assert.equal(planned.automation.correlationId, 'pub:551');
+  assert.equal(planned.automation.derivedActions.length, 2);
+  assert.equal(planned.automation.derivedActions[0].entityType, 'deadline');
+  assert.equal(planned.automation.derivedActions[1].entityType, 'task');
+  assert.equal(planned.automation.fallbacks.length, 0);
 
   const batch = planBatchTriageDecisions({
     items: [triageItem, { ...triageItem, id: 779 }],
@@ -61,6 +66,7 @@ test('plans confirmed deadline automation with dedupeKey and handled state', asy
 
   assert.equal(batch[0].automation.commandType, 'none');
   assert.equal(batch[0].automation.skipReason, 'duplicate_dedupe_key');
+  assert.equal(batch[0].automation.fallbacks[0].code, 'duplicate_dedupe_key');
   assert.equal(batch[1].automation.commandType, 'none');
 });
 
@@ -103,6 +109,8 @@ test('plans confirmed task-only automation and postponed state without mutating 
   assert.equal(confirmed.automation.commandType, 'create_task');
   assert.equal(confirmed.automation.dedupeKey, 'pub:552|process:7|task');
   assert.equal(confirmed.automation.task.owner, 'time-contencioso');
+  assert.equal(confirmed.automation.derivedActions.length, 1);
+  assert.equal(confirmed.automation.derivedActions[0].entityType, 'task');
   assert.equal(confirmed.itemUpdate.crmLeadId, 12);
   assert.equal(confirmed.itemUpdate.crmOpportunityId, 18);
 
@@ -121,4 +129,5 @@ test('plans confirmed task-only automation and postponed state without mutating 
   assert.equal(postponed.itemUpdate.queueType, 'normal');
   assert.equal(postponed.itemUpdate.assignedQueue, 'fila_documental');
   assert.equal(postponed.automation.commandType, 'none');
+  assert.equal(postponed.automation.fallbacks[0].code, 'not_confirmed');
 });

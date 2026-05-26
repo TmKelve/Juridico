@@ -1,15 +1,13 @@
-import { AlertCircle, AlertTriangle, BarChart2, CalendarDays, CheckCircle2, Clock, DollarSign, Plus, Scale, Target, Users } from 'lucide-react';
+import { AlertCircle, AlertTriangle, BarChart2, CalendarDays, CheckCircle2, Clock, DollarSign, Scale, Target, Users } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useContextFeed } from '../hooks/useContextFeed';
 import { useDashboardHomeData } from '../hooks/useDashboardHomeData';
 import { useKpiActions } from '../hooks/useKpiActions';
 import { useOperationalFilters } from '../hooks/useOperationalFilters';
-import type { ChartSeries, DashboardKpi, QueueFilter, ResponsibilityItem } from '../types';
-import { AnalyticsContainer } from './AnalyticsContainer';
+import type { DashboardKpi, QueueFilter, ResponsibilityItem } from '../types';
 import { ContextRailContainer } from './ContextRailContainer';
 import { OperationalQueueContainer } from './OperationalQueueContainer';
-import { SupportLayerContainer } from './SupportLayerContainer';
 import { KpiStrip } from '../widgets/KpiStrip';
 import { DashboardShell } from '../layout/DashboardShell';
 
@@ -33,70 +31,115 @@ export function DashboardContainer({ user }: DashboardContainerProps) {
     const prazosHoje = items.filter((item) => item.type === 'hoje').length;
     const tarefasPendentes = items.filter((item) => item.status !== 'concluido').length;
     const aguardandoAcao = items.filter((item) => item.status === 'pausado').length;
-    const clientesEmRetorno = new Set(items.filter((item) => item.type !== 'amanha').map((item) => item.client)).size;
-    const financeiroDoDia = `R$ ${(items.length * 2800).toLocaleString('pt-BR')}`;
-    const produtividadeEquipe = `${Math.max(62, 100 - aguardandoAcao * 5)}%`;
+    const clientesRetorno = items.filter((item) => item.type === 'hoje').length + 1;
+    const financeiroDia = items.length * 2800;
+    const produtividade = Math.max(62, Math.min(98, 80 + items.filter((i) => i.status === 'concluido').length * 3));
 
     return [
-      { id: 'kpi-deadlines', title: 'Prazos Hoje', value: prazosHoje, microtext: 'Itens com vencimento no turno atual', icon: Clock, color: 'warning' },
-      { id: 'kpi-tasks', title: 'Tarefas Pendentes', value: tarefasPendentes, microtext: 'Demandas aguardando execução', icon: CheckCircle2, color: 'info' },
-      { id: 'kpi-awaiting', title: 'Processos Aguardando Ação', value: aguardandoAcao, microtext: 'Processos pausados ou bloqueados', icon: Scale, color: 'error' },
-      { id: 'kpi-return', title: 'Clientes em Retorno', value: clientesEmRetorno, microtext: 'Clientes com retorno previsto hoje', icon: Users, color: 'primary' },
-      ...(profile === 'ADM' || profile === 'FIN'
-        ? [{ id: 'kpi-finance', title: 'Financeiro Dia', value: financeiroDoDia, microtext: 'Receita prevista para o dia', icon: DollarSign, color: 'success' as const }]
-        : []),
-      ...(profile === 'ADM' || profile === 'ADV'
-        ? [{
-          id: 'kpi-productivity',
-          title: profile === 'ADV' ? 'Produtividade Pessoal' : 'Produtividade Equipe',
-          value: produtividadeEquipe,
-          microtext: profile === 'ADV' ? 'Aproveitamento operacional da sua carteira' : 'Aproveitamento operacional da equipe',
-          icon: BarChart2,
-          color: 'success' as const,
-        }]
-        : []),
+      {
+        id: 'kpi-deadlines',
+        title: 'Prazos Hoje',
+        value: prazosHoje,
+        microtext: 'Itens com vencimento no turno atual',
+        icon: Clock,
+        color: 'warning',
+      },
+      {
+        id: 'kpi-tasks',
+        title: 'Tarefas Pendentes',
+        value: tarefasPendentes,
+        microtext: 'Demandas aguardando execução',
+        icon: CheckCircle2,
+        color: 'info',
+      },
+      {
+        id: 'kpi-awaiting',
+        title: 'Processos Aguardando Ação',
+        value: aguardandoAcao,
+        microtext: 'Processos pausados ou bloqueados',
+        icon: Scale,
+        color: 'error',
+      },
+      {
+        id: 'kpi-clients',
+        title: 'Clientes em Retorno',
+        value: clientesRetorno,
+        microtext: 'Clientes com retorno previsto hoje',
+        icon: Users,
+        color: 'primary',
+      },
+      {
+        id: 'kpi-financial',
+        title: 'Financeiro do Dia',
+        value: `R$ ${financeiroDia.toLocaleString('pt-BR')}`,
+        microtext: 'Receita prevista para o dia',
+        icon: DollarSign,
+        color: 'success',
+      },
+      {
+        id: 'kpi-productivity',
+        title: 'Produtividade da Equipe',
+        value: `${produtividade}%`,
+        microtext: 'Aproveitamento operacional da equipe',
+        icon: BarChart2,
+        color: 'info',
+      },
     ];
-  }, [items, profile]);
+  }, [items]);
 
   const hero = useMemo(() => {
     const overdueCount = items.filter((item) => item.type === 'atrasados').length;
     const todayCount = items.filter((item) => item.type === 'hoje').length;
-    const pausedCount = items.filter((item) => item.status === 'pausado').length;
     const agendaToday = agenda.length;
+    const withoutMovement = items.filter((i) => i.status !== 'ativo' && i.status !== 'concluido').length;
+
     const now = new Date();
     const longDate = new Intl.DateTimeFormat('pt-BR', {
       weekday: 'long',
       day: 'numeric',
       month: 'long',
     }).format(now);
+
     const titleByProfile: Record<string, string> = {
       ADV: 'Meu Dia',
       ADM: 'Visão do Escritório',
       FIN: 'Operação Financeira',
       ATD: 'Atendimento do Dia',
     };
+
     const subtitleByProfile: Record<string, string> = {
       ADV: 'Priorize prazos críticos, avance tarefas-chave e monitore gargalos da operação.',
-      ADM: 'Enxergue carga, bloqueios e urgências antes que virem atraso operacional.',
-      FIN: 'Monitore execução, retornos e pontos que travam cobrança ou andamento.',
-      ATD: 'Acompanhe retornos, agenda e fila de processos com ação pendente.',
+      ADM: 'Acompanhe a performance do escritório, urgências e alocação da equipe.',
+      FIN: 'Monitore receitas, cobranças pendentes e saúde financeira do dia.',
+      ATD: 'Gerencie atendimentos, retornos e pendências do dia com clientes.',
     };
 
     return {
       title: titleByProfile[profile] || 'Home Operacional',
-      subtitle: subtitleByProfile[profile] || 'Acompanhe a fila operacional e ataque o que exige ação primeiro.',
+      subtitle: subtitleByProfile[profile] || 'Acompanhe suas responsabilidades operacionais do dia.',
       dateLabel: longDate.charAt(0).toUpperCase() + longDate.slice(1),
       summary: `Você tem ${agendaToday} compromisso(s) no dia, ${todayCount} item(ns) para atuar hoje e ${overdueCount} atraso(s) exigindo correção.`,
-      pulse: [
-        { label: 'Urgências', value: overdueCount, tone: overdueCount > 0 ? 'error' : 'success' },
-        { label: 'Atuação hoje', value: todayCount, tone: todayCount > 0 ? 'warning' : 'neutral' },
-        { label: 'Agenda', value: agendaToday, tone: 'info' as const },
-      ],
       insights: [
-        { text: `${todayCount} itens exigem atuação hoje`, tone: todayCount > 0 ? 'warning' : 'neutral' },
-        { text: `${overdueCount} atraso(s) pedem correção imediata`, tone: overdueCount > 0 ? 'error' : 'success' },
-        { text: `${pausedCount} processo(s) estão em atenção`, tone: pausedCount > 0 ? 'warning' : 'success' },
-        { text: `${agendaToday} compromissos no dia`, tone: 'info' },
+        {
+          label: `${todayCount} item(ns) exigem atuação hoje`,
+          tone: todayCount > 0 ? 'warning' : 'info',
+          icon: Clock,
+        },
+        {
+          label: `${overdueCount} atraso(s) pedem correção imediata`,
+          tone: overdueCount > 0 ? 'error' : 'info',
+          icon: AlertTriangle,
+        },
+        {
+          label: `${withoutMovement} processo(s) estão sem avanço`,
+          tone: withoutMovement > 0 ? 'info' : 'success',
+          icon: Scale,
+        },
+        {
+          label: `${agendaToday} compromisso(s) no dia`,
+          tone: 'info',
+          icon: CalendarDays,
+        },
       ],
     };
   }, [agenda.length, items, profile]);
@@ -104,9 +147,10 @@ export function DashboardContainer({ user }: DashboardContainerProps) {
   const nextBestAction = useMemo(() => {
     const overdueItem = items.find((item) => item.type === 'atrasados');
     if (overdueItem) {
+      const overdueCount = items.filter((i) => i.type === 'atrasados').length;
       return {
-        title: `Resolver atraso do ${overdueItem.client}`,
-        description: `Existe ${items.filter((i) => i.type === 'atrasados').length} item vencido que pode impactar a fila operacional. Priorize a validação interna e destrave o processo antes das demais tarefas.`,
+        title: `Resolver atraso: ${overdueItem.client}`,
+        description: `${overdueCount === 1 ? '1 item vencido exige' : `${overdueCount} itens vencidos exigem`} correção imediata. Priorize a validação e destrave o processo antes das demais tarefas.`,
         cta: 'Abrir prioridade',
         secondary: 'Ver fila completa',
         tone: 'warning' as const,
@@ -115,9 +159,10 @@ export function DashboardContainer({ user }: DashboardContainerProps) {
     }
     const todayItem = items.find((item) => item.type === 'hoje');
     if (todayItem) {
+      const todayCount = items.filter((i) => i.type === 'hoje').length;
       return {
-        title: `Avançar ${todayItem.title}`,
-        description: `${items.filter((i) => i.type === 'hoje').length} item(ns) aguardam execução hoje. Priorize a manifestação pendente e mantenha a cadência da carteira.`,
+        title: `Avançar: ${todayItem.title}`,
+        description: `${todayCount === 1 ? '1 item aguarda' : `${todayCount} itens aguardam`} execução hoje. Priorize a manifestação pendente e mantenha a cadência da carteira.`,
         cta: 'Abrir prioridade',
         secondary: 'Ver fila completa',
         tone: 'info' as const,
@@ -127,35 +172,9 @@ export function DashboardContainer({ user }: DashboardContainerProps) {
     return null;
   }, [items]);
 
-  const phaseSeries = useMemo<ChartSeries[]>(() => {
-    const phaseTotals = items.reduce((acc: Record<string, number>, item) => {
-      acc[item.phase] = (acc[item.phase] || 0) + 1;
-      return acc;
-    }, {});
-
-    const entries = Object.entries(phaseTotals).slice(0, 5) as Array<[string, number]>;
-    const palette = ['#1d4ed8', '#2563eb', '#3b82f6', '#0891b2', '#0e7490'];
-    const base: Array<[string, number]> = entries.length > 0 ? entries : [['Sem fase', 1]];
-    return base.map((entry, index) => ({ label: entry[0], value: entry[1], color: palette[index % palette.length] }));
-  }, [items]);
-
-  const statusSeries = useMemo<ChartSeries[]>(() => {
-    return [
-      { label: 'Pendentes', value: items.filter((item) => item.status === 'pausado').length, color: '#b45309' },
-      { label: 'Em andamento', value: items.filter((item) => item.status === 'ativo').length, color: '#2563eb' },
-      { label: 'Concluídas', value: items.filter((item) => item.status === 'concluido').length, color: '#0f766e' },
-    ];
-  }, [items]);
-
   const handleQueueFilter = (filter: QueueFilter) => {
     setQueueFilter(filter);
     setLiveFeedback(`Filtro de fila aplicado: ${filter}.`);
-  };
-
-  const handlePhaseToggle = (phase: string) => {
-    const next = selectedPhase === phase ? null : phase;
-    setSelectedPhase(next);
-    setLiveFeedback(next ? `Filtro por fase aplicado: ${next}.` : 'Filtro por fase removido.');
   };
 
   const handleOpenItem = (item: ResponsibilityItem) => {
@@ -176,9 +195,7 @@ export function DashboardContainer({ user }: DashboardContainerProps) {
     closeDrawerRef.current?.focus();
 
     const onEscapeClose = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        closeItemDrawer();
-      }
+      if (event.key === 'Escape') closeItemDrawer();
     };
 
     window.addEventListener('keydown', onEscapeClose);
@@ -209,66 +226,37 @@ export function DashboardContainer({ user }: DashboardContainerProps) {
 
       <DashboardShell
         header={(
-          <>
-            <section className="dashboard-hero" aria-label="Resumo do dia">
-              <div className="dashboard-hero-copy">
-                <div className="dashboard-hero-eyebrow">Dashboard</div>
-                <h2>{hero.title}</h2>
-                <p>{hero.subtitle}</p>
-                <span className="dashboard-hero-date-badge">
-                  <CalendarDays size={14} aria-hidden="true" />
-                  {hero.dateLabel}
-                </span>
+          <header className="dashboard-hero" aria-label="Cabeçalho do dia">
+            <div className="dashboard-hero-copy">
+              <p className="dashboard-hero-eyebrow">DASHBOARD</p>
+              <h2>{hero.title}</h2>
+              <p>{hero.subtitle}</p>
+              <div className="dashboard-hero-date-badge">
+                <CalendarDays size={14} aria-hidden="true" />
+                {hero.dateLabel}
               </div>
-
-              <div className="dashboard-hero-right">
-                <div className="dashboard-hero-pulse-card" aria-label="Pulso operacional">
-                  <div className="dashboard-hero-pulse-head">
-                    <span className="dashboard-hero-pulse-kicker">Pulso operacional</span>
-                    <strong>{hero.summary}</strong>
-                  </div>
-                  <div className="dashboard-hero-pulse-grid">
-                    {hero.pulse.map((item) => (
-                      <div key={item.label} className={`dashboard-hero-pulse-stat dashboard-hero-pulse-stat--${item.tone}`}>
-                        <span>{item.label}</span>
-                        <strong>{item.value}</strong>
-                      </div>
-                    ))}
-                  </div>
+            </div>
+          </header>
+        )}
+        responsibility={(
+          <section className="responsibility-panel" aria-label="Painel de responsabilidades">
+            <div className="responsibility-panel__copy">
+              <div className="responsibility-panel__eyebrow">
+                <Scale size={14} aria-hidden="true" />
+                Painel de Responsabilidades
+              </div>
+              <p>Entregue carga, bloqueios e urgências antes que virem atraso operacional.</p>
+              <strong>{hero.summary}</strong>
+            </div>
+            <div className="responsibility-panel__insights" aria-label="Insights operacionais">
+              {hero.insights.map((insight) => (
+                <div key={insight.label} className={`responsibility-insight responsibility-insight--${insight.tone}`}>
+                  <insight.icon size={16} aria-hidden="true" />
+                  {insight.label}
                 </div>
-
-                <div className="dashboard-hero-actions" aria-label="Ações principais">
-                  <button className="btn-secondary btn-compact" onClick={() => onShortcutClick('ver_agenda')}>
-                    <CalendarDays size={16} aria-hidden="true" />
-                    Ver Agenda
-                  </button>
-                  <button className="btn-primary btn-compact" onClick={() => onShortcutClick('nova_tarefa')}>
-                    <Plus size={16} aria-hidden="true" />
-                    Nova Tarefa
-                  </button>
-                </div>
-              </div>
-            </section>
-
-            <section className="responsibility-panel" aria-label="Painel de responsabilidades">
-              <div className="responsibility-panel__copy">
-                <div className="responsibility-panel__eyebrow">
-                  <Users size={16} aria-hidden="true" />
-                  Painel de responsabilidades
-                </div>
-                <p>Entregue carga, bloqueios e urgências antes que virem atraso operacional.</p>
-                <strong>{hero.summary}</strong>
-              </div>
-              <div className="responsibility-panel__insights" aria-label="Alertas do dia">
-                {hero.insights.map((insight) => (
-                  <span key={insight.text} className={`responsibility-insight responsibility-insight--${insight.tone}`}>
-                    {insight.tone === 'error' ? <AlertTriangle size={18} aria-hidden="true" /> : <Clock size={18} aria-hidden="true" />}
-                    {insight.text}
-                  </span>
-                ))}
-              </div>
-            </section>
-          </>
+              ))}
+            </div>
+          </section>
         )}
         kpi={<KpiStrip kpis={kpis} onKpiClick={onKpiClick} />}
         nextAction={nextBestAction ? (
@@ -303,15 +291,6 @@ export function DashboardContainer({ user }: DashboardContainerProps) {
           />
         )}
         context={<ContextRailContainer agenda={agenda} movements={movements} alerts={alerts} onShortcutClick={onShortcutClick} />}
-        analytics={(
-          <AnalyticsContainer
-            phaseSeries={phaseSeries}
-            statusSeries={statusSeries}
-            selectedPhase={selectedPhase}
-            onTogglePhase={handlePhaseToggle}
-          />
-        )}
-        support={<SupportLayerContainer items={items} />}
       />
 
       {selectedItem && (
@@ -350,7 +329,7 @@ export function DashboardContainer({ user }: DashboardContainerProps) {
                 </div>
                 <div>
                   <small className="quick-drawer-label">Status</small>
-                  <p>{selectedItem.status}</p>
+                  <p style={{ textTransform: 'capitalize' }}>{selectedItem.status}</p>
                 </div>
                 <div>
                   <small className="quick-drawer-label">Fila</small>

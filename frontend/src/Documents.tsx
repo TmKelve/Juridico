@@ -402,6 +402,22 @@ export function Documents({ user }: DocumentsProps) {
   const pageCount = Math.max(1, Math.ceil(sortedDocuments.length / itemsPerPage));
   const pagedDocuments = sortedDocuments.slice((page - 1) * itemsPerPage, page * itemsPerPage);
 
+  const activeChecklistProcess = useMemo(
+    () => (filters.process ? processes.find((process) => process.id === filters.process) ?? null : null),
+    [filters.process, processes],
+  );
+  const scopedChecklistDocuments = useMemo(
+    () => (filters.process ? documents.filter((doc) => String(doc.processId) === filters.process) : []),
+    [documents, filters.process],
+  );
+  const scopedChecklist = useMemo(
+    () =>
+      checklist.map((item) => ({
+        ...item,
+        received: item.received || scopedChecklistDocuments.some((doc) => doc.requiredChecklist && doc.status === 'validado'),
+      })),
+    [checklist, scopedChecklistDocuments],
+  );
   const kpis = useMemo(() => {
     const now = new Date();
 
@@ -413,9 +429,9 @@ export function Documents({ user }: DocumentsProps) {
         const delta = Math.ceil((now.getTime() - new Date(`${doc.uploadedAt}T00:00:00`).getTime()) / (1000 * 60 * 60 * 24));
         return delta <= 3;
       }).length,
-      missingChecklist: checklist.filter((item) => item.required && !item.received).length,
+      missingChecklist: activeChecklistProcess ? scopedChecklist.filter((item) => item.required && !item.received).length : 0,
     };
-  }, [documents, checklist]);
+  }, [activeChecklistProcess, documents, scopedChecklist]);
 
   const hasActiveFilter = useMemo(
     () => JSON.stringify(filters) !== JSON.stringify(EMPTY_FILTERS),
@@ -440,7 +456,9 @@ export function Documents({ user }: DocumentsProps) {
   const emptyWithFilter = !loading && !error && documents.length > 0 && sortedDocuments.length === 0;
   const visiblePendingCount = sortedDocuments.filter((doc) => doc.status === 'pendente').length;
   const visibleValidationCount = sortedDocuments.filter((doc) => doc.status === 'aguardando_validacao').length;
-  const visibleChecklistGapCount = sortedDocuments.filter((doc) => doc.requiredChecklist && doc.status !== 'validado').length;
+  const visibleChecklistGapCount = activeChecklistProcess
+    ? scopedChecklist.filter((item) => item.required && !item.received).length
+    : 0;
   const focusDocument = sortedDocuments.find((doc) => doc.status === 'pendente')
     ?? sortedDocuments.find((doc) => doc.status === 'aguardando_validacao')
     ?? sortedDocuments[0]
@@ -550,7 +568,7 @@ export function Documents({ user }: DocumentsProps) {
         <article className="document-kpi-card warning"><p>Pendentes</p><strong>{kpis.pending}</strong></article>
         <article className="document-kpi-card info"><p>Aguardando validacao</p><strong>{kpis.waitingValidation}</strong></article>
         <article className="document-kpi-card success"><p>Enviados recentemente</p><strong>{kpis.recentSent}</strong></article>
-        <article className="document-kpi-card danger"><p>Faltantes por checklist</p><strong>{kpis.missingChecklist}</strong></article>
+        <article className="document-kpi-card danger"><p>Checklist no contexto</p><strong>{activeChecklistProcess ? kpis.missingChecklist : '—'}</strong></article>
       </section>
 
       {error && (
@@ -598,7 +616,7 @@ export function Documents({ user }: DocumentsProps) {
           <div className="documents-priority-card" data-tone={visibleChecklistGapCount > 0 ? 'danger' : 'neutral'}>
             <span>Checklist incompleto</span>
             <strong>{visibleChecklistGapCount}</strong>
-            <small>{visibleChecklistGapCount > 0 ? 'gaps de entrega no recorte' : 'checklist coberto'}</small>
+            <small>{activeChecklistProcess ? (visibleChecklistGapCount > 0 ? 'gaps de entrega no processo filtrado' : 'checklist coberto') : 'selecione um processo para avaliar checklist'}</small>
           </div>
         </div>
 
@@ -752,39 +770,49 @@ export function Documents({ user }: DocumentsProps) {
       <section className="documents-checklist-shell" aria-label="Checklist documental">
         <header>
           <h3>Checklist documental / documentos faltantes</h3>
-          <span>{checklist.filter((item) => item.required && !item.received).length} faltante(s)</span>
+          <span>{activeChecklistProcess ? `${scopedChecklist.filter((item) => item.required && !item.received).length} faltante(s)` : 'aguardando contexto'}</span>
         </header>
-        <div className="documents-checklist-grid">
-          {checklist.map((item) => (
-            <article key={item.id} className={`checklist-item ${item.required ? 'required' : ''}`}>
-              <div className="checklist-head">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={item.received}
-                    onChange={() => toggleChecklistReceived(item.id)}
-                  />
-                  {item.title}
+        {!activeChecklistProcess ? (
+          <div className="documents-checklist-empty" role="status">
+            <strong>Selecione um processo para abrir o checklist documental.</strong>
+            <p>O checklist só deve aparecer quando a tela estiver em contexto processual. Sem processo filtrado, a carteira mostra apenas os documentos.</p>
+          </div>
+        ) : (
+          <div className="documents-checklist-grid">
+            {scopedChecklist.map((item) => (
+              <article key={item.id} className={`checklist-item ${item.required ? 'required' : ''}`}>
+                <div className="checklist-head">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={item.received}
+                      onChange={() => toggleChecklistReceived(item.id)}
+                    />
+                    {item.title}
+                  </label>
+                  <span className={`checklist-state ${item.received ? 'ok' : 'pending'}`}>
+                    {item.received ? 'Recebido' : 'Faltante'}
+                  </span>
+                </div>
+                <label className="checklist-link">
+                  Vincular documento
+                  <select
+                    value={item.linkedDocumentId || ''}
+                    onChange={(event) => linkChecklistDocument(item.id, event.target.value)}
+                  >
+                    <option value="">Nao vinculado</option>
+                    {scopedChecklistDocuments.map((doc) => (
+                      <option key={String(doc.id)} value={String(doc.id)}>{doc.name} ({doc.processLabel})</option>
+                    ))}
+                  </select>
                 </label>
-                <span className={`checklist-state ${item.received ? 'ok' : 'pending'}`}>
-                  {item.received ? 'Recebido' : 'Faltante'}
-                </span>
-              </div>
-              <label className="checklist-link">
-                Vincular documento
-                <select
-                  value={item.linkedDocumentId || ''}
-                  onChange={(event) => linkChecklistDocument(item.id, event.target.value)}
-                >
-                  <option value="">Nao vinculado</option>
-                  {documents.map((doc) => (
-                    <option key={String(doc.id)} value={String(doc.id)}>{doc.name} ({doc.processLabel})</option>
-                  ))}
-                </select>
-              </label>
-            </article>
-          ))}
-        </div>
+              </article>
+            ))}
+          </div>
+        )}
+        {activeChecklistProcess ? (
+          <p className="documents-checklist-context">Checklist aplicado ao processo {activeChecklistProcess.label}.</p>
+        ) : null}
       </section>
 
       {emptyWithoutData && (

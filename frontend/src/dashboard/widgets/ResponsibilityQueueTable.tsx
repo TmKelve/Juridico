@@ -57,19 +57,6 @@ export function ResponsibilityQueueTable({
         {selectedPhase && <span className="phase-chip">Fase: {selectedPhase}</span>}
       </div>
 
-      <div className="queue-snapshot" aria-label="Resumo da fila">
-        <div className="queue-snapshot-card">
-          <span className="queue-snapshot-label">Em destaque</span>
-          <strong>{highlights.length}</strong>
-          <small>prioridades com ação imediata</small>
-        </div>
-        <div className="queue-snapshot-card">
-          <span className="queue-snapshot-label">Na fila detalhada</span>
-          <strong>{remaining.length > 0 ? remaining.length : items.length}</strong>
-          <small>itens para varredura completa</small>
-        </div>
-      </div>
-
       {highlights.length > 0 && (
         <section className="priority-stack" aria-label="Itens prioritários">
           {highlights.map((row) => (
@@ -77,36 +64,39 @@ export function ResponsibilityQueueTable({
               key={row.id}
               className={`priority-card ${selectedItemId === row.id ? 'is-selected' : ''}`}
               data-sla={getSlaUrgency(row.sla)}
+              onClick={() => onItemOpen(row)}
+              role="button"
+              tabIndex={0}
+              aria-label={`Abrir detalhes: ${row.title}`}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onItemOpen(row); } }}
             >
-              <div className="priority-card-main">
-                <div className="priority-card-headline">
-                  <span className="priority-card-kicker">{row.type === 'hoje' ? 'Atuação hoje' : row.type === 'atrasados' ? 'Atrasado' : 'Próximo período'}</span>
-                  <span className={`sla-badge sla-${getSlaUrgency(row.sla)}`}>{row.sla}</span>
-                </div>
-                <h3>{row.title}</h3>
-                <p>{row.client} • Processo #{row.id} • {row.phase}</p>
-                <small>{row.pendingSummary}</small>
+              <header className="priority-card-header">
+                <span className={`sla-badge sla-${getSlaUrgency(row.sla)}`}>{row.sla}</span>
+                <span className="priority-card-phase-tag">{row.phase}</span>
+              </header>
+
+              <div className="priority-card-body">
+                <h3 className="priority-card-title">{row.title}</h3>
+                <p className="priority-card-client">{row.client} · #{row.id}</p>
+                <p className="priority-card-summary">{row.pendingSummary}</p>
               </div>
 
-              <div className="priority-card-meta">
-                <div>
-                  <span className="priority-card-label">Responsável</span>
-                  <strong>{row.owner}</strong>
-                </div>
-                <div>
-                  <span className="priority-card-label">Status</span>
-                  <span className="queue-status-dot" data-status={row.status}>
-                    {row.status}
+              <footer className="priority-card-footer">
+                <div className="priority-card-owner">
+                  <span className="priority-card-avatar" aria-hidden="true">
+                    {row.owner.charAt(0).toUpperCase()}
                   </span>
+                  <span className="priority-card-owner-name">{row.owner}</span>
                 </div>
-              </div>
-
-              <div className="priority-card-actions">
-                <button className="btn-primary btn-small" onClick={() => onItemOpen(row)}>
-                  <Eye size={14} aria-hidden="true" />
-                  Ver detalhe
+                <span className="queue-status-dot" data-status={row.status}>{row.status}</span>
+                <button
+                  className="priority-card-cta"
+                  onClick={(e) => { e.stopPropagation(); onItemOpen(row); }}
+                  aria-label={`Ver detalhe: ${row.title}`}
+                >
+                  <Eye size={15} aria-hidden="true" />
                 </button>
-              </div>
+              </footer>
             </article>
           ))}
         </section>
@@ -115,7 +105,6 @@ export function ResponsibilityQueueTable({
       <div className="queue-table-header">
         <div>
           <h3>Fila completa</h3>
-          <p>Continue pela lista detalhada quando precisar varrer a carteira inteira.</p>
         </div>
       </div>
 

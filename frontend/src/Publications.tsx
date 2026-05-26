@@ -21,7 +21,17 @@ import {
   ShieldCheck,
   X,
 } from 'lucide-react';
-import { api, type ApiPublication } from './api';
+import {
+  api,
+  type ApiDerivedActionRecord,
+  type ApiPublication,
+  type ApiPublicationCapture,
+  type ApiPublicationPipelineItem,
+} from './api';
+import { OriginBadgeRow } from './components/audit/OriginBadgeRow';
+import { buildFallbackOriginReference } from './components/audit/origin-model';
+import { loadOriginBundle } from './components/audit/loadOriginBundle';
+import { PublicationSignalSplitPanel } from './components/publications/PublicationSignalSplitPanel';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import { ProcessCombobox } from './ProcessCombobox';
 import { Button, Input, Textarea } from './components/ui';
@@ -158,6 +168,11 @@ export function Publications({ user }: PublicationsProps) {
   const [selected, setSelected]         = useState<PublicationItem | null>(null);
   const [openMenuId, setOpenMenuId]     = useState<number | null>(null);
   const [obsInput, setObsInput]         = useState('');
+  const [originLoading, setOriginLoading] = useState(false);
+  const [originError, setOriginError] = useState('');
+  const [originCapture, setOriginCapture] = useState<ApiPublicationCapture | null>(null);
+  const [originTimeline, setOriginTimeline] = useState<ApiPublicationPipelineItem[]>([]);
+  const [originActions, setOriginActions] = useState<ApiDerivedActionRecord[]>([]);
 
   const PER_PAGE = 15;
 
@@ -186,6 +201,51 @@ export function Publications({ user }: PublicationsProps) {
   useEffect(() => {
     if (success) { const t = setTimeout(() => setSuccess(''), 3000); return () => clearTimeout(t); }
   }, [success]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function hydrateSelectedOrigin(item: PublicationItem) {
+      setOriginLoading(true);
+      setOriginError('');
+      try {
+        const bundle = await loadOriginBundle({
+          originReference: item.originReference ?? null,
+          correlationId: item.correlationId ?? null,
+          captureId: item.captureId ?? null,
+        });
+        if (!active) return;
+        setOriginCapture(bundle.capture);
+        setOriginTimeline(bundle.timeline);
+        setOriginActions(bundle.derivedActions);
+        setOriginError(bundle.error);
+      } catch (err) {
+        if (!active) return;
+        setOriginError((err as Error).message || 'Nao foi possivel carregar a origem desta publicacao.');
+        setOriginCapture(null);
+        setOriginTimeline([]);
+        setOriginActions([]);
+      } finally {
+        if (active) setOriginLoading(false);
+      }
+    }
+
+    if (!selected) {
+      setOriginLoading(false);
+      setOriginError('');
+      setOriginCapture(null);
+      setOriginTimeline([]);
+      setOriginActions([]);
+      return () => {
+        active = false;
+      };
+    }
+
+    void hydrateSelectedOrigin(selected);
+    return () => {
+      active = false;
+    };
+  }, [selected]);
 
   async function loadData() {
     setLoading(true);
@@ -384,6 +444,21 @@ export function Publications({ user }: PublicationsProps) {
   const totalPages = Math.max(1, Math.ceil(sorted.length / PER_PAGE));
   const pageItems  = sorted.slice((page - 1) * PER_PAGE, page * PER_PAGE);
   const hasActiveFilters = Object.entries(filters).some(([, v]) => typeof v === 'boolean' ? v : v !== '');
+  const selectedOriginReference = useMemo(() => (
+    selected
+      ? buildFallbackOriginReference({
+          source: selected.origem,
+          originReference: selected.originReference ?? null,
+          correlationId: selected.correlationId ?? null,
+          captureId: selected.captureId ?? null,
+          publicationId: selected.id,
+          eventId: selected.eventId ?? null,
+          originStage: selected.originStage ?? null,
+          pipelineStatus: selected.pipelineStatus ?? null,
+          consolidationStatus: selected.consolidationStatus ?? null,
+        })
+      : null
+  ), [selected]);
 
   // timeline grouping by date
   const byDate = useMemo(() => {
@@ -411,6 +486,23 @@ export function Publications({ user }: PublicationsProps) {
         <td className="pub-td-pub">
           <TipoChip tipo={item.tipo} />
           <span className="pub-resumo-preview">{item.resumo}</span>
+          <OriginBadgeRow
+            originReference={buildFallbackOriginReference({
+              source: item.origem,
+              originReference: item.originReference ?? null,
+              correlationId: item.correlationId ?? null,
+              captureId: item.captureId ?? null,
+              publicationId: item.id,
+              eventId: item.eventId ?? null,
+              originStage: item.originStage ?? null,
+              pipelineStatus: item.pipelineStatus ?? null,
+              consolidationStatus: item.consolidationStatus ?? null,
+            })}
+            originStage={item.originStage}
+            pipelineStatus={item.pipelineStatus}
+            consolidationStatus={item.consolidationStatus}
+            compact
+          />
           {!item.lida && <span className="pub-unread-dot" aria-label="Não lida" />}
         </td>
         <td className="pub-td-process">
@@ -726,58 +818,81 @@ export function Publications({ user }: PublicationsProps) {
 
           {/* ── Lista ───────────────────────────────────────────── */}
           {filtered.length > 0 && viewMode === 'lista' && (
-            <div className="pub-table-card">
-              <div className="pub-table-header">
-                <span className="pub-count-badge">
-                  {filtered.length} publicaç{filtered.length !== 1 ? 'ões' : 'ão'}
-                </span>
-                <div className="pub-sort-controls">
-                  <label htmlFor="pub-sort" className="sr-only">Ordenar por</label>
-                  <select id="pub-sort" value={sortBy} onChange={(e) => setSortBy(e.target.value as SortField)} aria-label="Ordenar por">
-                    <option value="data">Data</option>
-                    <option value="impacto">Impacto</option>
-                    <option value="status">Status</option>
-                    <option value="processo">Processo</option>
-                  </select>
-                  <Button
-                    variant="ghost"
-                    className="pub-sort-dir"
-                    onClick={() => setSortDesc((d) => !d)}
-                    aria-label={sortDesc ? 'Decrescente' : 'Crescente'}
-                  >
-                    {sortDesc ? '↓' : '↑'}
-                  </Button>
+            <div className="pub-split-view">
+              <div className="pub-table-card">
+                <div className="pub-table-header">
+                  <span className="pub-count-badge">
+                    {filtered.length} publicaç{filtered.length !== 1 ? 'ões' : 'ão'}
+                  </span>
+                  <div className="pub-sort-controls">
+                    <label htmlFor="pub-sort" className="sr-only">Ordenar por</label>
+                    <select id="pub-sort" value={sortBy} onChange={(e) => setSortBy(e.target.value as SortField)} aria-label="Ordenar por">
+                      <option value="data">Data</option>
+                      <option value="impacto">Impacto</option>
+                      <option value="status">Status</option>
+                      <option value="processo">Processo</option>
+                    </select>
+                    <Button
+                      variant="ghost"
+                      className="pub-sort-dir"
+                      onClick={() => setSortDesc((d) => !d)}
+                      aria-label={sortDesc ? 'Decrescente' : 'Crescente'}
+                    >
+                      {sortDesc ? '↓' : '↑'}
+                    </Button>
+                  </div>
                 </div>
+
+                <div className="pub-table-wrap">
+                  <table className="pub-table" aria-label="Lista de publicações">
+                    <thead>
+                      <tr>
+                        <th scope="col">Publicação</th>
+                        <th scope="col">Processo</th>
+                        <th scope="col">Cliente</th>
+                        <th scope="col">Tribunal / Origem</th>
+                        <th scope="col">Data</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Impacto</th>
+                        <th scope="col">Prazo derivado</th>
+                        <th scope="col"><span className="sr-only">Ações</span></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pageItems.map((item) => renderRow(item))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {totalPages > 1 && (
+                  <div className="pub-pagination" aria-label="Paginação">
+                    <button disabled={page === 1} onClick={() => setPage((p) => p - 1)} aria-label="Página anterior">Anterior</button>
+                    <span aria-live="polite">{page} / {totalPages}</span>
+                    <button disabled={page === totalPages} onClick={() => setPage((p) => p + 1)} aria-label="Próxima página">Próximo</button>
+                  </div>
+                )}
               </div>
 
-              <div className="pub-table-wrap">
-                <table className="pub-table" aria-label="Lista de publicações">
-                  <thead>
-                    <tr>
-                      <th scope="col">Publicação</th>
-                      <th scope="col">Processo</th>
-                      <th scope="col">Cliente</th>
-                      <th scope="col">Tribunal / Origem</th>
-                      <th scope="col">Data</th>
-                      <th scope="col">Status</th>
-                      <th scope="col">Impacto</th>
-                      <th scope="col">Prazo derivado</th>
-                      <th scope="col"><span className="sr-only">Ações</span></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pageItems.map((item) => renderRow(item))}
-                  </tbody>
-                </table>
-              </div>
-
-              {totalPages > 1 && (
-                <div className="pub-pagination" aria-label="Paginação">
-                  <button disabled={page === 1} onClick={() => setPage((p) => p - 1)} aria-label="Página anterior">Anterior</button>
-                  <span aria-live="polite">{page} / {totalPages}</span>
-                  <button disabled={page === totalPages} onClick={() => setPage((p) => p + 1)} aria-label="Próxima página">Próximo</button>
-                </div>
-              )}
+              <PublicationSignalSplitPanel
+                selected={selected}
+                originReference={selectedOriginReference}
+                capture={originCapture}
+                timeline={originTimeline.length ? originTimeline : (selected?.timeline ?? [])}
+                derivedActions={originActions.length ? originActions : (selected?.derivedActions ?? [])}
+                loading={originLoading}
+                error={originError}
+                onOpenDrawer={() => {
+                  if (selected) {
+                    setSelected(selected);
+                    setObsInput(selected.observacoes);
+                  }
+                }}
+                onRefresh={() => {
+                  if (selected) {
+                    setSelected({ ...selected });
+                  }
+                }}
+              />
             </div>
           )}
 
@@ -811,6 +926,23 @@ export function Publications({ user }: PublicationsProps) {
                             <span className="pub-timeline-tribunal">{item.tribunal}</span>
                             <ImpactoBadge impacto={item.impacto} />
                             <StatusBadge status={item.status} />
+                            <OriginBadgeRow
+                              originReference={buildFallbackOriginReference({
+                                source: item.origem,
+                                originReference: item.originReference ?? null,
+                                correlationId: item.correlationId ?? null,
+                                captureId: item.captureId ?? null,
+                                publicationId: item.id,
+                                eventId: item.eventId ?? null,
+                                originStage: item.originStage ?? null,
+                                pipelineStatus: item.pipelineStatus ?? null,
+                                consolidationStatus: item.consolidationStatus ?? null,
+                              })}
+                              originStage={item.originStage}
+                              pipelineStatus={item.pipelineStatus}
+                              consolidationStatus={item.consolidationStatus}
+                              compact
+                            />
                             {!item.lida && <span className="pub-unread-dot" aria-label="Não lida" />}
                           </div>
                           <p className="pub-timeline-resumo">{item.resumo}</p>
@@ -847,6 +979,12 @@ export function Publications({ user }: PublicationsProps) {
               <div>
                 <TipoChip tipo={selected.tipo} />
                 <h3>{selected.processLabel} · {selected.processTitle}</h3>
+                <OriginBadgeRow
+                  originReference={selectedOriginReference}
+                  originStage={selected.originStage}
+                  pipelineStatus={selected.pipelineStatus}
+                  consolidationStatus={selected.consolidationStatus}
+                />
               </div>
               <button className="pub-close-btn" onClick={() => setSelected(null)} aria-label="Fechar detalhe">
                 <X size={16} />

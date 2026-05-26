@@ -37,8 +37,15 @@ import {
   type ApiCrmLead,
   type ApiCrmOpportunity,
   type ApiCrmOpportunityDocument,
+  type ApiDerivedActionRecord,
   type ApiProcess,
+  type ApiPublicationCapture,
+  type ApiPublicationPipelineItem,
 } from './api';
+import { OriginInsightPanel } from './components/audit/OriginInsightPanel';
+import { buildFallbackOriginReference } from './components/audit/origin-model';
+import { loadOriginBundle } from './components/audit/loadOriginBundle';
+import { CrmOriginSummary } from './components/crm/CrmOriginSummary';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import './CrmJuridico.css';
 
@@ -252,6 +259,11 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
   const [opportunityAudit, setOpportunityAudit] = useState<OpportunityAuditState>({});
   const [availableProcesses, setAvailableProcesses] = useState<ApiProcess[]>([]);
   const [drawerLoading, setDrawerLoading] = useState(false);
+  const [originLoading, setOriginLoading] = useState(false);
+  const [originError, setOriginError] = useState('');
+  const [originCapture, setOriginCapture] = useState<ApiPublicationCapture | null>(null);
+  const [originTimeline, setOriginTimeline] = useState<ApiPublicationPipelineItem[]>([]);
+  const [originActions, setOriginActions] = useState<ApiDerivedActionRecord[]>([]);
   const [conversionForm, setConversionForm] = useState({
     clientName: '',
     processTitle: '',
@@ -305,6 +317,66 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     }));
     void loadOpportunitySupportData(selectedOpportunity.id);
   }, [selectedOpportunity, user.email]);
+
+  const activeCrmRecord = tab === 'leads' ? selectedLead : selectedOpportunity;
+  const activeOriginReference = useMemo(() => (
+    activeCrmRecord
+      ? buildFallbackOriginReference({
+          source: activeCrmRecord.source,
+          sourceReference: activeCrmRecord.cpf || activeCrmRecord.personName,
+          originReference: activeCrmRecord.originReference ?? null,
+          correlationId: activeCrmRecord.correlationId ?? null,
+          captureId: activeCrmRecord.captureId ?? null,
+          publicationId: activeCrmRecord.publicationId ?? null,
+          originStage: activeCrmRecord.originStage ?? null,
+          pipelineStatus: activeCrmRecord.pipelineStatus ?? null,
+          consolidationStatus: activeCrmRecord.consolidationStatus ?? null,
+        })
+      : null
+  ), [activeCrmRecord]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function hydrateOrigin() {
+      if (!activeCrmRecord) {
+        setOriginLoading(false);
+        setOriginError('');
+        setOriginCapture(null);
+        setOriginTimeline([]);
+        setOriginActions([]);
+        return;
+      }
+
+      setOriginLoading(true);
+      setOriginError('');
+      try {
+        const bundle = await loadOriginBundle({
+          originReference: activeCrmRecord.originReference ?? null,
+          correlationId: activeCrmRecord.correlationId ?? null,
+          captureId: activeCrmRecord.captureId ?? null,
+        });
+        if (!active) return;
+        setOriginCapture(bundle.capture);
+        setOriginTimeline(bundle.timeline);
+        setOriginActions(bundle.derivedActions);
+        setOriginError(bundle.error);
+      } catch (err) {
+        if (!active) return;
+        setOriginError((err as Error).message || 'Nao foi possivel carregar a trilha de origem do CRM.');
+        setOriginCapture(null);
+        setOriginTimeline([]);
+        setOriginActions([]);
+      } finally {
+        if (active) setOriginLoading(false);
+      }
+    }
+
+    void hydrateOrigin();
+    return () => {
+      active = false;
+    };
+  }, [activeCrmRecord]);
 
   async function loadData() {
     setLoading(true);
@@ -1221,6 +1293,28 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                     <p>{item.client || 'Sem cliente vinculado'} · {item.source}</p>
                     <small>{item.cpf || 'CPF não informado'}</small>
                     <div className="crm-card__summary">{getSummaryPreview(item.summary)}</div>
+                    <CrmOriginSummary
+                      compact
+                      source={item.source}
+                      originReference={buildFallbackOriginReference({
+                        source: item.source,
+                        sourceReference: item.cpf || item.personName,
+                        originReference: item.originReference ?? null,
+                        correlationId: item.correlationId ?? null,
+                        captureId: item.captureId ?? null,
+                        publicationId: item.publicationId ?? null,
+                        originStage: item.originStage ?? null,
+                        pipelineStatus: item.pipelineStatus ?? null,
+                        consolidationStatus: item.consolidationStatus ?? null,
+                      })}
+                      originStage={item.originStage}
+                      pipelineStatus={item.pipelineStatus}
+                      consolidationStatus={item.consolidationStatus}
+                      onOpenDetails={() => {
+                        setSelectedLead(item);
+                        setDrawerTab('overview');
+                      }}
+                    />
                     <div className="crm-card__meta">
                       <span>{item.triageCount} triagem(ns)</span>
                       {item.responsible ? <span>{item.responsible}</span> : <span className="crm-card__warning">Sem responsável</span>}
@@ -1298,6 +1392,28 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                             onClick={() => setSelectedOpportunity(item)}
                             footer={(
                               <div className="crm-card__footer-stack">
+                                <CrmOriginSummary
+                                  compact
+                                  source={item.source}
+                                  originReference={buildFallbackOriginReference({
+                                    source: item.source,
+                                    sourceReference: item.cpf || item.personName,
+                                    originReference: item.originReference ?? null,
+                                    correlationId: item.correlationId ?? null,
+                                    captureId: item.captureId ?? null,
+                                    publicationId: item.publicationId ?? null,
+                                    originStage: item.originStage ?? null,
+                                    pipelineStatus: item.pipelineStatus ?? null,
+                                    consolidationStatus: item.consolidationStatus ?? null,
+                                  })}
+                                  originStage={item.originStage}
+                                  pipelineStatus={item.pipelineStatus}
+                                  consolidationStatus={item.consolidationStatus}
+                                  onOpenDetails={() => {
+                                    setSelectedOpportunity(item);
+                                    setDrawerTab('overview');
+                                  }}
+                                />
                                 {(item.triageCount > 0 || !item.responsible) ? (
                                   <div className="crm-card__footer-meta">
                                     {item.triageCount > 0 ? (
@@ -1423,6 +1539,20 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                       <h4>Resumo</h4>
                       <p>{selectedLead.summary}</p>
                     </section>
+                    <OriginInsightPanel
+                      title="Origem comercial do lead"
+                      originReference={activeOriginReference}
+                      originStage={selectedLead.originStage}
+                      pipelineStatus={selectedLead.pipelineStatus}
+                      consolidationStatus={selectedLead.consolidationStatus}
+                      capture={originCapture}
+                      timeline={originTimeline.length ? originTimeline : (selectedLead.originTimeline ?? [])}
+                      derivedActions={originActions.length ? originActions : (selectedLead.derivedActions ?? [])}
+                      loading={originLoading}
+                      error={originError}
+                      fallbackEvidenceText={selectedLead.summary}
+                      summary={selectedLead.summary}
+                    />
                     <section className="crm-panel">
                       <h4>Contexto de triagem</h4>
                       <p>{selectedLead.triageCount} item(ns) associado(s){selectedLead.hasCriticalTriage ? ' com sinal crítico recente.' : '.'}</p>
@@ -1594,6 +1724,20 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                     <p>{selectedOpportunity.summary}</p>
                     <small>Oportunidade criada automaticamente para análise comercial e possível conversão operacional.</small>
                   </section>
+                  <OriginInsightPanel
+                    title="Origem comercial da oportunidade"
+                    originReference={activeOriginReference}
+                    originStage={selectedOpportunity.originStage}
+                    pipelineStatus={selectedOpportunity.pipelineStatus}
+                    consolidationStatus={selectedOpportunity.consolidationStatus}
+                    capture={originCapture}
+                    timeline={originTimeline.length ? originTimeline : (selectedOpportunity.originTimeline ?? [])}
+                    derivedActions={originActions.length ? originActions : (selectedOpportunity.derivedActions ?? [])}
+                    loading={originLoading}
+                    error={originError}
+                    fallbackEvidenceText={selectedOpportunity.summary}
+                    summary={selectedOpportunity.summary}
+                  />
                   <section className="crm-panel">
                     <h4>Contexto de triagem</h4>
                     <p>{selectedOpportunity.triageCount} item associado.</p>

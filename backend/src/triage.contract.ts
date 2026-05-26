@@ -21,6 +21,13 @@ type RawTriageItem = {
   discardReason?: string | null;
   discardNote?: string | null;
   sourceLabel?: string | null;
+  correlationId?: string | null;
+  pipelineStatus?: string | null;
+  originStage?: string | null;
+  consolidationStatus?: string | null;
+  pipelineTimeline?: TriageTimelineItem[] | null;
+  derivedActions?: DerivedActionRecord[] | null;
+  fallbacks?: FallbackRecord[] | null;
   createdAt: Date;
   updatedAt: Date;
   process?: { id: number; title: string; client: string } | null;
@@ -37,6 +44,7 @@ type RawTriageItem = {
     cpf?: string | null;
     personName?: string | null;
     normalizedText: string;
+    correlationId?: string | null;
   };
   event?: {
     id: number;
@@ -62,6 +70,114 @@ type RawTriageDecision = {
   generatedOpportunityId?: number | null;
 };
 
+type TriageTimelineItem = {
+  id: string;
+  entityType: string;
+  entityId: number | null;
+  stage: string;
+  title: string;
+  summary: string;
+  status: string;
+  occurredAt: string;
+  sourceType?: string | null;
+  sourceReference?: string | null;
+  link?: string | null;
+};
+
+type DerivedActionRecord = {
+  entityType: string;
+  entityId: number;
+  correlationId: string | null;
+  sourceType: string;
+  sourceReference: string;
+  originStage: string;
+  status: string;
+  title: string;
+  summary: string | null;
+  url: string | null;
+  createdAt: string;
+};
+
+type FallbackRecord = {
+  code: string;
+  message: string;
+};
+
+function normalizeOptionalString(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function resolveCorrelationId(item: RawTriageItem) {
+  return normalizeOptionalString(item.correlationId) ?? normalizeOptionalString(item.capture.correlationId);
+}
+
+function buildOriginReference(item: RawTriageItem) {
+  return {
+    correlationId: resolveCorrelationId(item),
+    sourceType: item.capture.sourceType,
+    sourceReference: item.capture.sourceReference,
+    originKind: item.event?.publicationId ? 'publication' : 'capture',
+    originStage: normalizeOptionalString(item.originStage) ?? 'triado',
+    pipelineStatus: normalizeOptionalString(item.pipelineStatus) ?? item.status,
+    captureId: item.capture.id,
+    eventId: item.event?.id ?? null,
+    publicationId: item.event?.publicationId ?? null,
+  };
+}
+
+function buildPipeline(item: RawTriageItem) {
+  return {
+    status: normalizeOptionalString(item.pipelineStatus) ?? item.status,
+    timeline: item.pipelineTimeline ?? [],
+    consolidationStatus: normalizeOptionalString(item.consolidationStatus) ?? null,
+  };
+}
+
+function buildDerivedActions(item: RawTriageItem): DerivedActionRecord[] {
+  if (item.derivedActions?.length) {
+    return item.derivedActions;
+  }
+
+  const correlationId = resolveCorrelationId(item);
+  const originStage = normalizeOptionalString(item.originStage) ?? 'triado';
+  const createdAt = item.updatedAt.toISOString();
+  const actions: DerivedActionRecord[] = [];
+
+  if (item.crmLead?.id) {
+    actions.push({
+      entityType: 'crm_lead',
+      entityId: item.crmLead.id,
+      correlationId,
+      sourceType: item.capture.sourceType,
+      sourceReference: item.capture.sourceReference,
+      originStage,
+      status: item.crmLead.status,
+      title: `Lead ${item.crmLead.personName}`,
+      summary: item.suggestedReason,
+      url: `/crm/leads/${item.crmLead.id}`,
+      createdAt,
+    });
+  }
+
+  if (item.crmOpportunity?.id) {
+    actions.push({
+      entityType: 'crm_opportunity',
+      entityId: item.crmOpportunity.id,
+      correlationId,
+      sourceType: item.capture.sourceType,
+      sourceReference: item.capture.sourceReference,
+      originStage,
+      status: item.crmOpportunity.status,
+      title: `Oportunidade ${item.crmOpportunity.personName}`,
+      summary: item.suggestedReason,
+      url: `/crm/opportunities/${item.crmOpportunity.id}`,
+      createdAt,
+    });
+  }
+
+  return actions;
+}
+
 export function buildTriageDecisionPayload(decision: RawTriageDecision) {
   return {
     id: decision.id,
@@ -84,6 +200,10 @@ export function buildTriageItemPayload(item: RawTriageItem) {
       : typeof item.slaTargetAt === 'string' && item.slaTargetAt.trim()
         ? new Date(item.slaTargetAt).toISOString()
         : null;
+  const originReference = buildOriginReference(item);
+  const pipeline = buildPipeline(item);
+  const derivedActions = buildDerivedActions(item);
+  const fallbacks = item.fallbacks ?? [];
 
   return {
     id: item.id,
@@ -117,6 +237,11 @@ export function buildTriageItemPayload(item: RawTriageItem) {
     client: item.clientRecord?.name ?? item.process?.client ?? item.capture.personName ?? 'Cliente não identificado',
     crmLeadId: item.crmLead?.id ?? null,
     crmOpportunityId: item.crmOpportunity?.id ?? null,
+    correlationId: originReference.correlationId,
+    originReference,
+    pipeline,
+    derivedActions,
+    fallbacks,
     capture: {
       id: item.capture.id,
       sourceType: item.capture.sourceType,

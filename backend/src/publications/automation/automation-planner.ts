@@ -7,10 +7,13 @@ export type AutomationCommandType =
 export type AutomationCommand = {
   commandType: AutomationCommandType;
   dedupeKey: string;
+  correlationId: string | null;
   publicationId: number | null;
   triageItemId: number | null;
   processId: number | null;
   clientId: number | null;
+  derivedActions: DerivedActionRecord[];
+  fallbacks: FallbackRecord[];
   deadline: {
     title: string | null;
     dueDate: string | null;
@@ -25,6 +28,25 @@ export type AutomationCommand = {
     description: string | null;
   };
   skipReason?: 'not_confirmed' | 'unsupported_action' | 'missing_process' | 'duplicate_dedupe_key';
+};
+
+export type DerivedActionRecord = {
+  entityType: 'triage' | 'crm_lead' | 'crm_opportunity' | 'deadline' | 'task';
+  entityId: number;
+  correlationId: string | null;
+  sourceType: string;
+  sourceReference: string;
+  originStage: string;
+  status: string;
+  title: string;
+  summary: string | null;
+  url: string | null;
+  createdAt: string;
+};
+
+export type FallbackRecord = {
+  code: string;
+  message: string;
 };
 
 export type AutomationPlanningItem = {
@@ -74,14 +96,33 @@ function normalizeTitle(value?: string | null) {
   return normalized || null;
 }
 
+function buildFallback(reason: NonNullable<AutomationCommand['skipReason']>): FallbackRecord {
+  const messages: Record<NonNullable<AutomationCommand['skipReason']>, string> = {
+    not_confirmed: 'Automação não executada porque a decisão ainda não foi confirmada.',
+    unsupported_action: 'A ação sugerida ainda não possui automação compatível.',
+    missing_process: 'A automação depende de processo vinculado para continuar.',
+    duplicate_dedupe_key: 'A automação foi suprimida por chave de deduplicação já utilizada.',
+  };
+
+  return {
+    code: reason,
+    message: messages[reason],
+  };
+}
+
 function buildNoneCommand(item: AutomationPlanningItem, reason: AutomationCommand['skipReason']): AutomationCommand {
+  const publicationId = item.event?.publicationId ?? null;
+  const correlationId = publicationId ? `pub:${publicationId}` : `triage:${item.id}`;
   return {
     commandType: 'none',
     dedupeKey: '',
-    publicationId: item.event?.publicationId ?? null,
+    correlationId,
+    publicationId,
     triageItemId: item.id,
     processId: item.processId,
     clientId: item.clientId,
+    derivedActions: [],
+    fallbacks: reason ? [buildFallback(reason)] : [],
     deadline: {
       title: null,
       dueDate: null,
@@ -125,10 +166,40 @@ export function planAutomationCommand(params: {
     return {
       commandType: 'create_deadline_and_task',
       dedupeKey: `${publicationRef}|process:${triageItem.processId}|deadline-and-task`,
+      correlationId: publicationRef,
       publicationId,
       triageItemId: triageItem.id,
       processId: triageItem.processId,
       clientId: triageItem.clientId,
+      derivedActions: [
+        {
+          entityType: 'deadline',
+          entityId: triageItem.id,
+          correlationId: publicationRef,
+          sourceType: 'publication',
+          sourceReference: triageItem.capture.sourceReference ?? publicationRef,
+          originStage: 'gerou_prazo',
+          status: 'planned',
+          title: normalizeTitle(input.deadlineTitle) ?? eventTitle,
+          summary: notes,
+          url: null,
+          createdAt: now.toISOString(),
+        },
+        {
+          entityType: 'task',
+          entityId: triageItem.id,
+          correlationId: publicationRef,
+          sourceType: 'publication',
+          sourceReference: triageItem.capture.sourceReference ?? publicationRef,
+          originStage: 'gerou_tarefa',
+          status: 'planned',
+          title: taskTitle,
+          summary: notes,
+          url: null,
+          createdAt: now.toISOString(),
+        },
+      ],
+      fallbacks: [],
       deadline: {
         title: normalizeTitle(input.deadlineTitle) ?? eventTitle,
         dueDate: normalizeTitle(input.dueDate) ?? toIsoDate(addDays(now, 2)),
@@ -146,13 +217,31 @@ export function planAutomationCommand(params: {
   }
 
   if (triageItem.suggestedAction === 'criar_tarefa') {
+    const taskTitle = normalizeTitle(input.taskTitle) ?? normalizeTitle(triageItem.event?.title) ?? `Ação derivada da triagem #${triageItem.id}`;
     return {
       commandType: 'create_task',
       dedupeKey: `${publicationRef}|process:${triageItem.processId}|task`,
+      correlationId: publicationRef,
       publicationId,
       triageItemId: triageItem.id,
       processId: triageItem.processId,
       clientId: triageItem.clientId,
+      derivedActions: [
+        {
+          entityType: 'task',
+          entityId: triageItem.id,
+          correlationId: publicationRef,
+          sourceType: 'publication',
+          sourceReference: triageItem.capture.sourceReference ?? publicationRef,
+          originStage: 'gerou_tarefa',
+          status: 'planned',
+          title: taskTitle,
+          summary: notes,
+          url: null,
+          createdAt: now.toISOString(),
+        },
+      ],
+      fallbacks: [],
       deadline: {
         title: null,
         dueDate: null,
@@ -160,7 +249,7 @@ export function planAutomationCommand(params: {
         notes: null,
       },
       task: {
-        title: normalizeTitle(input.taskTitle) ?? normalizeTitle(triageItem.event?.title) ?? `Ação derivada da triagem #${triageItem.id}`,
+        title: taskTitle,
         dueDate: normalizeTitle(input.taskDueDate) ?? toIsoDate(addDays(now, 1)),
         priority: normalizeTitle(input.taskPriority) ?? (triageItem.queueType === 'critica' ? 'alta' : 'media'),
         owner: normalizeTitle(input.taskOwner) ?? actor,
@@ -182,5 +271,7 @@ export function applyAutomationDedupe(
     ...command,
     commandType: 'none' as const,
     skipReason: 'duplicate_dedupe_key' as const,
+    derivedActions: [],
+    fallbacks: [buildFallback('duplicate_dedupe_key')],
   };
 }

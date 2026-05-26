@@ -12,6 +12,7 @@ export function useKpiActions() {
 
         if (kpiId === 'kpi-deadlines') navigate('/prazos');
         if (kpiId === 'kpi-tasks') navigate('/tarefas');
+        if (kpiId === 'kpi-awaiting') navigate('/processos');
         if (kpiId === 'kpi-return') navigate('/atendimentos');
       },
       onShortcutClick: (action: string) => {

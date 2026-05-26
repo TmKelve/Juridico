@@ -16,7 +16,19 @@ import {
   UserRoundSearch,
   X,
 } from 'lucide-react';
-import { api, type ApiTriageDecision, type ApiTriageItem, type ApiTriageJob } from './api';
+import {
+  api,
+  type ApiDerivedActionRecord,
+  type ApiPublicationCapture,
+  type ApiPublicationPipelineItem,
+  type ApiTriageDecision,
+  type ApiTriageItem,
+  type ApiTriageJob,
+} from './api';
+import { OriginBadgeRow } from './components/audit/OriginBadgeRow';
+import { OriginInsightPanel } from './components/audit/OriginInsightPanel';
+import { buildFallbackOriginReference } from './components/audit/origin-model';
+import { loadOriginBundle } from './components/audit/loadOriginBundle';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import { Button, Input, Textarea } from './components/ui';
 import './Triagem.css';
@@ -106,6 +118,11 @@ export function Triagem({ user }: TriagemProps) {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [discardReason, setDiscardReason] = useState<string>('duplicada');
   const [decisionNote, setDecisionNote] = useState('');
+  const [originLoading, setOriginLoading] = useState(false);
+  const [originError, setOriginError] = useState('');
+  const [originCapture, setOriginCapture] = useState<ApiPublicationCapture | null>(null);
+  const [originTimeline, setOriginTimeline] = useState<ApiPublicationPipelineItem[]>([]);
+  const [originActions, setOriginActions] = useState<ApiDerivedActionRecord[]>([]);
   const [assistDraft, setAssistDraft] = useState({
     deadlineTitle: '',
     dueDate: '',
@@ -141,6 +158,51 @@ export function Triagem({ user }: TriagemProps) {
     if (!processId) return;
     setSearch(processId);
   }, [location.search]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function hydrateOrigin(item: ApiTriageItem) {
+      setOriginLoading(true);
+      setOriginError('');
+      try {
+        const bundle = await loadOriginBundle({
+          originReference: item.originReference ?? null,
+          correlationId: item.correlationId ?? null,
+          captureId: item.capture.id,
+        });
+        if (!active) return;
+        setOriginCapture(bundle.capture);
+        setOriginTimeline(bundle.timeline);
+        setOriginActions(bundle.derivedActions);
+        setOriginError(bundle.error);
+      } catch (err) {
+        if (!active) return;
+        setOriginCapture(null);
+        setOriginTimeline([]);
+        setOriginActions([]);
+        setOriginError((err as Error).message || 'Nao foi possivel carregar a origem desta triagem.');
+      } finally {
+        if (active) setOriginLoading(false);
+      }
+    }
+
+    if (!selected) {
+      setOriginLoading(false);
+      setOriginError('');
+      setOriginCapture(null);
+      setOriginTimeline([]);
+      setOriginActions([]);
+      return () => {
+        active = false;
+      };
+    }
+
+    void hydrateOrigin(selected);
+    return () => {
+      active = false;
+    };
+  }, [selected]);
 
   async function loadItems() {
     setLoading(true);
@@ -758,6 +820,25 @@ export function Triagem({ user }: TriagemProps) {
                     {item.agingHours !== null ? <span className={`triage-metric-pill${item.breached ? ' is-breached' : ''}`}>{item.agingHours}h aging</span> : null}
                   </div>
 
+                  <OriginBadgeRow
+                    originReference={buildFallbackOriginReference({
+                      source: item.sourceLabel,
+                      sourceReference: item.capture.sourceReference,
+                      originReference: item.originReference ?? null,
+                      correlationId: item.correlationId ?? null,
+                      captureId: item.capture.id,
+                      publicationId: item.event?.publicationId ?? null,
+                      eventId: item.event?.id ?? null,
+                      originStage: item.originReference?.originStage ?? item.capture.sourceType,
+                      pipelineStatus: item.originReference?.pipelineStatus ?? item.pipelineStatus ?? null,
+                      consolidationStatus: item.originReference?.consolidationStatus ?? null,
+                    })}
+                    originStage={item.originReference?.originStage ?? item.capture.sourceType}
+                    pipelineStatus={item.originReference?.pipelineStatus ?? item.pipelineStatus ?? null}
+                    consolidationStatus={item.originReference?.consolidationStatus ?? null}
+                    compact
+                  />
+
                   <div className="triage-card__reason">{item.suggestedReason}</div>
 
                   <div className="triage-card__actions">
@@ -823,6 +904,42 @@ export function Triagem({ user }: TriagemProps) {
                 <span className={`triage-confidence triage-confidence--${selected.aiConfidenceBand}`}>{CONFIDENCE_LABEL[selected.aiConfidenceBand]}</span>
                 <span className="triage-action-chip">{ACTION_LABEL[selected.suggestedAction]}</span>
               </div>
+
+              <OriginInsightPanel
+                title="Origem da triagem"
+                originReference={buildFallbackOriginReference({
+                  source: selected.sourceLabel,
+                  sourceReference: selected.capture.sourceReference,
+                  originReference: selected.originReference ?? null,
+                  correlationId: selected.correlationId ?? null,
+                  captureId: selected.capture.id,
+                  publicationId: selected.event?.publicationId ?? null,
+                  eventId: selected.event?.id ?? null,
+                  originStage: selected.originReference?.originStage ?? selected.capture.sourceType,
+                  pipelineStatus: selected.originReference?.pipelineStatus ?? selected.pipelineStatus ?? null,
+                  consolidationStatus: selected.originReference?.consolidationStatus ?? null,
+                })}
+                originStage={selected.originReference?.originStage ?? selected.capture.sourceType}
+                pipelineStatus={selected.originReference?.pipelineStatus ?? selected.pipelineStatus ?? null}
+                consolidationStatus={selected.originReference?.consolidationStatus ?? null}
+                capture={originCapture}
+                timeline={originTimeline.length ? originTimeline : (selected.timeline ?? []).map((event) => ({
+                  id: String(event.id),
+                  entityType: event.eventType,
+                  entityId: event.id,
+                  stage: event.eventType,
+                  title: event.title,
+                  summary: event.summary,
+                  status: event.riskLevel,
+                  occurredAt: event.eventAt,
+                  sourceReference: selected.capture.sourceReference,
+                }))}
+                derivedActions={originActions.length ? originActions : (selected.derivedActions ?? [])}
+                loading={originLoading}
+                error={originError}
+                fallbackEvidenceText={selected.capture.normalizedText}
+                summary={selected.suggestedReason}
+              />
 
               <section className="triage-panel">
                 <h4>Contexto</h4>

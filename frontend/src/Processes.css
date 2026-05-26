@@ -4,205 +4,208 @@
   gap: var(--space-5);
 }
 
+/* ── Header hero — mesmo DNA do dashboard ── */
 .my-processes-header {
-  background:
-    radial-gradient(900px 220px at 8% -45%, color-mix(in srgb, var(--brand-100) 58%, transparent), transparent 68%),
-    var(--white);
-  border: 1px solid color-mix(in srgb, var(--neutral-200) 88%, var(--brand-200));
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-card);
-  padding: var(--space-4) var(--space-5);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--brand-50) 72%, white) 0%, var(--white) 58%);
+  border: 1px solid color-mix(in srgb, var(--brand-200) 50%, var(--neutral-200));
+  border-left: 4px solid var(--brand-500);
+  border-radius: var(--radius-2xl);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 6px 20px rgba(15, 23, 42, 0.04);
+  padding: var(--space-6);
+  position: relative;
+  overflow: hidden;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: var(--space-4);
+  gap: var(--space-6);
 }
 
-.my-processes-header-main {
+/* Halo decorativo canto direito */
+.my-processes-header::after {
+  content: '';
+  position: absolute;
+  inset: auto -4% -38% auto;
+  width: 280px;
+  height: 280px;
+  border-radius: 999px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--brand-200) 35%, transparent) 0%, transparent 68%);
+  pointer-events: none;
+}
+
+/* Bloco de copy: eyebrow + título + subtitle + chips */
+.my-processes-header-copy {
   flex: 1 1 0;
   min-width: 0;
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: 0;
 }
 
-.my-processes-eyebrow {
-  margin: 0;
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  color: var(--brand-600);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.my-processes-header h2 {
-  margin: var(--space-1) 0 0;
-  font-size: var(--font-size-2xl);
-  color: var(--neutral-900);
-}
-
-.my-processes-subtitle {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  color: var(--neutral-600);
-  max-width: 620px;
-}
-
-.my-processes-header-summary {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-3);
-}
-
-.my-processes-header-summary-card {
-  border: 1px solid color-mix(in srgb, var(--neutral-200) 84%, var(--brand-200));
-  border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--white) 88%, var(--brand-50));
-  padding: var(--space-3);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.my-processes-header-summary-card span {
+.my-processes-header-eyebrow {
+  margin: 0 0 var(--space-1);
   font-size: 11px;
-  color: var(--neutral-500);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-weight: var(--font-weight-semibold);
+  color: var(--brand-600);
 }
 
-.my-processes-header-summary-card strong {
-  font-size: var(--font-size-xl);
-  color: var(--neutral-900);
+.my-processes-header-title {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-3xl);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--neutral-950);
   line-height: var(--line-height-tight);
 }
 
-.my-processes-header-summary-card[data-tone="critical"] strong {
-  color: var(--error-700);
+.my-processes-header-subtitle {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-size-sm);
+  color: var(--neutral-700);
+  line-height: 1.6;
 }
 
-.my-processes-header-summary-card[data-tone="attention"] strong {
-  color: var(--warning-700);
-}
-
-.my-processes-header-summary-card[data-tone="info"] strong {
-  color: var(--info-700);
-}
-
-.my-processes-header-status {
-  border: 1px solid color-mix(in srgb, var(--neutral-200) 84%, var(--brand-200));
-  border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--white) 92%, var(--brand-50)) 0%, var(--white) 100%);
-  padding: var(--space-3) var(--space-4);
+/* Chips row dentro do copy */
+.my-processes-header-chips {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
 }
 
-.my-processes-header-status-label {
+/* Alias para .my-processes-header-summary (mantém compatibilidade se houver) */
+.my-processes-header-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.my-processes-header-summary-chip {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  background: color-mix(in srgb, var(--white) 82%, var(--brand-50));
+  border: 1px solid color-mix(in srgb, var(--neutral-200) 80%, var(--brand-200));
+  border-radius: var(--radius-full);
+  padding: 4px 12px 4px 10px;
+  white-space: nowrap;
+}
+
+.my-processes-header-summary-chip strong {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--neutral-900);
+  line-height: 1;
+}
+
+.my-processes-header-summary-chip span {
   font-size: 11px;
+  color: var(--neutral-500);
+  font-weight: var(--font-weight-medium);
+}
+
+.my-processes-header-summary-chip[data-tone="critical"] {
+  border-color: rgba(239, 68, 68, 0.22);
+  background: rgba(254, 242, 242, 0.85);
+}
+.my-processes-header-summary-chip[data-tone="critical"] strong { color: var(--error-700); }
+
+.my-processes-header-summary-chip[data-tone="attention"] {
+  border-color: rgba(245, 158, 11, 0.22);
+  background: rgba(255, 251, 235, 0.85);
+}
+.my-processes-header-summary-chip[data-tone="attention"] strong { color: var(--warning-700); }
+
+.my-processes-header-summary-chip[data-tone="info"] {
+  border-color: rgba(59, 130, 246, 0.22);
+  background: rgba(239, 246, 255, 0.85);
+}
+.my-processes-header-summary-chip[data-tone="info"] strong { color: var(--info-700); }
+
+/* Pulse badge — live status indicator */
+.my-processes-header-pulse {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(239, 246, 255, 0.7);
+  border: 1px solid rgba(147, 197, 253, 0.55);
+  border-radius: var(--radius-full);
+  padding: 4px 12px 4px 8px;
+  white-space: nowrap;
+}
+
+.my-processes-header-pulse span:last-child {
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
   color: var(--brand-700);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.05em;
 }
 
-.my-processes-header-status strong {
-  font-size: var(--font-size-sm);
-  color: var(--neutral-900);
+.my-processes-header-pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--brand-400);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-300) 40%, transparent);
+  animation: pulse-ring 2s ease-in-out infinite;
+  flex-shrink: 0;
 }
 
-.my-processes-header-status small {
-  color: var(--neutral-600);
-  font-size: var(--font-size-xs);
-  line-height: 1.45;
+@keyframes pulse-ring {
+  0%, 100% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-300) 40%, transparent); }
+  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand-300) 20%, transparent); }
 }
 
-.my-processes-header-status[data-tone="critical"] {
-  border-color: color-mix(in srgb, var(--error-600) 36%, var(--neutral-200));
-  background: linear-gradient(135deg, color-mix(in srgb, var(--error-100) 78%, var(--white)) 0%, var(--white) 100%);
+.my-processes-header-pulse[data-tone="critical"] .my-processes-header-pulse-dot {
+  background: var(--error-500);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25);
+}
+.my-processes-header-pulse[data-tone="critical"] span:last-child { color: var(--error-700); }
+.my-processes-header-pulse[data-tone="critical"] {
+  border-color: rgba(239, 68, 68, 0.22);
+  background: rgba(254, 242, 242, 0.85);
 }
 
-.my-processes-header-status[data-tone="attention"] {
-  border-color: color-mix(in srgb, var(--warning-600) 34%, var(--neutral-200));
-  background: linear-gradient(135deg, color-mix(in srgb, var(--warning-100) 72%, var(--white)) 0%, var(--white) 100%);
+.my-processes-header-pulse[data-tone="attention"] .my-processes-header-pulse-dot {
+  background: var(--warning-500);
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25);
 }
-
-.my-processes-header-side {
-  width: min(360px, 100%);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  align-items: stretch;
+.my-processes-header-pulse[data-tone="attention"] span:last-child { color: var(--warning-700); }
+.my-processes-header-pulse[data-tone="attention"] {
+  border-color: rgba(245, 158, 11, 0.22);
+  background: rgba(255, 251, 235, 0.85);
 }
 
 .my-processes-header-actions {
+  position: relative;
+  z-index: 1;
   display: flex;
-  flex-wrap: wrap;
+  flex-shrink: 0;
   gap: var(--space-2);
-  align-items: center;
-  justify-content: flex-end;
+  align-items: flex-start;
+  align-self: flex-start;
 }
 
 .my-processes-header-actions .btn-primary,
 .my-processes-header-actions .btn-secondary {
-  min-height: 44px;
+  min-height: 40px;
   padding-inline: var(--space-4);
   border-radius: var(--radius-md);
   font-weight: var(--font-weight-semibold);
-}
-
-.my-processes-focus-card {
-  border: 1px solid color-mix(in srgb, var(--neutral-200) 82%, var(--brand-300));
-  border-radius: var(--radius-xl);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--white) 86%, var(--brand-50)) 0%, var(--white) 100%);
-  box-shadow: var(--shadow-sm);
-  padding: var(--space-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.my-processes-focus-card-eyebrow {
-  font-size: 11px;
-  color: var(--brand-700);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-weight: var(--font-weight-semibold);
-}
-
-.my-processes-focus-card strong {
-  font-size: var(--font-size-lg);
-  color: var(--neutral-900);
-  line-height: 1.3;
-}
-
-.my-processes-focus-card p {
-  margin: 0;
-  color: var(--neutral-700);
   font-size: var(--font-size-sm);
-  line-height: 1.45;
 }
 
-.my-processes-focus-card small {
-  color: var(--neutral-600);
-  font-size: var(--font-size-xs);
-  line-height: 1.45;
-}
-
-.my-processes-focus-card-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  align-items: center;
-}
-
-.my-processes-focus-card-action {
-  min-height: 40px;
-  justify-content: center;
-}
+/* Legacy — kept for reference, no longer rendered */
+.my-processes-eyebrow { display: none; }
+.my-processes-header-main { display: none; }
+.my-processes-header-side { display: none; }
+.my-processes-header-status { display: none; }
+.my-processes-focus-card { display: none; }
 
 .my-processes-kpis {
   display: grid;
@@ -210,101 +213,7 @@
   gap: var(--space-4);
 }
 
-.my-processes-kpi-card {
-  background: var(--white);
-  border: 1px solid color-mix(in srgb, var(--neutral-200) 84%, var(--brand-200));
-  border-left: 3px solid var(--kpi-accent-color, var(--brand-300));
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
-  min-height: 104px;
-  padding: var(--space-4);
-  display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
-  gap: var(--space-3);
-  align-items: center;
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
-}
-
-.my-processes-kpi-card[data-kpi-color="warning"] { --kpi-accent-color: var(--kpi-accent-warning); }
-.my-processes-kpi-card[data-kpi-color="info"] { --kpi-accent-color: var(--kpi-accent-info); }
-.my-processes-kpi-card[data-kpi-color="error"] { --kpi-accent-color: var(--kpi-accent-error); }
-.my-processes-kpi-card[data-kpi-color="primary"] { --kpi-accent-color: var(--kpi-accent-primary); }
-.my-processes-kpi-card[data-kpi-color="success"] { --kpi-accent-color: var(--kpi-accent-success); }
-
-.kpi-card-top {
-  display: contents;
-}
-
-.kpi-card-top strong {
-  grid-column: 2;
-  grid-row: 1;
-  align-self: end;
-  font-size: var(--font-size-2xl);
-  color: var(--neutral-900);
-  line-height: var(--line-height-tight);
-}
-
-.kpi-card-icon {
-  grid-column: 1;
-  grid-row: 1 / span 3;
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-full);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--kpi-icon-bg, var(--brand-100));
-  color: var(--kpi-icon-color, var(--brand-700));
-}
-
-.my-processes-kpi-card[data-kpi-color="warning"] .kpi-card-icon {
-  --kpi-icon-bg: var(--kpi-bg-warning);
-  --kpi-icon-color: var(--warning-700);
-}
-
-.my-processes-kpi-card[data-kpi-color="info"] .kpi-card-icon {
-  --kpi-icon-bg: var(--kpi-bg-info);
-  --kpi-icon-color: var(--info-700);
-}
-
-.my-processes-kpi-card[data-kpi-color="error"] .kpi-card-icon {
-  --kpi-icon-bg: var(--kpi-bg-error);
-  --kpi-icon-color: var(--error-700);
-}
-
-.my-processes-kpi-card[data-kpi-color="primary"] .kpi-card-icon {
-  --kpi-icon-bg: var(--kpi-bg-primary);
-  --kpi-icon-color: var(--brand-700);
-}
-
-.my-processes-kpi-card[data-kpi-color="success"] .kpi-card-icon {
-  --kpi-icon-bg: var(--kpi-bg-success);
-  --kpi-icon-color: var(--success-700);
-}
-
-.my-processes-kpi-card p {
-  grid-column: 2;
-  margin: -2px 0 0;
-  font-size: var(--font-size-xs);
-  color: var(--neutral-600);
-  font-weight: var(--font-weight-semibold);
-}
-
-.my-processes-kpi-card small {
-  grid-column: 2;
-  display: block;
-  margin-top: -4px;
-  font-size: 11px;
-  color: var(--neutral-500);
-}
-
-.my-processes-kpi-card:hover {
-  border-color: var(--brand-300);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-card-hover);
-}
+/* KPI cards — reusam .metric-card do Dashboard.css (importado em Processes.tsx) */
 
 .my-processes-alert {
   display: inline-flex;

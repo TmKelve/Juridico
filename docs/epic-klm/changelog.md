@@ -1,0 +1,70 @@
+# Changelog K/L/M
+
+## 2026-05-26
+- Criados os contratos soberanos:
+  - `contracts/epic-k.contract.json`
+  - `contracts/epic-l-bi.contract.json`
+  - `contracts/epic-m.contract.json`
+- Criado o pacote documental base:
+  - `docs/epic-klm/overview.md`
+  - `docs/epic-klm/contracts.md`
+  - `docs/epic-klm/ai-governance.md`
+  - `docs/epic-klm/bi-metrics-catalog.md`
+  - `docs/epic-klm/runbook.md`
+  - `docs/epic-klm/qa.md`
+  - `docs/epic-klm/changelog.md`
+- Adicionadas fundacoes de schema em `backend/prisma/schema.prisma` e migration `backend/prisma/migrations/20260526123000_epic_klm_foundations/migration.sql`.
+- Expandido o catalogo de authz em `backend/src/authz/rbac/permissions.ts`.
+- Adicionados testes de authz para `ai`, `bi` e `timesheet` em `backend/src/authz/policies/authz.check.test.cjs`.
+- Criado o nucleo inicial de IA em:
+  - `backend/src/ai/core/ai-request.types.ts`
+  - `backend/src/ai/core/ai-provider.port.ts`
+  - `backend/src/ai/core/ai-provider.router.ts`
+  - `backend/src/ai/core/ai-idempotency.adapter.ts`
+  - `backend/src/ai/summarization/publication-summarizer.service.ts`
+  - `backend/src/ai/recommendation/triage-recommendation.service.ts`
+  - `backend/src/ai/recommendation/triage-recommendation.adapter.ts`
+- Criados os complementos de IA:
+  - `backend/src/ai/drafting/document-drafting.service.ts`
+  - `backend/src/ai/drafting/template-document-generator.adapter.ts`
+  - `backend/src/ai/checklist/checklist-suggestion.service.ts`
+  - `backend/src/ai/checklist/document-checklist-suggestion.adapter.ts`
+  - `backend/src/ai/audit/ai-audit.types.ts`
+  - `backend/src/ai/audit/ai-audit.service.ts`
+- `backend/src/triage-ai.provider.ts` passou a delegar para o adapter do Epic K com fallback preservado.
+- Criada a primeira fatia do Epic L:
+  - `backend/src/bi/models/executive-metric.types.ts`
+  - `backend/src/bi/metrics/productivity-executive-metrics.service.ts`
+  - `backend/src/bi/metrics/finance-executive-metrics.service.ts`
+  - `backend/src/bi/snapshots/bi-snapshot.service.ts`
+- Criada a segunda fatia do Epic L:
+  - `backend/src/bi/models/executive-metric.payload.ts`
+  - `backend/src/bi/access-control/bi-authorizer.ts`
+  - `backend/src/bi/exports/bi-export.service.ts`
+  - `backend/src/bi/api/register-bi-routes.ts`
+- Criada a primeira fatia do Epic M:
+  - `backend/src/timesheet/core/time-entry.types.ts`
+  - `backend/src/timesheet/core/time-entry.errors.ts`
+  - `backend/src/timesheet/core/time-entry-conflict.service.ts`
+  - `backend/src/timesheet/core/time-entry.repository.ts`
+  - `backend/src/timesheet/core/time-entry.service.ts`
+  - `backend/src/timesheet/approval/time-entry-approval.service.ts`
+  - `backend/src/timesheet/reports/timesheet-report.service.ts`
+  - `backend/src/mobile/adapters/mobile-feed.adapter.ts`
+- Costura serial do backend:
+  - `backend/src/ai/http/register-ai-routes.ts`
+  - `backend/src/bi/pipelines/prisma-bi-source.repository.ts`
+  - `backend/src/timesheet/http/register-timesheet-routes.ts`
+  - `backend/src/mobile/http/register-mobile-routes.ts`
+  - registro dos modulos em `backend/src/main.ts`
+- Validado:
+  - `npx prisma validate --schema=prisma/schema.prisma`
+  - `npm run build`
+  - `node --test src/authz/policies/authz.check.test.cjs`
+  - `node --test src/ai/core/ai-provider.router.test.cjs src/ai/summarization/publication-summarizer.service.test.cjs src/ai/recommendation/triage-recommendation.service.test.cjs`
+  - `node --test test/triage-ai.provider.test.cjs`
+  - `node --test src/ai/audit/ai-audit.service.test.cjs src/ai/drafting/document-drafting.service.test.cjs src/ai/drafting/template-document-generator.adapter.test.cjs src/ai/checklist/checklist-suggestion.service.test.cjs`
+  - `node --test src/bi/metrics/finance-executive-metrics.service.test.cjs src/bi/metrics/productivity-executive-metrics.service.test.cjs src/bi/snapshots/bi-snapshot.service.test.cjs`
+  - `node --test src/bi/access-control/bi-authorizer.test.cjs src/bi/exports/bi-export.service.test.cjs src/bi/api/register-bi-routes.test.cjs`
+  - `node --test src/timesheet/core/time-entry.service.test.cjs src/timesheet/approval/time-entry-approval.service.test.cjs src/timesheet/reports/timesheet-report.service.test.cjs src/mobile/adapters/mobile-feed.adapter.test.cjs`
+  - `node --test src/ai/http/register-ai-routes.test.cjs src/timesheet/http/register-timesheet-routes.test.cjs src/mobile/http/register-mobile-routes.test.cjs`

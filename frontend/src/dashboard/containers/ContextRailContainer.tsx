@@ -17,7 +17,7 @@ export function ContextRailContainer({ agenda, movements, alerts, onShortcutClic
   return (
     <aside className="context-column" aria-label="Coluna contextual">
       <SectionCard title="Ações Rápidas" meta="Atalhos de operação">
-        <div className="action-card-grid">
+        <div className="action-card-grid action-card-grid--compact">
           <ActionCard
             icon={PlusCircle}
             title="Nova Tarefa"
@@ -45,9 +45,9 @@ export function ContextRailContainer({ agenda, movements, alerts, onShortcutClic
         </div>
       </SectionCard>
 
+      <CriticalAlertsWidget items={alerts} />
       <TodayAgendaWidget items={agenda} />
       <RecentMovementsWidget items={movements} />
-      <CriticalAlertsWidget items={alerts} />
     </aside>
   );
 }

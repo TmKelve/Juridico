@@ -29,6 +29,8 @@ import { captureException, trackEvent, trackPageView } from './monitoring';
 import { ProcessCombobox } from './ProcessCombobox';
 import { EmptyState, FilterBar, PriorityBadge as ProductPriorityBadge, StatusPill } from './components/product';
 import './Tasks.css';
+import './Dashboard.css';
+import './Processes.css';
 
 interface TasksProps {
   user: { id: number; email: string; role: string };
@@ -737,36 +739,66 @@ export function Tasks({ user }: TasksProps) {
   return (
     <div className="tasks-page" onClick={() => { if (openMenuId) setOpenMenuId(null); }}>
 
-      {/* Toolbar de ações + KPIs — substitui o header duplicado */}
-      <div className="tsk-top-strip">
-        <div className="tsk-kpis" aria-label="Indicadores de tarefas">
-          <button type="button" className={`tsk-kpi-card${activeKpi === 'today' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('today')} aria-pressed={activeKpi === 'today'}>
-            <div className="tsk-kpi-top"><p>Tarefas hoje</p><Clock size={15} className="tsk-kpi-icon" /></div>
-            <strong>{loading ? '—' : kpis.today}</strong>
+      {/* Hero header */}
+      <header className="tsk-hero" aria-label="Cabeçalho de tarefas">
+        <div className="tsk-hero-copy">
+          <p className="tsk-hero-eyebrow">OPERAÇÃO</p>
+          <h1 className="tsk-hero-title">Tarefas</h1>
+          <p className="tsk-hero-subtitle">Gerencie tarefas operacionais, prazos e responsabilidades da equipe.</p>
+        </div>
+        <div className="tsk-hero-actions">
+          <button className="btn-primary" onClick={() => setShowForm(true)} aria-label="Criar nova tarefa">
+            <Plus size={16} /> Nova Tarefa
           </button>
-          <button type="button" className={`tsk-kpi-card tsk-kpi-card--danger${activeKpi === 'overdue' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('overdue')} aria-pressed={activeKpi === 'overdue'}>
-            <div className="tsk-kpi-top"><p>Atrasadas</p><TriangleAlert size={15} className="tsk-kpi-icon tsk-kpi-icon--danger" /></div>
-            <strong>{loading ? '—' : kpis.overdue}</strong>
-          </button>
-          <button type="button" className={`tsk-kpi-card tsk-kpi-card--warning${activeKpi === 'high' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('high')} aria-pressed={activeKpi === 'high'}>
-            <div className="tsk-kpi-top"><p>Alta prioridade</p><Zap size={15} className="tsk-kpi-icon tsk-kpi-icon--warning" /></div>
-            <strong>{loading ? '—' : kpis.high}</strong>
-          </button>
-          <button type="button" className={`tsk-kpi-card${activeKpi === 'delegated' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('delegated')} aria-pressed={activeKpi === 'delegated'}>
-            <div className="tsk-kpi-top"><p>Delegadas</p><UserRoundPlus size={15} className="tsk-kpi-icon" /></div>
-            <strong>{loading ? '—' : kpis.delegated}</strong>
-          </button>
-          <button type="button" className={`tsk-kpi-card tsk-kpi-card--success${activeKpi === 'doneWeek' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('doneWeek')} aria-pressed={activeKpi === 'doneWeek'}>
-            <div className="tsk-kpi-top"><p>Concluídas semana</p><CheckCircle2 size={15} className="tsk-kpi-icon tsk-kpi-icon--success" /></div>
-            <strong>{loading ? '—' : kpis.doneWeek}</strong>
+          <button className="btn-secondary" onClick={() => exportCsv(sorted)} aria-label="Exportar tarefas">
+            <Download size={16} /> Exportar
           </button>
         </div>
+      </header>
 
-        <div className="tsk-main-actions">
-          <button className="btn-primary" onClick={() => setShowForm(true)} aria-label="Criar nova tarefa"><Plus size={14} /> Nova Tarefa</button>
-          <button className="btn-secondary" onClick={() => exportCsv(sorted)} aria-label="Exportar tarefas"><Download size={14} /> Exportar</button>
-        </div>
-      </div>
+      {/* KPI cards */}
+      <section className="tsk-kpis" aria-label="Indicadores de tarefas">
+        <button type="button" className="metric-card" data-kpi-color="primary" onClick={() => applyKpiFilter('today')} aria-pressed={activeKpi === 'today'} aria-label={`Tarefas hoje: ${kpis.today}`}>
+          <div className="metric-top-row">
+            <p className="metric-value">{loading ? '—' : kpis.today}</p>
+            <div className="metric-icon" aria-hidden="true"><Clock size={16} /></div>
+          </div>
+          <p className="metric-label">Tarefas hoje</p>
+          <p className="metric-microtext">Com vencimento no turno atual</p>
+        </button>
+        <button type="button" className="metric-card" data-kpi-color="error" onClick={() => applyKpiFilter('overdue')} aria-pressed={activeKpi === 'overdue'} aria-label={`Atrasadas: ${kpis.overdue}`}>
+          <div className="metric-top-row">
+            <p className="metric-value">{loading ? '—' : kpis.overdue}</p>
+            <div className="metric-icon" aria-hidden="true"><TriangleAlert size={16} /></div>
+          </div>
+          <p className="metric-label">Atrasadas</p>
+          <p className="metric-microtext">Exigem atenção imediata</p>
+        </button>
+        <button type="button" className="metric-card" data-kpi-color="warning" onClick={() => applyKpiFilter('high')} aria-pressed={activeKpi === 'high'} aria-label={`Alta prioridade: ${kpis.high}`}>
+          <div className="metric-top-row">
+            <p className="metric-value">{loading ? '—' : kpis.high}</p>
+            <div className="metric-icon" aria-hidden="true"><Zap size={16} /></div>
+          </div>
+          <p className="metric-label">Alta prioridade</p>
+          <p className="metric-microtext">Acompanhamento próximo</p>
+        </button>
+        <button type="button" className="metric-card" data-kpi-color="info" onClick={() => applyKpiFilter('delegated')} aria-pressed={activeKpi === 'delegated'} aria-label={`Delegadas: ${kpis.delegated}`}>
+          <div className="metric-top-row">
+            <p className="metric-value">{loading ? '—' : kpis.delegated}</p>
+            <div className="metric-icon" aria-hidden="true"><UserRoundPlus size={16} /></div>
+          </div>
+          <p className="metric-label">Delegadas</p>
+          <p className="metric-microtext">Atribuídas a outros</p>
+        </button>
+        <button type="button" className="metric-card" data-kpi-color="success" onClick={() => applyKpiFilter('doneWeek')} aria-pressed={activeKpi === 'doneWeek'} aria-label={`Concluídas semana: ${kpis.doneWeek}`}>
+          <div className="metric-top-row">
+            <p className="metric-value">{loading ? '—' : kpis.doneWeek}</p>
+            <div className="metric-icon" aria-hidden="true"><CheckCircle2 size={16} /></div>
+          </div>
+          <p className="metric-label">Concluídas semana</p>
+          <p className="metric-microtext">Entregas desta semana</p>
+        </button>
+      </section>
 
       {error && (
         <div className="tsk-alert tsk-alert--error" role="alert">
@@ -782,62 +814,24 @@ export function Tasks({ user }: TasksProps) {
         </div>
       )}
 
-      {/* Painel de filtros — busca principal sempre visível, filtros avançados colápsaveis */}
-      <div className="tsk-filters">
-        {/* Linha 1: busca + filtros rápidos + controles */}
-        <div className="tsk-filters-row1">
-          <FilterBar
-            className="tsk-filterbar"
-            searchId="tsk-search"
-            searchAriaLabel="Buscar tarefa"
-            searchPlaceholder="Buscar por título, cliente, processo, responsável..."
-            searchValue={filters.query}
-            onSearchChange={(value) => updateFilter('query', value)}
-            actions={<></>}
-          />
+      {/* Painel de filtros — padrão visual Processos */}
+      <section className={`my-processes-filters tsk-filters${filtersExpanded ? '' : ' is-compact'}`} aria-label="Busca e filtros de tarefas">
 
-          <div className="tsk-quick-filters">
-            <div className="tsk-field"><label htmlFor="tsk-status">Status</label><select id="tsk-status" value={filters.status} onChange={(e) => updateFilter('status', e.target.value)}><option value="">Todos</option>{(Object.entries(STATUS_CFG) as Array<[TaskStatus, { label: string }]>).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
-            <div className="tsk-field"><label htmlFor="tsk-priority">Prioridade</label><select id="tsk-priority" value={filters.priority} onChange={(e) => updateFilter('priority', e.target.value)}><option value="">Todas</option>{(Object.entries(PRIORITY_CFG) as Array<[TaskPriority, { label: string }]>).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
-            <div className="tsk-field"><label htmlFor="tsk-prazo">Prazo</label><select id="tsk-prazo" value={filters.prazo} onChange={(e) => updateFilter('prazo', e.target.value)}><option value="">Todos</option><option value="hoje">Hoje</option><option value="atrasado">Atrasado</option></select></div>
+        {/* Cabeçalho do painel */}
+        <div className="filters-head">
+          <div>
+            <p className="filters-eyebrow">Refinar tarefas</p>
+            <h3>Filtros de tarefas</h3>
           </div>
-
-          <button
-            className={`tsk-expand-btn${filtersExpanded ? ' is-open' : ''}`}
-            onClick={() => setFiltersExpanded((v) => !v)}
-            aria-expanded={filtersExpanded}
-            type="button"
-          >
-            <Filter size={13} />
-            {filtersExpanded ? 'Menos filtros' : 'Mais filtros'}
-            <ChevronDown size={13} className="tsk-expand-chevron" />
-          </button>
-        </div>
-
-        {/* Linha 2: filtros avançados (colápsaveis) */}
-        {filtersExpanded && (
-          <div className="tsk-filters-advanced">
-            <div className="tsk-field"><label htmlFor="tsk-owner">Responsável</label><select id="tsk-owner" value={filters.owner} onChange={(e) => updateFilter('owner', e.target.value)}><option value="">Todos</option>{uniqueOwners.map((o) => <option key={o} value={o}>{o}</option>)}</select></div>
-            <div className="tsk-field"><label htmlFor="tsk-scope">Escopo</label><select id="tsk-scope" value={filters.scope} onChange={(e) => updateFilter('scope', e.target.value)}><option value="">Todos</option><option value="minha">Tarefa minha</option><option value="delegada_por_mim">Delegada por mim</option></select></div>
-            <div className="tsk-field tsk-field--wide"><label htmlFor="tsk-process">Processo</label><ProcessCombobox id="tsk-process" value={filters.process} onChange={(value) => updateFilter('process', value)} options={processOptions} placeholder="Buscar processo" emptyLabel="Todos" /></div>
-            <div className="tsk-field"><label htmlFor="tsk-client">Cliente</label><select id="tsk-client" value={filters.client} onChange={(e) => updateFilter('client', e.target.value)}><option value="">Todos</option>{uniqueClients.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
-            <div className="tsk-field"><label htmlFor="tsk-origin">Origem</label><select id="tsk-origin" value={filters.origin} onChange={(e) => updateFilter('origin', e.target.value)}><option value="">Todas</option>{(Object.entries(ORIGIN_LABEL) as Array<[TaskOrigin, string]>).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
-            <div className="tsk-field"><label htmlFor="tsk-link">Vinculada a</label><select id="tsk-link" value={filters.vinculada} onChange={(e) => updateFilter('vinculada', e.target.value)}><option value="">Todas</option><option value="prazo">Prazo</option><option value="publicacao">Publicação</option><option value="documento">Documento</option><option value="atendimento">Atendimento</option></select></div>
-            <div className="tsk-field"><label htmlFor="tsk-period">Período</label><select id="tsk-period" value={filters.period} onChange={(e) => updateFilter('period', e.target.value)}><option value="">Todos</option><option value="hoje">Hoje</option><option value="7">7 dias</option><option value="30">30 dias</option></select></div>
-          </div>
-        )}
-
-        {/* Linha 3: status + controles de view */}
-        <div className="tsk-filters-bottom">
-          <div className="tsk-filters-bottom-left">
-            {hasActiveFilters && <span className="tsk-filter-summary"><Filter size={12} /><strong>{filtered.length}</strong> de {tasks.length}</span>}
-          </div>
-          <div className="tsk-filters-bottom-right">
+          <div className="filters-head-meta">
+            {hasActiveFilters && <span className="filters-active-pill">Filtros ativos</span>}
+            <span className="filters-total-pill">{filtered.length} em exibição</span>
             <div className="tsk-view-toggle" role="group" aria-label="Modo de visualização">
               <button
                 className={`tsk-view-btn${viewMode === 'lista' ? ' tsk-view-btn--active' : ''}`}
                 onClick={() => setViewMode('lista')}
                 aria-pressed={viewMode === 'lista'}
+                type="button"
               >
                 <List size={13} /> Lista
               </button>
@@ -845,17 +839,135 @@ export function Tasks({ user }: TasksProps) {
                 className={`tsk-view-btn${viewMode === 'kanban' ? ' tsk-view-btn--active' : ''}`}
                 onClick={() => setViewMode('kanban')}
                 aria-pressed={viewMode === 'kanban'}
+                type="button"
               >
                 <LayoutGrid size={13} /> Kanban
               </button>
             </div>
-            <div className="tsk-filter-actions">
-              <button className="btn-ghost" onClick={clearFilters}><X size={13} /> Limpar</button>
-              <button className="btn-ghost" onClick={saveFilters}><Save size={13} /> Salvar</button>
-            </div>
+            <button
+              type="button"
+              className={`btn-ghost btn-filter-density${filtersExpanded ? ' is-open' : ''}`}
+              onClick={() => setFiltersExpanded((v) => !v)}
+              aria-expanded={filtersExpanded}
+            >
+              <Filter size={14} aria-hidden="true" />
+              {filtersExpanded ? 'Menos filtros' : 'Mais filtros'}
+            </button>
           </div>
         </div>
-      </div>
+
+        {/* Chips de acesso rápido */}
+        <div className="filter-presets" role="toolbar" aria-label="Presets de filtros rápidos">
+          <button type="button" className="filter-preset-btn" onClick={() => applyKpiFilter('overdue')}>Atrasadas</button>
+          <button type="button" className="filter-preset-btn" onClick={() => applyKpiFilter('high')}>Alta prioridade</button>
+          <button type="button" className="filter-preset-btn" onClick={() => applyKpiFilter('today')}>Hoje</button>
+          <button type="button" className="filter-preset-btn" onClick={() => applyKpiFilter('delegated')}>Delegadas</button>
+          <button type="button" className="filter-preset-btn" onClick={() => applyKpiFilter('doneWeek')}>Concluídas semana</button>
+        </div>
+
+        {/* Linha principal: busca + filtros rápidos */}
+        <div className="filters-top-row filter-row-card">
+          <label htmlFor="tsk-search" className="filter-field filter-field-search filter-cascade-item">
+            <span>Busca</span>
+            <div className="filter-input-wrap">
+              <Search size={14} aria-hidden="true" />
+              <input
+                id="tsk-search"
+                type="search"
+                placeholder="Título, cliente, processo, responsável..."
+                value={filters.query}
+                onChange={(e) => updateFilter('query', e.target.value)}
+                aria-label="Buscar tarefa"
+              />
+            </div>
+          </label>
+          <label htmlFor="tsk-status" className="filter-field filter-cascade-item">
+            <span>Status</span>
+            <select id="tsk-status" value={filters.status} onChange={(e) => updateFilter('status', e.target.value)}>
+              <option value="">Todos</option>
+              {(Object.entries(STATUS_CFG) as Array<[TaskStatus, { label: string }]>).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+            </select>
+          </label>
+          <label htmlFor="tsk-priority" className="filter-field filter-cascade-item">
+            <span>Prioridade</span>
+            <select id="tsk-priority" value={filters.priority} onChange={(e) => updateFilter('priority', e.target.value)}>
+              <option value="">Todas</option>
+              {(Object.entries(PRIORITY_CFG) as Array<[TaskPriority, { label: string }]>).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+            </select>
+          </label>
+          <label htmlFor="tsk-prazo" className="filter-field filter-cascade-item">
+            <span>Prazo</span>
+            <select id="tsk-prazo" value={filters.prazo} onChange={(e) => updateFilter('prazo', e.target.value)}>
+              <option value="">Todos</option>
+              <option value="hoje">Hoje</option>
+              <option value="atrasado">Atrasado</option>
+            </select>
+          </label>
+        </div>
+
+        {/* Filtros avançados (expansíveis) */}
+        {filtersExpanded && (
+          <div className="filters-bottom-row filter-row-card">
+            <label htmlFor="tsk-owner" className="filter-field filter-cascade-item">
+              <span>Responsável</span>
+              <select id="tsk-owner" value={filters.owner} onChange={(e) => updateFilter('owner', e.target.value)}>
+                <option value="">Todos</option>
+                {uniqueOwners.map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </label>
+            <label htmlFor="tsk-scope" className="filter-field filter-cascade-item">
+              <span>Escopo</span>
+              <select id="tsk-scope" value={filters.scope} onChange={(e) => updateFilter('scope', e.target.value)}>
+                <option value="">Todos</option>
+                <option value="minha">Tarefa minha</option>
+                <option value="delegada_por_mim">Delegada por mim</option>
+              </select>
+            </label>
+            <label htmlFor="tsk-process" className="filter-field filter-cascade-item" style={{ gridColumn: 'span 4' }}>
+              <span>Processo</span>
+              <ProcessCombobox id="tsk-process" value={filters.process} onChange={(value) => updateFilter('process', value)} options={processOptions} placeholder="Buscar processo" emptyLabel="Todos" />
+            </label>
+            <label htmlFor="tsk-client" className="filter-field filter-cascade-item">
+              <span>Cliente</span>
+              <select id="tsk-client" value={filters.client} onChange={(e) => updateFilter('client', e.target.value)}>
+                <option value="">Todos</option>
+                {uniqueClients.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </label>
+            <label htmlFor="tsk-origin" className="filter-field filter-cascade-item">
+              <span>Origem</span>
+              <select id="tsk-origin" value={filters.origin} onChange={(e) => updateFilter('origin', e.target.value)}>
+                <option value="">Todas</option>
+                {(Object.entries(ORIGIN_LABEL) as Array<[TaskOrigin, string]>).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </label>
+            <label htmlFor="tsk-link" className="filter-field filter-cascade-item">
+              <span>Vinculada a</span>
+              <select id="tsk-link" value={filters.vinculada} onChange={(e) => updateFilter('vinculada', e.target.value)}>
+                <option value="">Todas</option>
+                <option value="prazo">Prazo</option>
+                <option value="publicacao">Publicação</option>
+                <option value="documento">Documento</option>
+                <option value="atendimento">Atendimento</option>
+              </select>
+            </label>
+            <label htmlFor="tsk-period" className="filter-field filter-cascade-item">
+              <span>Período</span>
+              <select id="tsk-period" value={filters.period} onChange={(e) => updateFilter('period', e.target.value)}>
+                <option value="">Todos</option>
+                <option value="hoje">Hoje</option>
+                <option value="7">7 dias</option>
+                <option value="30">30 dias</option>
+              </select>
+            </label>
+            <div className="filter-actions filter-cascade-item">
+              <button type="button" className="btn-ghost btn-filter-clear" onClick={clearFilters}><Filter size={14} aria-hidden="true" />Limpar filtros</button>
+              <button type="button" className="btn-ghost" onClick={saveFilters}><Save size={14} aria-hidden="true" />Salvar filtro</button>
+            </div>
+          </div>
+        )}
+
+      </section>
 
       {loading && (
         <div className="tsk-loading" aria-live="polite" aria-busy="true">

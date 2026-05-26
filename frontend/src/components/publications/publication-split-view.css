@@ -1,0 +1,43 @@
+.pub-split-view {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(320px, 0.95fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.pub-signal-panel {
+  position: sticky;
+  top: 1rem;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.pub-signal-panel--empty {
+  padding: 1rem;
+  border-radius: 1rem;
+  border: 1px dashed #cbd5e1;
+  background: #f8fafc;
+}
+
+.pub-signal-panel__eyebrow {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+}
+
+.pub-signal-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+@media (max-width: 1180px) {
+  .pub-split-view {
+    grid-template-columns: 1fr;
+  }
+
+  .pub-signal-panel {
+    position: static;
+  }
+}

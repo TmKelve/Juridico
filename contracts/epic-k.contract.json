@@ -1,0 +1,183 @@
+{
+  "epic": "Epic K - IA Juridica de Produto",
+  "version": "2026-05-26",
+  "compatibility": {
+    "preserveExistingRoutes": true,
+    "preserveExistingContracts": true,
+    "additiveOnly": true,
+    "rules": [
+      "Nenhuma automacao de IA pode substituir a decisao final humana em acoes juridicas sensiveis.",
+      "Toda inferencia deve registrar auditoria com promptVersion, modelVersion, latencyMs, estimatedCostUsd e actorDecision.",
+      "Falhas de provider devem retornar fallback deterministico e status auditavel sem quebrar rotas operacionais existentes.",
+      "Entradas sensiveis devem aceitar mascaramento e escopo minimo por papel/equipe."
+    ]
+  },
+  "entities": [
+    "aiExecution",
+    "aiExecutionTarget",
+    "aiBudgetLedger",
+    "aiSummary",
+    "aiRecommendation",
+    "aiDraft",
+    "aiChecklistSuggestion",
+    "aiAuditEvent"
+  ],
+  "contracts": {
+    "ai.summary.generate": {
+      "input": {
+        "targetType": "publication|publication_event|document|triage_item",
+        "targetId": "number|string",
+        "sourceText": "string",
+        "context": {
+          "processId": "number|null",
+          "clientId": "number|null",
+          "portfolioId": "number|null",
+          "teamId": "number|null"
+        },
+        "promptVersion": "string",
+        "modelVersion": "string",
+        "maskSensitiveData": "boolean",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "summary": "aiSummary",
+        "execution": "aiExecution",
+        "auditEvent": "aiAuditEvent",
+        "idempotency": "created|replayed"
+      },
+      "errors": [
+        "AI_INPUT_INVALID",
+        "AI_TARGET_NOT_FOUND",
+        "AI_PROVIDER_UNAVAILABLE",
+        "AI_BUDGET_EXCEEDED",
+        "AI_PERMISSION_DENIED",
+        "IDEMPOTENCY_CONFLICT"
+      ],
+      "idempotency": {
+        "scope": "ai.summary.generate",
+        "dedupeBy": [
+          "scope",
+          "idempotencyKey"
+        ]
+      }
+    },
+    "ai.recommendation.generate": {
+      "input": {
+        "targetType": "publication|triage_item|deadline|task",
+        "targetId": "number|string",
+        "facts": "object",
+        "policyProfile": "default|conservative|deadline_sensitive",
+        "promptVersion": "string",
+        "modelVersion": "string",
+        "requiresHumanApproval": "boolean",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "recommendation": "aiRecommendation",
+        "execution": "aiExecution",
+        "auditEvent": "aiAuditEvent"
+      },
+      "errors": [
+        "AI_INPUT_INVALID",
+        "AI_TARGET_NOT_FOUND",
+        "AI_PROVIDER_UNAVAILABLE",
+        "AI_GUARDRAIL_BLOCKED",
+        "AI_PERMISSION_DENIED",
+        "AI_BUDGET_EXCEEDED",
+        "IDEMPOTENCY_CONFLICT"
+      ],
+      "idempotency": {
+        "scope": "ai.recommendation.generate",
+        "dedupeBy": [
+          "scope",
+          "idempotencyKey"
+        ]
+      }
+    },
+    "ai.draft.generate": {
+      "input": {
+        "templateId": "number|null",
+        "documentType": "peticao|manifestacao|recurso|parecer|checklist",
+        "processId": "number|null",
+        "clientId": "number|null",
+        "instructions": "string",
+        "facts": "object",
+        "promptVersion": "string",
+        "modelVersion": "string",
+        "maskSensitiveData": "boolean",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "draft": "aiDraft",
+        "execution": "aiExecution",
+        "auditEvent": "aiAuditEvent"
+      },
+      "errors": [
+        "AI_INPUT_INVALID",
+        "AI_TEMPLATE_NOT_FOUND",
+        "AI_PROVIDER_UNAVAILABLE",
+        "AI_GUARDRAIL_BLOCKED",
+        "AI_PERMISSION_DENIED",
+        "AI_BUDGET_EXCEEDED",
+        "IDEMPOTENCY_CONFLICT"
+      ],
+      "idempotency": {
+        "scope": "ai.draft.generate",
+        "dedupeBy": [
+          "scope",
+          "idempotencyKey"
+        ]
+      }
+    },
+    "ai.checklist.suggest": {
+      "input": {
+        "targetType": "document|process|publication|attendance",
+        "targetId": "number|string",
+        "documentCategory": "string|null",
+        "facts": "object",
+        "promptVersion": "string",
+        "modelVersion": "string",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "checklist": "aiChecklistSuggestion",
+        "execution": "aiExecution",
+        "auditEvent": "aiAuditEvent"
+      },
+      "errors": [
+        "AI_INPUT_INVALID",
+        "AI_TARGET_NOT_FOUND",
+        "AI_PROVIDER_UNAVAILABLE",
+        "AI_PERMISSION_DENIED",
+        "AI_BUDGET_EXCEEDED",
+        "IDEMPOTENCY_CONFLICT"
+      ],
+      "idempotency": {
+        "scope": "ai.checklist.suggest",
+        "dedupeBy": [
+          "scope",
+          "idempotencyKey"
+        ]
+      }
+    },
+    "ai.audit.event": {
+      "input": {
+        "executionId": "string",
+        "actionTaken": "accepted|edited|rejected|fallback|error",
+        "actor": "user:<id>|system|scheduler",
+        "notes": "string|null",
+        "correlationId": "string|null"
+      },
+      "output": {
+        "auditEvent": "aiAuditEvent"
+      },
+      "errors": [
+        "AI_EXECUTION_NOT_FOUND",
+        "AI_AUDIT_INVALID"
+      ],
+      "idempotency": {
+        "scope": "audit-log"
+      }
+    }
+  }
+}

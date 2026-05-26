@@ -4,7 +4,7 @@ export type AuthzScope = (typeof authzScopes)[number];
 export const manageableAuthzScopes = ['own', 'team', 'portfolio', 'global'] as const;
 export type ManageableAuthzScope = (typeof manageableAuthzScopes)[number];
 
-export const authzResourceTypes = ['task', 'attendance', 'portfolio', 'team', 'productivity', 'export'] as const;
+export const authzResourceTypes = ['task', 'attendance', 'portfolio', 'team', 'productivity', 'export', 'ai', 'bi', 'timesheet', 'mobile'] as const;
 export type AuthzResourceType = (typeof authzResourceTypes)[number];
 
 export const authzPermissionCatalog = [
@@ -32,6 +32,23 @@ export const authzPermissionCatalog = [
   { key: 'export.tasks', resourceType: 'export', sensitive: false, requiresAudit: true },
   { key: 'export.attendances', resourceType: 'export', sensitive: false, requiresAudit: true },
   { key: 'export.productivity', resourceType: 'export', sensitive: true, requiresAudit: true },
+  { key: 'ai.view', resourceType: 'ai', sensitive: false, requiresAudit: false },
+  { key: 'ai.summary.generate', resourceType: 'ai', sensitive: false, requiresAudit: true },
+  { key: 'ai.recommendation.generate', resourceType: 'ai', sensitive: false, requiresAudit: true },
+  { key: 'ai.draft.generate', resourceType: 'ai', sensitive: true, requiresAudit: true },
+  { key: 'ai.checklist.suggest', resourceType: 'ai', sensitive: false, requiresAudit: true },
+  { key: 'ai.audit.view', resourceType: 'ai', sensitive: true, requiresAudit: true },
+  { key: 'ai.budget.manage', resourceType: 'ai', sensitive: true, requiresAudit: true },
+  { key: 'bi.view', resourceType: 'bi', sensitive: false, requiresAudit: false },
+  { key: 'bi.snapshot.generate', resourceType: 'bi', sensitive: false, requiresAudit: true },
+  { key: 'bi.export.generate', resourceType: 'bi', sensitive: true, requiresAudit: true },
+  { key: 'timesheet.view', resourceType: 'timesheet', sensitive: false, requiresAudit: false },
+  { key: 'timesheet.entry.create', resourceType: 'timesheet', sensitive: false, requiresAudit: true },
+  { key: 'timesheet.entry.update', resourceType: 'timesheet', sensitive: false, requiresAudit: true },
+  { key: 'timesheet.entry.approve', resourceType: 'timesheet', sensitive: true, requiresAudit: true },
+  { key: 'timesheet.report.view', resourceType: 'timesheet', sensitive: false, requiresAudit: true },
+  { key: 'timesheet.period.close', resourceType: 'timesheet', sensitive: true, requiresAudit: true },
+  { key: 'mobile.feed.view', resourceType: 'mobile', sensitive: false, requiresAudit: false },
 ] as const;
 
 export type AuthzPermissionCatalogEntry = (typeof authzPermissionCatalog)[number];
@@ -64,6 +81,19 @@ const authzRoleGrants: Record<string, AuthzGrant[]> = {
     { permissionKey: 'productivity.snapshot', scopes: ['own', 'team', 'portfolio'] },
     { permissionKey: 'export.tasks', scopes: ['own', 'team', 'portfolio'] },
     { permissionKey: 'export.attendances', scopes: ['own', 'team', 'portfolio'] },
+    { permissionKey: 'ai.view', scopes: ['own', 'team', 'portfolio'] },
+    { permissionKey: 'ai.summary.generate', scopes: ['own', 'team', 'portfolio'] },
+    { permissionKey: 'ai.recommendation.generate', scopes: ['own', 'team', 'portfolio'] },
+    { permissionKey: 'ai.draft.generate', scopes: ['own', 'team', 'portfolio'] },
+    { permissionKey: 'ai.checklist.suggest', scopes: ['own', 'team', 'portfolio'] },
+    { permissionKey: 'bi.view', scopes: ['own', 'team', 'portfolio'] },
+    { permissionKey: 'bi.snapshot.generate', scopes: ['own', 'team', 'portfolio'] },
+    { permissionKey: 'timesheet.view', scopes: ['own', 'team', 'portfolio'] },
+    { permissionKey: 'timesheet.entry.create', scopes: ['own', 'team', 'portfolio'] },
+    { permissionKey: 'timesheet.entry.update', scopes: ['own', 'team', 'portfolio'] },
+    { permissionKey: 'timesheet.entry.approve', scopes: ['own', 'team', 'portfolio'] },
+    { permissionKey: 'timesheet.report.view', scopes: ['own', 'team', 'portfolio'] },
+    { permissionKey: 'mobile.feed.view', scopes: ['own', 'team', 'portfolio'] },
   ],
   ATD: [
     { permissionKey: 'task.view', scopes: ['own', 'team'] },
@@ -80,6 +110,13 @@ const authzRoleGrants: Record<string, AuthzGrant[]> = {
     { permissionKey: 'productivity.snapshot', scopes: ['own', 'team'] },
     { permissionKey: 'export.tasks', scopes: ['own', 'team'] },
     { permissionKey: 'export.attendances', scopes: ['own', 'team'] },
+    { permissionKey: 'ai.view', scopes: ['own', 'team'] },
+    { permissionKey: 'ai.summary.generate', scopes: ['own', 'team'] },
+    { permissionKey: 'ai.checklist.suggest', scopes: ['own', 'team'] },
+    { permissionKey: 'timesheet.view', scopes: ['own', 'team'] },
+    { permissionKey: 'timesheet.entry.create', scopes: ['own', 'team'] },
+    { permissionKey: 'timesheet.entry.update', scopes: ['own', 'team'] },
+    { permissionKey: 'mobile.feed.view', scopes: ['own', 'team'] },
   ],
   FIN: [
     { permissionKey: 'portfolio.view', scopes: ['global'] },
@@ -87,6 +124,11 @@ const authzRoleGrants: Record<string, AuthzGrant[]> = {
     { permissionKey: 'productivity.snapshot', scopes: ['global'] },
     { permissionKey: 'productivity.export', scopes: ['global'] },
     { permissionKey: 'export.productivity', scopes: ['global'] },
+    { permissionKey: 'bi.view', scopes: ['global'] },
+    { permissionKey: 'bi.snapshot.generate', scopes: ['global'] },
+    { permissionKey: 'bi.export.generate', scopes: ['global'] },
+    { permissionKey: 'timesheet.view', scopes: ['global'] },
+    { permissionKey: 'timesheet.report.view', scopes: ['global'] },
   ],
 };
 

@@ -6,8 +6,89 @@
 .tasks-page {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-5);
   position: relative;
+}
+
+/* ── Hero header — mesmo DNA do dashboard ── */
+.tsk-hero {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--brand-50) 72%, white) 0%, var(--white) 58%);
+  border: 1px solid color-mix(in srgb, var(--brand-200) 50%, var(--neutral-200));
+  border-left: 4px solid var(--brand-500);
+  border-radius: var(--radius-2xl);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 6px 20px rgba(15, 23, 42, 0.04);
+  padding: var(--space-6);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-6);
+}
+
+.tsk-hero::after {
+  content: '';
+  position: absolute;
+  inset: auto -4% -38% auto;
+  width: 280px;
+  height: 280px;
+  border-radius: 999px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--brand-200) 35%, transparent) 0%, transparent 68%);
+  pointer-events: none;
+}
+
+.tsk-hero-copy {
+  position: relative;
+  z-index: 1;
+}
+
+.tsk-hero-eyebrow {
+  margin: 0 0 var(--space-1);
+  font-size: 11px;
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--brand-600);
+}
+
+.tsk-hero-title {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-3xl);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--neutral-950);
+  line-height: var(--line-height-tight);
+}
+
+.tsk-hero-subtitle {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--neutral-700);
+  line-height: 1.6;
+}
+
+.tsk-hero-actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.tsk-hero-actions .btn-primary,
+.tsk-hero-actions .btn-secondary {
+  min-height: 40px;
+  padding-inline: var(--space-4);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* KPI grid — reusa .metric-card do Dashboard.css */
+.tsk-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-4);
 }
 
 /* ─────────────────────────────────────────────────────────────────── */
@@ -185,15 +266,14 @@
 /* PAINEL DE FILTROS — Colapsável                                       */
 /* ─────────────────────────────────────────────────────────────────── */
 
+/* .tsk-filters — visual agora controlado por .my-processes-filters (Processes.css) */
 .tsk-filters {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-card);
-  padding: var(--space-3) var(--space-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
+  /* reset dos estilos antigos — o card/padding vêm de .my-processes-filters */
+  background: unset;
+  border: unset;
+  border-radius: unset;
+  box-shadow: unset;
+  padding: unset;
 }
 
 /* Linha 1: busca + filtros rápidos + botão "Mais filtros" */

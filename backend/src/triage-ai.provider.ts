@@ -1,5 +1,6 @@
 import { matchPublicationDeterministically } from './publications/matching';
 import { toLegacyTriageClassification } from './publications/classification';
+import { adaptTriageRecommendation } from './ai/recommendation/triage-recommendation.adapter';
 
 export interface TriageAiInput {
   sourceType: string;
@@ -129,5 +130,9 @@ export async function classifyTriageItem(input: TriageAiInput): Promise<TriageAi
     }
   }
 
-  return buildFallbackClassification(input);
+  try {
+    return await adaptTriageRecommendation(input);
+  } catch {
+    return buildFallbackClassification(input);
+  }
 }

@@ -1,0 +1,133 @@
+{
+  "epic": "Epic L - BI Executivo Avancado",
+  "version": "2026-05-26",
+  "compatibility": {
+    "preserveExistingRoutes": true,
+    "preserveExistingContracts": true,
+    "additiveOnly": true,
+    "rules": [
+      "Metricas executivas devem ter definicao unica e auditavel.",
+      "Leituras executivas devem aceitar consulta asOf para consistencia temporal.",
+      "Exportacoes devem refletir o mesmo recorte e o mesmo snapshot exibidos na UI."
+    ]
+  },
+  "entities": [
+    "biMetricDefinition",
+    "biMetricSnapshot",
+    "biDashboardPayload",
+    "biExportJob",
+    "biAuditEvent"
+  ],
+  "contracts": {
+    "bi.metric.query": {
+      "input": {
+        "metricKeys": "string[]",
+        "scopeType": "global|team|portfolio|user|client",
+        "scopeId": "number|string|null",
+        "from": "YYYY-MM-DD",
+        "to": "YYYY-MM-DD",
+        "groupBy": "day|week|month|quarter",
+        "timezone": "IANA timezone",
+        "asOf": "ISO-8601|null"
+      },
+      "output": {
+        "items": "Array<{ metricKey, label, value, delta, series, definitionVersion, snapshotId|null }>",
+        "warnings": "string[]"
+      },
+      "errors": [
+        "BI_METRIC_INVALID",
+        "BI_RANGE_INVALID",
+        "BI_PERMISSION_DENIED"
+      ],
+      "idempotency": {
+        "scope": "read-only"
+      }
+    },
+    "bi.snapshot.generate": {
+      "input": {
+        "referenceDate": "YYYY-MM-DD",
+        "scopeType": "global|team|portfolio|user|client",
+        "scopeId": "number|string|null",
+        "metricKeys": "string[]",
+        "timezone": "IANA timezone",
+        "generatedBy": "user:<id>|system|scheduler",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "snapshot": "biMetricSnapshot",
+        "auditEvent": "biAuditEvent",
+        "idempotency": "created|replayed"
+      },
+      "errors": [
+        "BI_SNAPSHOT_INVALID",
+        "BI_PERMISSION_DENIED",
+        "IDEMPOTENCY_CONFLICT"
+      ],
+      "idempotency": {
+        "scope": "bi.snapshot.generate",
+        "dedupeBy": [
+          "scope",
+          "referenceDate",
+          "scopeType",
+          "scopeId",
+          "idempotencyKey"
+        ]
+      }
+    },
+    "bi.dashboard.fetch": {
+      "input": {
+        "dashboardKey": "commercial_conversion|deadline_risk|financial_consolidated|team_productivity",
+        "filters": {
+          "period": "current_month|last_30_days|quarter|custom",
+          "from": "YYYY-MM-DD|null",
+          "to": "YYYY-MM-DD|null",
+          "teamId": "number|null",
+          "ownerUserId": "number|null",
+          "portfolioId": "number|null",
+          "clientId": "number|null"
+        },
+        "timezone": "IANA timezone",
+        "asOf": "ISO-8601|null"
+      },
+      "output": {
+        "dashboard": "biDashboardPayload",
+        "snapshotId": "string|null",
+        "definitionsVersion": "string"
+      },
+      "errors": [
+        "BI_DASHBOARD_INVALID",
+        "BI_PERMISSION_DENIED"
+      ],
+      "idempotency": {
+        "scope": "read-only"
+      }
+    },
+    "bi.export.generate": {
+      "input": {
+        "dashboardKey": "commercial_conversion|deadline_risk|financial_consolidated|team_productivity",
+        "format": "csv|xlsx|pdf",
+        "filters": "object",
+        "timezone": "IANA timezone",
+        "asOf": "ISO-8601|null",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "exportJob": "biExportJob",
+        "auditEvent": "biAuditEvent"
+      },
+      "errors": [
+        "BI_EXPORT_INVALID",
+        "BI_EXPORT_FORMAT_UNSUPPORTED",
+        "BI_PERMISSION_DENIED",
+        "IDEMPOTENCY_CONFLICT"
+      ],
+      "idempotency": {
+        "scope": "bi.export.generate",
+        "dedupeBy": [
+          "scope",
+          "idempotencyKey"
+        ]
+      }
+    }
+  }
+}

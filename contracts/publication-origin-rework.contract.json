@@ -1,0 +1,164 @@
+{
+  "epic": "Publication Origin Rework",
+  "version": "2026-05-26",
+  "integrationOrder": [
+    "contracts",
+    "backend-origin-correlation",
+    "backend-derived-actions-and-api",
+    "frontend-crm-publications-triage",
+    "tests",
+    "docs"
+  ],
+  "pipelineStates": [
+    "capturado",
+    "normalizado",
+    "consolidado",
+    "triado",
+    "gerou_crm",
+    "gerou_prazo",
+    "gerou_tarefa",
+    "descartado",
+    "falhou",
+    "reprocessado"
+  ],
+  "entities": {
+    "captureRecord": {
+      "description": "Sinal bruto coletado da fonte antes da consolidação operacional.",
+      "fields": {
+        "id": "number",
+        "correlationId": "string",
+        "sourceType": "cpf|oab|processo|cnj|diario|manual|other",
+        "sourceReference": "string",
+        "originStage": "capturado|normalizado",
+        "pipelineStatus": "capturado|normalizado|consolidado|triado|gerou_crm|gerou_prazo|gerou_tarefa|descartado|falhou|reprocessado",
+        "capturedAt": "ISO-8601 datetime",
+        "occurredAt": "ISO-8601 datetime",
+        "evidenceText": "string",
+        "normalizedText": "string",
+        "tribunal": "string|null",
+        "processNumber": "string|null",
+        "cpfCnpj": "string|null",
+        "oabNumber": "string|null",
+        "personName": "string|null",
+        "consolidationStatus": "nao_consolidado|aguardando_consolidacao|consolidado|descartado|falhou",
+        "metadata": "object"
+      }
+    },
+    "captureEvidenceFetch": {
+      "description": "Consulta detalhada da evidência original e do vínculo com o pipeline.",
+      "input": {
+        "captureId": "number"
+      },
+      "output": {
+        "capture": "capture.record",
+        "timeline": "publication.pipeline.timeline",
+        "derivedActions": "derived.action.record[]"
+      },
+      "errors": {
+        "CAPTURE_NOT_FOUND": "Captura não localizada.",
+        "CAPTURE_ACCESS_DENIED": "Usuário sem acesso à captura."
+      },
+      "idempotency": "read-only",
+      "correlationReference": "capture.correlationId"
+    },
+    "publicationNormalizedRecord": {
+      "description": "Evento interpretado/normalizado que pode ou não virar publicação consolidada.",
+      "fields": {
+        "id": "number",
+        "captureId": "number",
+        "publicationId": "number|null",
+        "correlationId": "string",
+        "sourceType": "string",
+        "sourceReference": "string",
+        "originStage": "normalizado|consolidado",
+        "pipelineStatus": "string",
+        "title": "string",
+        "summary": "string",
+        "fullText": "string",
+        "riskLevel": "normal|critico|alto|medio|baixo",
+        "requiresAction": "boolean",
+        "eventAt": "ISO-8601 datetime"
+      }
+    },
+    "publicationConsolidationStatus": {
+      "description": "Estado de consolidação entre sinal, evento e publicação operacional.",
+      "fields": {
+        "correlationId": "string",
+        "captureId": "number",
+        "eventId": "number|null",
+        "publicationId": "number|null",
+        "status": "nao_consolidado|aguardando_consolidacao|consolidado|descartado|falhou",
+        "publicationLabel": "string|null",
+        "lastUpdatedAt": "ISO-8601 datetime"
+      }
+    },
+    "publicationPipelineTimeline": {
+      "description": "Timeline ponta a ponta entre captura, evento, publicação e ações derivadas.",
+      "fields": {
+        "correlationId": "string",
+        "items": "Array<{ id: string, entityType: string, entityId: number|null, stage: string, title: string, summary: string, status: string, occurredAt: string, sourceType?: string|null, sourceReference?: string|null, link?: string|null }>"
+      }
+    },
+    "crmOriginReference": {
+      "description": "Referência explícita de origem exposta para CRM.",
+      "fields": {
+        "correlationId": "string",
+        "sourceType": "string",
+        "sourceReference": "string",
+        "originKind": "capture|publication",
+        "originLabel": "string",
+        "originStage": "string",
+        "consolidationStatus": "nao_consolidado|aguardando_consolidacao|consolidado|descartado|falhou",
+        "captureId": "number|null",
+        "eventId": "number|null",
+        "publicationId": "number|null",
+        "evidenceUrl": "string|null",
+        "publicationUrl": "string|null",
+        "timelineUrl": "string|null"
+      }
+    },
+    "triageOriginReference": {
+      "description": "Referência explícita de origem exposta para triagem.",
+      "fields": {
+        "correlationId": "string",
+        "sourceType": "string",
+        "sourceReference": "string",
+        "originKind": "capture|publication",
+        "originStage": "string",
+        "pipelineStatus": "string",
+        "captureId": "number",
+        "eventId": "number|null",
+        "publicationId": "number|null"
+      }
+    },
+    "derivedActionRecord": {
+      "description": "Saída operacional derivada da origem capturada/consolidada.",
+      "fields": {
+        "entityType": "triage|crm_lead|crm_opportunity|deadline|task",
+        "entityId": "number",
+        "correlationId": "string",
+        "sourceType": "string",
+        "sourceReference": "string",
+        "originStage": "string",
+        "status": "string",
+        "title": "string",
+        "summary": "string|null",
+        "url": "string|null",
+        "createdAt": "ISO-8601 datetime"
+      }
+    }
+  },
+  "compatibility": {
+    "publicationsList": "GET /publications permanece ativo e recebe expansão aditiva de origem/pipeline.",
+    "triageList": "GET /triage permanece ativo e recebe expansão aditiva de originReference/timeline.",
+    "crmLists": "GET /crm/leads e GET /crm/opportunities permanecem ativos e recebem expansão aditiva de originReference."
+  },
+  "newEndpoints": [
+    "GET /publication-captures",
+    "GET /publication-captures/:id",
+    "GET /publication-captures/:id/evidence",
+    "GET /publication-pipeline/:correlationId",
+    "GET /publication-pipeline/:correlationId/actions",
+    "POST /publication-origin/backfill"
+  ]
+}

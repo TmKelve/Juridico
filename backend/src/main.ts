@@ -46,6 +46,16 @@ import { planTriageDecision } from './triage/decision-engine';
 import { assistTriageDecision } from './triage/decision/assisted-triage-decision';
 import { rankUnifiedTriageQueue } from './triage/queue/triage-unified-queue';
 import { buildPublicationPayload } from './publications.contract';
+import { adaptLegacyPublicationCaptureRow, adaptLegacyPublicationEventRow } from './publications/capture';
+import { computePublicationCorrelationId } from './publications/correlation';
+import {
+  buildCaptureEvidenceFetch,
+  buildCrmOriginReference,
+  buildPipelineAssemblyFromLegacyRows,
+  buildPublicationPipelineTimeline,
+  buildTriageOriginReference,
+  inferPublicationSnapshot,
+} from './publications/pipeline';
 import { buildTaskPayload } from './tasks.contract';
 import { buildTemplatePayload } from './templates.contract';
 import { classifyTriageItem } from './triage-ai.provider';
@@ -68,6 +78,16 @@ import { FinanceCollectionDispatchJob } from './jobs/finance/finance-collection-
 import { MockFinanceTransport } from './jobs/finance/mock-finance-transport';
 import { registerFinanceSchedulers } from './shared/scheduler/finance-scheduler-registry';
 import { registerEpicIjRoutes } from './epic-ij/register-epic-ij-routes';
+import { registerAiRoutes } from './ai/http/register-ai-routes';
+import { registerBiRoutes } from './bi/api/register-bi-routes';
+import { PrismaBiSourceRepository } from './bi/pipelines/prisma-bi-source.repository';
+import { ProductivityExecutiveMetricsService } from './bi/metrics/productivity-executive-metrics.service';
+import { FinanceExecutiveMetricsService } from './bi/metrics/finance-executive-metrics.service';
+import { InMemoryBiSnapshotService } from './bi/snapshots/bi-snapshot.service';
+import { BiExportService } from './bi/exports/bi-export.service';
+import { InMemoryTimeEntryRepository } from './timesheet/core/time-entry.repository';
+import { registerTimesheetRoutes } from './timesheet/http/register-timesheet-routes';
+import { registerMobileRoutes } from './mobile/http/register-mobile-routes';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -1243,6 +1263,18 @@ async function ingestCnjPublications(triggeredBy: string) {
         capturePayload.occurredAt,
         capturePayload.rawText,
       ]);
+      const correlationId = computePublicationCorrelationId({
+        sourceType: 'cnj',
+        sourceReference: capturePayload.sourceReference,
+        processNumber: capturePayload.processNumber,
+        cpfCnpj: capturePayload.cpf ?? null,
+        oabNumber: null,
+        personName: capturePayload.personName ?? null,
+        tribunal: capturePayload.tribunal,
+        occurredAt: capturePayload.occurredAt,
+        evidenceText: capturePayload.rawText,
+        normalizedText: capturePayload.rawText,
+      });
 
       let capture = await prisma.publicationCapture.findUnique({
         where: { fingerprint },
@@ -1260,6 +1292,10 @@ async function ingestCnjPublications(triggeredBy: string) {
             personName: capturePayload.personName ?? null,
             rawText: capturePayload.rawText,
             normalizedText: capturePayload.rawText,
+            correlationId,
+            originStage: 'capturado',
+            pipelineStatus: 'capturado',
+            consolidationStatus: 'aguardando_consolidacao',
             status: 'atualizado',
             sourceJobId: sourceJob.id,
           },
@@ -1279,6 +1315,10 @@ async function ingestCnjPublications(triggeredBy: string) {
             personName: capturePayload.personName ?? null,
             metadataJson: { triggeredBy, source: 'cnj' },
             fingerprint,
+            correlationId,
+            originStage: 'capturado',
+            pipelineStatus: 'capturado',
+            consolidationStatus: 'aguardando_consolidacao',
             status: 'processado',
             sourceJobId: sourceJob.id,
           },
@@ -1333,6 +1373,11 @@ async function ingestCnjPublications(triggeredBy: string) {
           captureId: capture.id,
           processId: target.processId,
           clientId: target.clientId,
+          correlationId,
+          sourceType: 'cnj',
+          sourceReference: capturePayload.sourceReference,
+          originStage: 'normalizado',
+          pipelineStatus: 'normalizado',
           eventType: capturePayload.title.toLowerCase().includes('sentença') ? 'sentenca' : 'publicacao',
           eventAt: new Date(capturePayload.occurredAt),
           title: capturePayload.title,
@@ -1354,6 +1399,13 @@ async function ingestCnjPublications(triggeredBy: string) {
             cpf: capturePayload.cpf ?? null,
             personName: capturePayload.personName || 'Cliente identificado',
             source: 'publicacao_automatizada',
+            correlationId,
+            sourceType: 'cnj',
+            sourceReference: capturePayload.sourceReference,
+            originStage: 'gerou_crm',
+            captureId: capture.id,
+            eventId: event.id,
+            consolidationStatus: 'aguardando_consolidacao',
             status: 'acao_recomendada',
             summary: capturePayload.summary,
           },
@@ -1367,6 +1419,13 @@ async function ingestCnjPublications(triggeredBy: string) {
             cpf: capturePayload.cpf ?? null,
             personName: capturePayload.personName || 'Lead identificado',
             source: 'publicacao_automatizada',
+            correlationId,
+            sourceType: 'cnj',
+            sourceReference: capturePayload.sourceReference,
+            originStage: 'gerou_crm',
+            captureId: capture.id,
+            eventId: event.id,
+            consolidationStatus: 'aguardando_consolidacao',
             status: 'novo',
             summary: capturePayload.summary,
           },
@@ -1393,6 +1452,11 @@ async function ingestCnjPublications(triggeredBy: string) {
             queueType,
             suggestedReason: classification.suggestedReason,
             sourceLabel: 'CNJ',
+            correlationId,
+            sourceType: 'cnj',
+            sourceReference: capturePayload.sourceReference,
+            originStage: 'triado',
+            pipelineStatus: 'gerou_crm',
             aiConfidenceBand: classification.aiConfidenceBand,
             aiScoreRaw: classification.aiScoreRaw,
             crmLeadId: crmLeadId ?? existingTriage.crmLeadId,
@@ -1412,6 +1476,11 @@ async function ingestCnjPublications(triggeredBy: string) {
             status: 'pendente',
             suggestedAction,
             suggestedReason: classification.suggestedReason,
+            correlationId,
+            sourceType: 'cnj',
+            sourceReference: capturePayload.sourceReference,
+            originStage: 'triado',
+            pipelineStatus: 'gerou_crm',
             aiConfidenceBand: classification.aiConfidenceBand,
             aiScoreRaw: classification.aiScoreRaw,
             sourceLabel: 'CNJ',
@@ -1507,6 +1576,18 @@ async function ingestCpfPublications(triggeredBy: string) {
         capturePayload.occurredAt,
         capturePayload.rawText,
       ]);
+      const correlationId = computePublicationCorrelationId({
+        sourceType: 'cpf',
+        sourceReference: capturePayload.sourceReference,
+        processNumber: null,
+        cpfCnpj: capturePayload.cpf,
+        oabNumber: null,
+        personName: capturePayload.personName,
+        tribunal: capturePayload.tribunal,
+        occurredAt: capturePayload.occurredAt,
+        evidenceText: capturePayload.rawText,
+        normalizedText: capturePayload.rawText,
+      });
 
       let capture = await prisma.publicationCapture.findUnique({
         where: { fingerprint },
@@ -1523,6 +1604,10 @@ async function ingestCpfPublications(triggeredBy: string) {
             personName: capturePayload.personName,
             rawText: capturePayload.rawText,
             normalizedText: capturePayload.rawText,
+            correlationId,
+            originStage: 'capturado',
+            pipelineStatus: 'capturado',
+            consolidationStatus: 'aguardando_consolidacao',
             status: 'atualizado',
             sourceJobId: sourceJob.id,
           },
@@ -1541,6 +1626,10 @@ async function ingestCpfPublications(triggeredBy: string) {
             personName: capturePayload.personName,
             metadataJson: { triggeredBy, source: 'cpf' },
             fingerprint,
+            correlationId,
+            originStage: 'capturado',
+            pipelineStatus: 'capturado',
+            consolidationStatus: 'aguardando_consolidacao',
             status: 'processado',
             sourceJobId: sourceJob.id,
           },
@@ -1573,6 +1662,11 @@ async function ingestCpfPublications(triggeredBy: string) {
         data: {
           captureId: capture.id,
           clientId: matchedClient?.id ?? null,
+          correlationId,
+          sourceType: 'cpf',
+          sourceReference: capturePayload.sourceReference,
+          originStage: 'normalizado',
+          pipelineStatus: 'normalizado',
           eventType: 'publicacao',
           eventAt: new Date(capturePayload.occurredAt),
           title: capturePayload.title,
@@ -1594,6 +1688,13 @@ async function ingestCpfPublications(triggeredBy: string) {
             cpf: capturePayload.cpf,
             personName: capturePayload.personName,
             source: 'publicacao_automatizada',
+            correlationId,
+            sourceType: 'cpf',
+            sourceReference: capturePayload.sourceReference,
+            originStage: 'gerou_crm',
+            captureId: capture.id,
+            eventId: event.id,
+            consolidationStatus: 'aguardando_consolidacao',
             status: 'acao_recomendada',
             summary: capturePayload.summary,
           },
@@ -1605,6 +1706,13 @@ async function ingestCpfPublications(triggeredBy: string) {
             cpf: capturePayload.cpf,
             personName: capturePayload.personName,
             source: 'publicacao_automatizada',
+            correlationId,
+            sourceType: 'cpf',
+            sourceReference: capturePayload.sourceReference,
+            originStage: 'gerou_crm',
+            captureId: capture.id,
+            eventId: event.id,
+            consolidationStatus: 'aguardando_consolidacao',
             status: 'novo',
             summary: capturePayload.summary,
           },
@@ -1631,6 +1739,11 @@ async function ingestCpfPublications(triggeredBy: string) {
             queueType: classification.queueType,
             suggestedReason: classification.suggestedReason,
             sourceLabel: 'CPF',
+            correlationId,
+            sourceType: 'cpf',
+            sourceReference: capturePayload.sourceReference,
+            originStage: 'triado',
+            pipelineStatus: 'gerou_crm',
             aiConfidenceBand: classification.aiConfidenceBand,
             aiScoreRaw: classification.aiScoreRaw,
             crmLeadId: crmLeadId ?? existingTriage.crmLeadId,
@@ -1649,6 +1762,11 @@ async function ingestCpfPublications(triggeredBy: string) {
             status: 'pendente',
             suggestedAction: classification.suggestedAction,
             suggestedReason: classification.suggestedReason,
+            correlationId,
+            sourceType: 'cpf',
+            sourceReference: capturePayload.sourceReference,
+            originStage: 'triado',
+            pipelineStatus: 'gerou_crm',
             aiConfidenceBand: classification.aiConfidenceBand,
             aiScoreRaw: classification.aiScoreRaw,
             sourceLabel: 'CPF',
@@ -1751,6 +1869,18 @@ async function ingestDiarioPublications(triggeredBy: string) {
         capturePayload.occurredAt,
         capturePayload.rawText,
       ]);
+      const correlationId = computePublicationCorrelationId({
+        sourceType: 'diario_oficial',
+        sourceReference: capturePayload.sourceReference,
+        processNumber: capturePayload.processNumber,
+        cpfCnpj: capturePayload.cpf ?? null,
+        oabNumber: null,
+        personName: capturePayload.personName ?? null,
+        tribunal: capturePayload.tribunal,
+        occurredAt: capturePayload.occurredAt,
+        evidenceText: capturePayload.rawText,
+        normalizedText: capturePayload.rawText,
+      });
 
       let capture = await prisma.publicationCapture.findUnique({
         where: { fingerprint },
@@ -1768,6 +1898,10 @@ async function ingestDiarioPublications(triggeredBy: string) {
             personName: capturePayload.personName ?? null,
             rawText: capturePayload.rawText,
             normalizedText: capturePayload.rawText,
+            correlationId,
+            originStage: 'capturado',
+            pipelineStatus: 'capturado',
+            consolidationStatus: 'aguardando_consolidacao',
             status: 'atualizado',
             sourceJobId: sourceJob.id,
           },
@@ -1787,6 +1921,10 @@ async function ingestDiarioPublications(triggeredBy: string) {
             personName: capturePayload.personName ?? null,
             metadataJson: { triggeredBy, source: 'diario_oficial' },
             fingerprint,
+            correlationId,
+            originStage: 'capturado',
+            pipelineStatus: 'capturado',
+            consolidationStatus: 'aguardando_consolidacao',
             status: 'processado',
             sourceJobId: sourceJob.id,
           },
@@ -1841,6 +1979,11 @@ async function ingestDiarioPublications(triggeredBy: string) {
           captureId: capture.id,
           processId: target.processId,
           clientId: target.clientId,
+          correlationId,
+          sourceType: 'diario_oficial',
+          sourceReference: capturePayload.sourceReference,
+          originStage: 'normalizado',
+          pipelineStatus: 'normalizado',
           eventType: capturePayload.title.toLowerCase().includes('despacho') ? 'intimacao' : 'publicacao',
           eventAt: new Date(capturePayload.occurredAt),
           title: capturePayload.title,
@@ -1870,6 +2013,11 @@ async function ingestDiarioPublications(triggeredBy: string) {
             queueType,
             suggestedReason: classification.suggestedReason,
             sourceLabel: 'Diário Oficial',
+            correlationId,
+            sourceType: 'diario_oficial',
+            sourceReference: capturePayload.sourceReference,
+            originStage: 'triado',
+            pipelineStatus: 'triado',
             aiConfidenceBand: classification.aiConfidenceBand,
             aiScoreRaw: classification.aiScoreRaw,
           },
@@ -1885,6 +2033,11 @@ async function ingestDiarioPublications(triggeredBy: string) {
             status: 'pendente',
             suggestedAction,
             suggestedReason: classification.suggestedReason,
+            correlationId,
+            sourceType: 'diario_oficial',
+            sourceReference: capturePayload.sourceReference,
+            originStage: 'triado',
+            pipelineStatus: 'triado',
             aiConfidenceBand: classification.aiConfidenceBand,
             aiScoreRaw: classification.aiScoreRaw,
             sourceLabel: 'Diário Oficial',
@@ -1988,6 +2141,18 @@ async function ingestOabPublications(triggeredBy: string) {
         capturePayload.occurredAt,
         capturePayload.rawText,
       ]);
+      const correlationId = computePublicationCorrelationId({
+        sourceType: 'oab',
+        sourceReference: capturePayload.sourceReference,
+        processNumber: capturePayload.processNumber || null,
+        cpfCnpj: null,
+        oabNumber: capturePayload.oabNumber,
+        personName: capturePayload.personName ?? capturePayload.lawyerName ?? null,
+        tribunal: capturePayload.tribunal,
+        occurredAt: capturePayload.occurredAt,
+        evidenceText: capturePayload.rawText,
+        normalizedText: capturePayload.rawText,
+      });
 
       let capture = await prisma.publicationCapture.findUnique({
         where: { fingerprint },
@@ -2006,6 +2171,10 @@ async function ingestOabPublications(triggeredBy: string) {
             lawyerName: capturePayload.lawyerName ?? null,
             rawText: capturePayload.rawText,
             normalizedText: capturePayload.rawText,
+            correlationId,
+            originStage: 'capturado',
+            pipelineStatus: 'capturado',
+            consolidationStatus: 'aguardando_consolidacao',
             status: 'atualizado',
             sourceJobId: sourceJob.id,
           },
@@ -2026,6 +2195,10 @@ async function ingestOabPublications(triggeredBy: string) {
             lawyerName: capturePayload.lawyerName ?? null,
             metadataJson: { triggeredBy, source: 'oab' },
             fingerprint,
+            correlationId,
+            originStage: 'capturado',
+            pipelineStatus: 'capturado',
+            consolidationStatus: 'aguardando_consolidacao',
             status: 'processado',
             sourceJobId: sourceJob.id,
           },
@@ -2080,6 +2253,11 @@ async function ingestOabPublications(triggeredBy: string) {
           captureId: capture.id,
           processId: target.processId,
           clientId: target.clientId,
+          correlationId,
+          sourceType: 'oab',
+          sourceReference: capturePayload.sourceReference,
+          originStage: 'normalizado',
+          pipelineStatus: 'normalizado',
           eventType: capturePayload.title.toLowerCase().includes('intimação') ? 'intimacao' : 'publicacao',
           eventAt: new Date(capturePayload.occurredAt),
           title: capturePayload.title,
@@ -2109,6 +2287,11 @@ async function ingestOabPublications(triggeredBy: string) {
             queueType,
             suggestedReason: classification.suggestedReason,
             sourceLabel: 'OAB',
+            correlationId,
+            sourceType: 'oab',
+            sourceReference: capturePayload.sourceReference,
+            originStage: 'triado',
+            pipelineStatus: 'triado',
             aiConfidenceBand: classification.aiConfidenceBand,
             aiScoreRaw: classification.aiScoreRaw,
           },
@@ -2124,6 +2307,11 @@ async function ingestOabPublications(triggeredBy: string) {
             status: 'pendente',
             suggestedAction,
             suggestedReason: classification.suggestedReason,
+            correlationId,
+            sourceType: 'oab',
+            sourceReference: capturePayload.sourceReference,
+            originStage: 'triado',
+            pipelineStatus: 'triado',
             aiConfidenceBand: classification.aiConfidenceBand,
             aiScoreRaw: classification.aiScoreRaw,
             sourceLabel: 'OAB',
@@ -2804,11 +2992,27 @@ async function seedData() {
         : index === 1
           ? `Intimação para manifestação no processo ${process.processNumber} com necessidade de anexar documentos.`
           : `Movimentação informativa no processo ${process.processNumber} sem prazo explícito.`;
+      const correlationId = computePublicationCorrelationId({
+        sourceType: index === 2 ? 'diario_oficial' : 'cnj',
+        sourceReference: `SEED-TRIAGE-${process.id}-${index + 1}`,
+        processNumber: process.processNumber,
+        cpfCnpj: process.clientRecord?.cpfCnpj ?? null,
+        oabNumber: null,
+        personName: process.client,
+        tribunal: index === 0 ? 'TJSP' : index === 1 ? 'TRT-2' : 'TJRJ',
+        occurredAt,
+        evidenceText: rawText,
+        normalizedText: rawText,
+      });
 
       const capture = await prisma.publicationCapture.create({
         data: {
           sourceType: index === 2 ? 'diario_oficial' : 'cnj',
           sourceReference: `SEED-TRIAGE-${process.id}-${index + 1}`,
+          correlationId,
+          originStage: 'capturado',
+          pipelineStatus: 'capturado',
+          consolidationStatus: process.publications[0]?.id ? 'consolidado' : 'aguardando_consolidacao',
           occurredAt,
           rawText,
           normalizedText: rawText,
@@ -2834,6 +3038,11 @@ async function seedData() {
           processId: process.id,
           clientId: process.clientId ?? process.clientRecord?.id ?? null,
           publicationId: process.publications[0]?.id ?? null,
+          correlationId,
+          sourceType: index === 2 ? 'diario_oficial' : 'cnj',
+          sourceReference: `SEED-TRIAGE-${process.id}-${index + 1}`,
+          originStage: process.publications[0]?.id ? 'consolidado' : 'normalizado',
+          pipelineStatus: process.publications[0]?.id ? 'consolidado' : 'normalizado',
           eventType: index === 0 ? 'sentenca' : index === 1 ? 'intimacao' : 'movimentacao',
           eventAt: occurredAt,
           title: index === 0 ? 'Sentença publicada' : index === 1 ? 'Intimação para manifestação' : 'Movimentação informativa',
@@ -2854,6 +3063,12 @@ async function seedData() {
           queueType: index === 2 ? 'normal' : 'critica',
           status: index === 1 ? 'em_revisao_manual' : 'pendente',
           suggestedAction: index === 0 ? 'criar_prazo' : 'criar_tarefa',
+          correlationId,
+          sourceType: index === 2 ? 'diario_oficial' : 'cnj',
+          sourceReference: `SEED-TRIAGE-${process.id}-${index + 1}`,
+          originStage: 'triado',
+          pipelineStatus: 'triado',
+          publicationId: process.publications[0]?.id ?? null,
           suggestedReason: index === 0
             ? 'Sentença com indício de prazo recursal e necessidade de triagem imediata.'
             : index === 1
@@ -2866,11 +3081,29 @@ async function seedData() {
       });
     }
 
+    const prospectOccurredAt = new Date();
+    const prospectCorrelationId = computePublicationCorrelationId({
+      sourceType: 'cpf',
+      sourceReference: 'SEED-TRIAGE-CPF-1',
+      processNumber: null,
+      cpfCnpj: '98765432100',
+      oabNumber: null,
+      personName: 'Contato Prospectado',
+      tribunal: 'TJMG',
+      occurredAt: prospectOccurredAt,
+      evidenceText: 'Publicação associada ao CPF 98765432100 sem processo ativo na carteira.',
+      normalizedText: 'Publicação associada ao CPF 98765432100 sem processo ativo na carteira.',
+    });
+
     const prospectCapture = await prisma.publicationCapture.create({
       data: {
         sourceType: 'cpf',
         sourceReference: 'SEED-TRIAGE-CPF-1',
-        occurredAt: new Date(),
+        correlationId: prospectCorrelationId,
+        originStage: 'capturado',
+        pipelineStatus: 'capturado',
+        consolidationStatus: 'aguardando_consolidacao',
+        occurredAt: prospectOccurredAt,
         rawText: 'Publicação associada ao CPF 98765432100 sem processo ativo na carteira.',
         normalizedText: 'Publicação associada ao CPF 98765432100 sem processo ativo na carteira.',
         tribunal: 'TJMG',
@@ -2888,6 +3121,12 @@ async function seedData() {
         cpf: '98765432100',
         personName: 'Contato Prospectado',
         source: 'publicacao_automatizada',
+        correlationId: prospectCorrelationId,
+        sourceType: 'cpf',
+        sourceReference: 'SEED-TRIAGE-CPF-1',
+        originStage: 'gerou_crm',
+        captureId: prospectCapture.id,
+        consolidationStatus: 'aguardando_consolidacao',
         status: 'novo',
         summary: 'Lead criado a partir de publicação capturada por CPF sem cliente prévio.',
       },
@@ -2900,6 +3139,11 @@ async function seedData() {
         queueType: 'normal',
         status: 'pendente',
         suggestedAction: 'criar_lead',
+        correlationId: prospectCorrelationId,
+        sourceType: 'cpf',
+        sourceReference: 'SEED-TRIAGE-CPF-1',
+        originStage: 'triado',
+        pipelineStatus: 'gerou_crm',
         suggestedReason: 'CPF identificado em publicação sem cliente ou processo ativo associado.',
         aiConfidenceBand: 'media',
         aiScoreRaw: 0.71,
@@ -3151,6 +3395,373 @@ function canReadPublication(user: UserToken, publication: {
     publication.createdBy === getResponsibleLabel(user.email) ||
     (publication.process ? canReadProcess(user, publication.process) : false)
   );
+}
+
+function adaptCaptureContract(row: any) {
+  return adaptLegacyPublicationCaptureRow({
+    id: row.id,
+    correlationId: row.correlationId ?? null,
+    sourceType: row.sourceType,
+    sourceReference: row.sourceReference,
+    originStage: row.originStage ?? null,
+    pipelineStatus: row.pipelineStatus ?? row.status ?? null,
+    consolidationStatus: row.consolidationStatus ?? null,
+    capturedAt: row.capturedAt,
+    occurredAt: row.occurredAt,
+    rawText: row.rawText ?? null,
+    normalizedText: row.normalizedText ?? null,
+    tribunal: row.tribunal ?? null,
+    processNumber: row.processNumber ?? null,
+    cpf: row.cpf ?? null,
+    oabNumber: row.oabNumber ?? null,
+    personName: row.personName ?? null,
+    metadataJson: row.metadataJson ?? {},
+  });
+}
+
+function adaptEventContract(row: any) {
+  if (!row) return null;
+
+  return adaptLegacyPublicationEventRow({
+    id: row.id,
+    captureId: row.captureId,
+    publicationId: row.publicationId ?? null,
+    correlationId: row.correlationId ?? null,
+    sourceType: row.sourceType ?? row.capture?.sourceType ?? null,
+    sourceReference: row.sourceReference ?? row.capture?.sourceReference ?? null,
+    originStage: row.originStage ?? null,
+    pipelineStatus: row.pipelineStatus ?? null,
+    title: row.title,
+    summary: row.summary,
+    fullText: row.fullText,
+    riskLevel: row.riskLevel ?? null,
+    requiresAction: row.requiresAction ?? false,
+    eventAt: row.eventAt,
+  });
+}
+
+function adaptPublicationSnapshot(row: any) {
+  if (!row) return null;
+
+  return inferPublicationSnapshot({
+    id: row.id,
+    correlationId: row.correlationId ?? null,
+    sourceType: row.sourceType ?? null,
+    sourceReference: row.sourceReference ?? null,
+    originStage: row.originStage ?? null,
+    consolidationStatus: row.consolidationStatus ?? null,
+    status: row.status ?? null,
+    summary: row.summary,
+    publishedAt: row.publishedAt,
+    processNumber: row.process?.processNumber ?? null,
+  });
+}
+
+async function loadOriginDerivations(input: {
+  correlationId?: string | null;
+  captureId?: number | null;
+  publicationId?: number | null;
+}) {
+  const where = input.correlationId
+    ? { OR: [{ correlationId: input.correlationId }, ...(input.captureId ? [{ captureId: input.captureId }] : []), ...(input.publicationId ? [{ publicationId: input.publicationId }] : [])] }
+    : input.captureId
+      ? { captureId: input.captureId }
+      : input.publicationId
+        ? { publicationId: input.publicationId }
+        : null;
+
+  if (!where) {
+    return {
+      triageItems: [],
+      crmLead: null,
+      crmOpportunity: null,
+      deadline: null,
+      task: null,
+    };
+  }
+
+  const triageItems = await prisma.triageItem.findMany({
+    where,
+    include: {
+      capture: true,
+      event: true,
+      crmLead: true,
+      crmOpportunity: true,
+      decisions: { orderBy: { decidedAt: 'desc' } },
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  const fallbackLeadId = triageItems.find((item: any) => item.crmLeadId)?.crmLeadId ?? null;
+  const fallbackOpportunityId = triageItems.find((item: any) => item.crmOpportunityId)?.crmOpportunityId ?? null;
+  const crmLead = fallbackLeadId
+    ? await prisma.crmLead.findUnique({ where: { id: fallbackLeadId } })
+    : await prisma.crmLead.findFirst({ where: input.correlationId ? { correlationId: input.correlationId } : undefined });
+  const crmOpportunity = fallbackOpportunityId
+    ? await prisma.crmOpportunity.findUnique({ where: { id: fallbackOpportunityId } })
+    : await prisma.crmOpportunity.findFirst({ where: input.correlationId ? { correlationId: input.correlationId } : undefined });
+  const deadline = await prisma.prazo.findFirst({
+    where: input.correlationId
+      ? { OR: [{ correlationId: input.correlationId }, ...(input.publicationId ? [{ publicationId: input.publicationId }] : [])] }
+      : input.publicationId
+        ? { publicationId: input.publicationId }
+        : undefined,
+    orderBy: { createdAt: 'asc' },
+  });
+  const task = await prisma.task.findFirst({
+    where: input.correlationId ? { correlationId: input.correlationId } : undefined,
+    orderBy: { createdAt: 'asc' },
+  });
+
+  return {
+    triageItems,
+    crmLead,
+    crmOpportunity,
+    deadline,
+    task,
+  };
+}
+
+async function buildOriginEvidenceFromCaptureRow(captureRow: any) {
+  const capture = adaptCaptureContract(captureRow);
+  const eventRow = await prisma.publicationEvent.findFirst({
+    where: { captureId: captureRow.id },
+    include: { capture: true, publication: { include: { process: true } } },
+    orderBy: [{ publicationId: 'desc' }, { eventAt: 'asc' }],
+  });
+  const event = adaptEventContract(eventRow);
+  const publication = adaptPublicationSnapshot(eventRow?.publication ?? null);
+  const derivations = await loadOriginDerivations({
+    correlationId: capture.correlationId,
+    captureId: captureRow.id,
+    publicationId: eventRow?.publicationId ?? null,
+  });
+
+  const assembly = buildPipelineAssemblyFromLegacyRows({
+    capture,
+    event,
+    publication,
+    triageItem: derivations.triageItems[0]
+      ? {
+          id: derivations.triageItems[0].id,
+          status: derivations.triageItems[0].status ?? null,
+          queueType: derivations.triageItems[0].queueType ?? null,
+          suggestedAction: derivations.triageItems[0].suggestedAction ?? null,
+          createdAt: derivations.triageItems[0].createdAt ?? null,
+        }
+      : null,
+    crmLead: derivations.crmLead
+      ? {
+          id: derivations.crmLead.id,
+          status: derivations.crmLead.status ?? null,
+          summary: derivations.crmLead.summary ?? null,
+          createdAt: derivations.crmLead.createdAt ?? null,
+        }
+      : null,
+    crmOpportunity: derivations.crmOpportunity
+      ? {
+          id: derivations.crmOpportunity.id,
+          status: derivations.crmOpportunity.status ?? null,
+          summary: derivations.crmOpportunity.summary ?? null,
+          createdAt: derivations.crmOpportunity.createdAt ?? null,
+        }
+      : null,
+    deadline: derivations.deadline
+      ? {
+          id: derivations.deadline.id,
+          status: derivations.deadline.status ?? null,
+          title: derivations.deadline.title ?? null,
+          notes: derivations.deadline.notes ?? null,
+          createdAt: derivations.deadline.createdAt ?? null,
+        }
+      : null,
+    task: derivations.task
+      ? {
+          id: derivations.task.id,
+          status: derivations.task.status ?? null,
+          title: derivations.task.title ?? null,
+          description: derivations.task.description ?? null,
+          createdAt: derivations.task.createdAt ?? null,
+        }
+      : null,
+  });
+
+  return {
+    capture,
+    event,
+    publication,
+    derivations,
+    assembly,
+    evidence: buildCaptureEvidenceFetch(assembly),
+    timeline: buildPublicationPipelineTimeline(assembly),
+  };
+}
+
+async function findCaptureRowByCorrelationId(correlationId: string) {
+  const directMatch = await prisma.publicationCapture.findFirst({
+    where: { correlationId },
+  });
+
+  if (directMatch) return directMatch;
+
+  const fallbackRows = await prisma.publicationCapture.findMany({
+    orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+    take: 500,
+  });
+
+  return fallbackRows.find((row: any) => adaptCaptureContract(row).correlationId === correlationId) ?? null;
+}
+
+async function backfillPublicationOriginPersistence() {
+  const summary = {
+    capturesUpdated: 0,
+    eventsUpdated: 0,
+    publicationsUpdated: 0,
+    triageUpdated: 0,
+    crmLeadsUpdated: 0,
+    crmOpportunitiesUpdated: 0,
+    deadlinesUpdated: 0,
+    tasksUpdated: 0,
+  };
+
+  const captures = await prisma.publicationCapture.findMany({
+    orderBy: { id: 'asc' },
+  });
+
+  for (const captureRow of captures) {
+    const capture = adaptCaptureContract(captureRow);
+    const capturePatch: Record<string, unknown> = {};
+    if (captureRow.correlationId !== capture.correlationId) capturePatch.correlationId = capture.correlationId;
+    if (captureRow.originStage !== capture.originStage) capturePatch.originStage = capture.originStage;
+    if (captureRow.pipelineStatus !== capture.pipelineStatus) capturePatch.pipelineStatus = capture.pipelineStatus;
+    if (captureRow.consolidationStatus !== capture.consolidationStatus) capturePatch.consolidationStatus = capture.consolidationStatus;
+    if (Object.keys(capturePatch).length > 0) {
+      await prisma.publicationCapture.update({ where: { id: captureRow.id }, data: capturePatch });
+      summary.capturesUpdated += 1;
+    }
+
+    const eventRows = await prisma.publicationEvent.findMany({
+      where: { captureId: captureRow.id },
+      include: {
+        publication: {
+          include: {
+            process: true,
+            publicationEvents: { include: { capture: true }, orderBy: { eventAt: 'asc' } },
+          },
+        },
+      },
+      orderBy: { eventAt: 'asc' },
+    });
+
+    for (const eventRow of eventRows) {
+      const event = adaptEventContract({
+        ...eventRow,
+        capture: captureRow,
+      });
+      if (!event) continue;
+      const eventPatch: Record<string, unknown> = {};
+      if (eventRow.correlationId !== event.correlationId) eventPatch.correlationId = event.correlationId;
+      if (eventRow.sourceType !== event.sourceType) eventPatch.sourceType = event.sourceType;
+      if (eventRow.sourceReference !== event.sourceReference) eventPatch.sourceReference = event.sourceReference;
+      if (eventRow.originStage !== event.originStage) eventPatch.originStage = event.originStage;
+      if (eventRow.pipelineStatus !== event.pipelineStatus) eventPatch.pipelineStatus = event.pipelineStatus;
+      if (Object.keys(eventPatch).length > 0) {
+        await prisma.publicationEvent.update({ where: { id: eventRow.id }, data: eventPatch });
+        summary.eventsUpdated += 1;
+      }
+
+      if (eventRow.publication) {
+        const publicationSnapshot = adaptPublicationSnapshot(eventRow.publication);
+        const publicationPatch: Record<string, unknown> = {};
+        if (eventRow.publication.correlationId !== publicationSnapshot?.correlationId) publicationPatch.correlationId = publicationSnapshot?.correlationId;
+        if (eventRow.publication.sourceType !== (publicationSnapshot?.sourceType ?? null)) publicationPatch.sourceType = publicationSnapshot?.sourceType ?? null;
+        if (eventRow.publication.sourceReference !== (publicationSnapshot?.sourceReference ?? null)) publicationPatch.sourceReference = publicationSnapshot?.sourceReference ?? null;
+        if (eventRow.publication.originStage !== publicationSnapshot?.originStage) publicationPatch.originStage = publicationSnapshot?.originStage;
+        if (eventRow.publication.consolidationStatus !== publicationSnapshot?.consolidationStatus) publicationPatch.consolidationStatus = publicationSnapshot?.consolidationStatus;
+        if (Object.keys(publicationPatch).length > 0) {
+          await prisma.publication.update({ where: { id: eventRow.publication.id }, data: publicationPatch });
+          summary.publicationsUpdated += 1;
+        }
+      }
+    }
+
+    const derivations = await loadOriginDerivations({
+      correlationId: capture.correlationId,
+      captureId: captureRow.id,
+      publicationId: eventRows.find((item: any) => item.publicationId)?.publicationId ?? null,
+    });
+
+    for (const triageRow of derivations.triageItems) {
+      const triagePatch: Record<string, unknown> = {};
+      if (triageRow.correlationId !== capture.correlationId) triagePatch.correlationId = capture.correlationId;
+      if (triageRow.sourceType !== capture.sourceType) triagePatch.sourceType = capture.sourceType;
+      if (triageRow.sourceReference !== capture.sourceReference) triagePatch.sourceReference = capture.sourceReference;
+      if (triageRow.originStage !== 'triado') triagePatch.originStage = 'triado';
+      if (!triageRow.pipelineStatus || triageRow.pipelineStatus === 'capturado' || triageRow.pipelineStatus === 'normalizado') {
+        triagePatch.pipelineStatus =
+          triageRow.crmLeadId || triageRow.crmOpportunityId ? 'gerou_crm'
+          : triageRow.status === 'descartado' ? 'descartado'
+          : 'triado';
+      }
+      if (triageRow.publicationId !== (triageRow.event?.publicationId ?? null)) triagePatch.publicationId = triageRow.event?.publicationId ?? null;
+      if (Object.keys(triagePatch).length > 0) {
+        await prisma.triageItem.update({ where: { id: triageRow.id }, data: triagePatch });
+        summary.triageUpdated += 1;
+      }
+    }
+
+    if (derivations.crmLead) {
+      const leadPatch: Record<string, unknown> = {};
+      if (derivations.crmLead.correlationId !== capture.correlationId) leadPatch.correlationId = capture.correlationId;
+      if (derivations.crmLead.sourceType !== capture.sourceType) leadPatch.sourceType = capture.sourceType;
+      if (derivations.crmLead.sourceReference !== capture.sourceReference) leadPatch.sourceReference = capture.sourceReference;
+      if (derivations.crmLead.originStage !== 'gerou_crm') leadPatch.originStage = 'gerou_crm';
+      if (derivations.crmLead.captureId !== capture.id) leadPatch.captureId = capture.id;
+      if (Object.keys(leadPatch).length > 0) {
+        await prisma.crmLead.update({ where: { id: derivations.crmLead.id }, data: leadPatch });
+        summary.crmLeadsUpdated += 1;
+      }
+    }
+
+    if (derivations.crmOpportunity) {
+      const opportunityPatch: Record<string, unknown> = {};
+      if (derivations.crmOpportunity.correlationId !== capture.correlationId) opportunityPatch.correlationId = capture.correlationId;
+      if (derivations.crmOpportunity.sourceType !== capture.sourceType) opportunityPatch.sourceType = capture.sourceType;
+      if (derivations.crmOpportunity.sourceReference !== capture.sourceReference) opportunityPatch.sourceReference = capture.sourceReference;
+      if (derivations.crmOpportunity.originStage !== 'gerou_crm') opportunityPatch.originStage = 'gerou_crm';
+      if (derivations.crmOpportunity.captureId !== capture.id) opportunityPatch.captureId = capture.id;
+      if (Object.keys(opportunityPatch).length > 0) {
+        await prisma.crmOpportunity.update({ where: { id: derivations.crmOpportunity.id }, data: opportunityPatch });
+        summary.crmOpportunitiesUpdated += 1;
+      }
+    }
+
+    if (derivations.deadline) {
+      const deadlinePatch: Record<string, unknown> = {};
+      if (derivations.deadline.correlationId !== capture.correlationId) deadlinePatch.correlationId = capture.correlationId;
+      if (derivations.deadline.sourceType !== capture.sourceType) deadlinePatch.sourceType = capture.sourceType;
+      if (derivations.deadline.sourceReference !== capture.sourceReference) deadlinePatch.sourceReference = capture.sourceReference;
+      if (derivations.deadline.originStage !== 'gerou_prazo') deadlinePatch.originStage = 'gerou_prazo';
+      if (Object.keys(deadlinePatch).length > 0) {
+        await prisma.prazo.update({ where: { id: derivations.deadline.id }, data: deadlinePatch });
+        summary.deadlinesUpdated += 1;
+      }
+    }
+
+    if (derivations.task) {
+      const taskPatch: Record<string, unknown> = {};
+      if (derivations.task.correlationId !== capture.correlationId) taskPatch.correlationId = capture.correlationId;
+      if (derivations.task.sourceType !== capture.sourceType) taskPatch.sourceType = capture.sourceType;
+      if (derivations.task.sourceReference !== capture.sourceReference) taskPatch.sourceReference = capture.sourceReference;
+      if (derivations.task.originStage !== 'gerou_tarefa') taskPatch.originStage = 'gerou_tarefa';
+      if (Object.keys(taskPatch).length > 0) {
+        await prisma.task.update({ where: { id: derivations.task.id }, data: taskPatch });
+        summary.tasksUpdated += 1;
+      }
+    }
+  }
+
+  return summary;
 }
 
 function canReadTemplate(user: UserToken, template: { createdBy?: string | null; official?: boolean | null }) {
@@ -4474,7 +5085,13 @@ app.get('/crm/leads', async (req, res) => {
   const leads = await prisma.crmLead.findMany({
     include: {
       clientRecord: true,
-      triageItems: true,
+      triageItems: {
+        include: {
+          capture: true,
+          event: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      },
       contactEvents: { orderBy: { createdAt: 'desc' } },
     },
     orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
@@ -4491,7 +5108,13 @@ app.get('/crm/opportunities', async (req, res) => {
   const opportunities = await prisma.crmOpportunity.findMany({
     include: {
       clientRecord: true,
-      triageItems: true,
+      triageItems: {
+        include: {
+          capture: true,
+          event: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      },
       contactEvents: { orderBy: { createdAt: 'desc' } },
     },
     orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
@@ -5021,6 +5644,137 @@ app.post('/crm/prospects/signal', async (req, res) => {
   }
 });
 
+app.get('/publication-captures', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+  const sourceType = typeof req.query.sourceType === 'string' ? req.query.sourceType.trim() : '';
+  const pipelineStatus = typeof req.query.pipelineStatus === 'string' ? req.query.pipelineStatus.trim() : '';
+  const consolidationStatus = typeof req.query.consolidationStatus === 'string' ? req.query.consolidationStatus.trim() : '';
+
+  const captures = await prisma.publicationCapture.findMany({
+    where: {
+      ...(decoded.role === 'ADM' || decoded.role === 'FIN'
+        ? {}
+        : {
+            OR: [
+              { publicationEvents: { some: { process: { ownerId: decoded.sub } } } },
+              { triageItems: { some: { process: { ownerId: decoded.sub } } } },
+            ],
+          }),
+      ...(sourceType ? { sourceType } : {}),
+      ...(pipelineStatus ? { pipelineStatus } : {}),
+      ...(consolidationStatus ? { consolidationStatus } : {}),
+      ...(search
+        ? {
+            OR: [
+              { sourceReference: { contains: search, mode: 'insensitive' } },
+              { normalizedText: { contains: search, mode: 'insensitive' } },
+              { processNumber: { contains: search, mode: 'insensitive' } },
+              { personName: { contains: search, mode: 'insensitive' } },
+              { cpf: { contains: search, mode: 'insensitive' } },
+              { oabNumber: { contains: search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    },
+    orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }],
+  });
+
+  const payload = await Promise.all(
+    captures.map(async (captureRow: any) => {
+      const origin = await buildOriginEvidenceFromCaptureRow(captureRow);
+      return {
+        ...origin.capture,
+        timeline: origin.timeline,
+        derivedActions: origin.evidence.derivedActions,
+      };
+    }),
+  );
+
+  res.json(payload);
+});
+
+app.get('/publication-captures/:id', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const captureRow = await prisma.publicationCapture.findUnique({
+    where: { id: Number(req.params.id) },
+  });
+
+  if (!captureRow) return res.status(404).send({ message: 'Captura não encontrada' });
+
+  const origin = await buildOriginEvidenceFromCaptureRow(captureRow);
+  res.json({
+    ...origin.capture,
+    evidence: origin.evidence,
+    originReference: buildCrmOriginReference({
+      capture: origin.capture,
+      event: origin.event,
+      publication: origin.publication,
+    }),
+    triageOriginReference: buildTriageOriginReference({
+      capture: origin.capture,
+      event: origin.event,
+      publication: origin.publication,
+    }),
+  });
+});
+
+app.get('/publication-captures/:id/evidence', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const captureRow = await prisma.publicationCapture.findUnique({
+    where: { id: Number(req.params.id) },
+  });
+
+  if (!captureRow) return res.status(404).send({ message: 'Captura não encontrada' });
+
+  const origin = await buildOriginEvidenceFromCaptureRow(captureRow);
+  res.json(origin.evidence);
+});
+
+app.get('/publication-pipeline/:correlationId', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const captureRow = await findCaptureRowByCorrelationId(String(req.params.correlationId));
+
+  if (!captureRow) return res.status(404).send({ message: 'Pipeline não encontrado para a correlação informada' });
+
+  const origin = await buildOriginEvidenceFromCaptureRow(captureRow);
+  res.json(origin.timeline);
+});
+
+app.get('/publication-pipeline/:correlationId/actions', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const captureRow = await findCaptureRowByCorrelationId(String(req.params.correlationId));
+
+  if (!captureRow) return res.status(404).send({ message: 'Ações não encontradas para a correlação informada' });
+
+  const origin = await buildOriginEvidenceFromCaptureRow(captureRow);
+  res.json(origin.evidence.derivedActions);
+});
+
+app.post('/publication-origin/backfill', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+  if (decoded.role !== 'ADM') return res.status(403).send({ message: 'Acesso negado' });
+
+  const summary = await backfillPublicationOriginPersistence();
+  res.json({
+    mode: 'backfill',
+    status: 'success',
+    executedAt: new Date().toISOString(),
+    summary,
+  });
+});
+
 app.get('/publications', async (req, res) => {
   const decoded = getUserFromReq(req);
   if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
@@ -5037,6 +5791,11 @@ app.get('/publications', async (req, res) => {
         },
       },
       clientRecord: true,
+      publicationEvents: {
+        include: { capture: true },
+        orderBy: { eventAt: 'asc' },
+        take: 1,
+      },
     },
     orderBy: [
       { publishedAt: 'desc' },
@@ -5061,6 +5820,10 @@ app.get('/publications/:id', async (req, res) => {
         },
       },
       clientRecord: true,
+      publicationEvents: {
+        include: { capture: true },
+        orderBy: { eventAt: 'asc' },
+      },
     },
   });
 
@@ -5165,6 +5928,20 @@ app.post('/publications', async (req, res) => {
     return res.status(400).send({ message: 'Dados incompletos para a publicação' });
   }
 
+  const manualSourceReference = `manual-publication:${access.process.id}:${dataPublicacao}:${Date.now()}`;
+  const manualCorrelationId = computePublicationCorrelationId({
+    sourceType: 'manual',
+    sourceReference: manualSourceReference,
+    processNumber: access.process.processNumber ?? null,
+    cpfCnpj: access.process.clientRecord?.cpfCnpj ?? null,
+    oabNumber: null,
+    personName: access.process.clientRecord?.name ?? access.process.client ?? null,
+    tribunal,
+    occurredAt: `${dataPublicacao}T00:00:00.000Z`,
+    evidenceText: textoRelevante,
+    normalizedText: resumo,
+  });
+
   const created = await prisma.publication.create({
     data: {
       processId: access.process.id,
@@ -5174,6 +5951,11 @@ app.post('/publications', async (req, res) => {
       impact: impacto || 'medio',
       tribunal: tribunal.trim(),
       origin: origem.trim(),
+      correlationId: manualCorrelationId,
+      sourceType: 'manual',
+      sourceReference: manualSourceReference,
+      originStage: 'consolidado',
+      consolidationStatus: 'consolidado',
       publishedAt: new Date(`${dataPublicacao}T00:00:00`),
       summary: resumo.trim(),
       relevantText: textoRelevante.trim(),
@@ -5298,6 +6080,10 @@ app.post('/publications/:id/create-deadline', async (req, res) => {
             legalArea: input.processPhase,
             notes: input.description,
             publicationId: input.publicationId,
+            correlationId: publication.correlationId ?? `publication:${publication.id}`,
+            sourceType: publication.sourceType ?? 'publication',
+            sourceReference: publication.sourceReference ?? `publication:${publication.id}`,
+            originStage: 'gerou_prazo',
             agendaSyncStatus: input.agendaSyncStatus,
             createdBy: input.createdBy,
           },
@@ -6934,6 +7720,24 @@ app.post('/triage/:id/decision', async (req, res) => {
         let generatedDeadlineId: number | null = null;
         let generatedLeadId: number | null = null;
         let generatedOpportunityId: number | null = null;
+        const originCorrelationId =
+          triageItem.correlationId
+          ?? triageItem.capture?.correlationId
+          ?? computePublicationCorrelationId({
+            sourceType: triageItem.capture?.sourceType ?? triageItem.sourceLabel ?? 'other',
+            sourceReference: triageItem.capture?.sourceReference ?? `triage:${triageItem.id}`,
+            processNumber: triageItem.capture?.processNumber ?? null,
+            cpfCnpj: triageItem.capture?.cpf ?? null,
+            oabNumber: null,
+            personName: triageItem.capture?.personName ?? null,
+            tribunal: triageItem.capture?.tribunal ?? null,
+            occurredAt: triageItem.capture?.occurredAt ?? triageItem.createdAt,
+            evidenceText: triageItem.capture?.normalizedText ?? triageItem.suggestedReason,
+            normalizedText: triageItem.capture?.normalizedText ?? triageItem.suggestedReason,
+          });
+        const originSourceType = triageItem.sourceType ?? triageItem.capture?.sourceType ?? triageItem.sourceLabel ?? 'other';
+        const originSourceReference = triageItem.sourceReference ?? triageItem.capture?.sourceReference ?? `triage:${triageItem.id}`;
+        const originPublicationId = triageItem.publicationId ?? triageItem.event?.publicationId ?? null;
         const plannedDecision = planTriageDecision({
           triageItem,
           decision: normalizedDecisionInput,
@@ -6955,6 +7759,11 @@ app.post('/triage/:id/decision', async (req, res) => {
                 responsible: actor,
                 legalArea: triageItem.process?.phase || null,
                 notes: plannedDecision.automation.deadline.notes || triageItem.suggestedReason,
+                correlationId: originCorrelationId,
+                sourceType: originSourceType,
+                sourceReference: originSourceReference,
+                originStage: 'gerou_prazo',
+                publicationId: originPublicationId,
                 createdBy: actor,
               },
             });
@@ -6977,6 +7786,10 @@ app.post('/triage/:id/decision', async (req, res) => {
                 linkedToDeadline: true,
                 linkedToPublication: true,
                 immediateAction: true,
+                correlationId: originCorrelationId,
+                sourceType: originSourceType,
+                sourceReference: originSourceReference,
+                originStage: 'gerou_tarefa',
               },
             });
             generatedTaskId = task.id;
@@ -6997,6 +7810,10 @@ app.post('/triage/:id/decision', async (req, res) => {
                 notes: triageItem.capture.normalizedText,
                 linkedToPublication: true,
                 immediateAction: triageItem.queueType === 'critica',
+                correlationId: originCorrelationId,
+                sourceType: originSourceType,
+                sourceReference: originSourceReference,
+                originStage: 'gerou_tarefa',
               },
             });
             generatedTaskId = task.id;
@@ -7012,6 +7829,14 @@ app.post('/triage/:id/decision', async (req, res) => {
                     ? crmPersonName.trim()
                     : triageItem.clientRecord?.name || triageItem.capture.personName || 'Cliente identificado',
                   source: 'publicacao_automatizada',
+                  correlationId: originCorrelationId,
+                  sourceType: originSourceType,
+                  sourceReference: originSourceReference,
+                  originStage: 'gerou_crm',
+                  captureId: triageItem.captureId,
+                  eventId: triageItem.eventId ?? null,
+                  publicationId: originPublicationId,
+                  consolidationStatus: originPublicationId ? 'consolidado' : 'aguardando_consolidacao',
                   status: 'acao_recomendada',
                   summary: typeof crmSummary === 'string' && crmSummary.trim() ? crmSummary.trim() : triageItem.suggestedReason,
                 },
@@ -7030,6 +7855,14 @@ app.post('/triage/:id/decision', async (req, res) => {
                     ? crmPersonName.trim()
                     : triageItem.capture.personName || 'Lead identificado',
                   source: 'publicacao_automatizada',
+                  correlationId: originCorrelationId,
+                  sourceType: originSourceType,
+                  sourceReference: originSourceReference,
+                  originStage: 'gerou_crm',
+                  captureId: triageItem.captureId,
+                  eventId: triageItem.eventId ?? null,
+                  publicationId: originPublicationId,
+                  consolidationStatus: originPublicationId ? 'consolidado' : 'aguardando_consolidacao',
                   status: 'novo',
                   summary: typeof crmSummary === 'string' && crmSummary.trim() ? crmSummary.trim() : triageItem.suggestedReason,
                 },
@@ -7066,6 +7899,17 @@ app.post('/triage/:id/decision', async (req, res) => {
             assignedQueue: plannedDecision.itemUpdate.assignedQueue,
             crmLeadId: generatedLeadId ?? triageItem.crmLeadId,
             crmOpportunityId: generatedOpportunityId ?? triageItem.crmOpportunityId,
+            correlationId: originCorrelationId,
+            sourceType: originSourceType,
+            sourceReference: originSourceReference,
+            originStage: plannedDecision.itemUpdate.status === 'descartado' ? 'descartado' : 'triado',
+            pipelineStatus:
+              generatedTaskId ? 'gerou_tarefa'
+              : generatedDeadlineId ? 'gerou_prazo'
+              : generatedLeadId || generatedOpportunityId ? 'gerou_crm'
+              : plannedDecision.itemUpdate.status === 'descartado' ? 'descartado'
+              : 'triado',
+            publicationId: originPublicationId,
           },
           include: {
             process: true,
@@ -7265,6 +8109,39 @@ registerEpicIjRoutes({
   app,
   prisma,
   getUserFromReq,
+});
+
+const biSourceRepository = new PrismaBiSourceRepository(prisma as any);
+const biSnapshotService = new InMemoryBiSnapshotService();
+const timeEntryRepository = new InMemoryTimeEntryRepository();
+
+registerAiRoutes({
+  app,
+  getUserFromReq,
+});
+
+registerBiRoutes({
+  app,
+  getUserFromReq,
+  productivityService: new ProductivityExecutiveMetricsService(),
+  financeService: new FinanceExecutiveMetricsService(),
+  snapshotService: biSnapshotService,
+  exportService: new BiExportService(),
+  loadProductivitySnapshots: (query) => biSourceRepository.listProductivitySnapshots(query),
+  loadFinanceSnapshots: (query) => biSourceRepository.listFinanceSnapshots(query),
+});
+
+registerTimesheetRoutes({
+  app,
+  getUserFromReq,
+  repository: timeEntryRepository,
+});
+
+registerMobileRoutes({
+  app,
+  prisma,
+  getUserFromReq,
+  repository: timeEntryRepository,
 });
 
 app.get('/', (req, res) => {

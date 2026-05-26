@@ -33,6 +33,7 @@ import {
 import { api } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import './Processes.css';
+import './Dashboard.css';
 
 interface Process {
   id: number;
@@ -289,7 +290,7 @@ export function Processes({ user }: ProcessesProps) {
   const [selectedProcess, setSelectedProcess] = useState<EnrichedProcess | null>(null);
   const [menuOpenId, setMenuOpenId] = useState<number | null>(null);
   const [clientSuggestionIndex, setClientSuggestionIndex] = useState(-1);
-  const [isFiltersCompact, setIsFiltersCompact] = useState(false);
+  const [isFiltersCompact, setIsFiltersCompact] = useState(true);
 
   const isAdvogado = user.role === 'ADV';
   const itemsPerPage = 10;
@@ -844,78 +845,54 @@ export function Processes({ user }: ProcessesProps) {
 
   return (
     <section className="my-processes-page" aria-label="Meus processos">
-      <header className="my-processes-header">
-        <div className="my-processes-header-main">
-          <div className="my-processes-header-summary" aria-label="Pulso da carteira">
+      <header className="my-processes-header" aria-label="Cabeçalho da carteira de processos">
+        <div className="my-processes-header-copy">
+          <p className="my-processes-header-eyebrow">OPERAÇÃO</p>
+          <h1 className="my-processes-header-title">Processos</h1>
+          <p className="my-processes-header-subtitle">Gestão operacional de processos, responsáveis e status.</p>
+          <div className="my-processes-header-chips" aria-label="Pulso da carteira">
             {headerSummaryItems.map((item) => (
-              <div key={item.label} className="my-processes-header-summary-card" data-tone={item.tone}>
-                <span>{item.label}</span>
+              <div key={item.label} className="my-processes-header-summary-chip" data-tone={item.tone}>
                 <strong>{item.value}</strong>
+                <span>{item.label}</span>
               </div>
             ))}
-          </div>
-          <div className="my-processes-header-status" data-tone={portfolioHealthTone}>
-            <span className="my-processes-header-status-label">Pulso da carteira</span>
-            <strong>{portfolioHealthLabel}</strong>
+            <div className="my-processes-header-pulse" data-tone={portfolioHealthTone}>
+              <span className="my-processes-header-pulse-dot" aria-hidden="true" />
+              <span>{portfolioHealthLabel}</span>
+            </div>
           </div>
         </div>
-        <div className="my-processes-header-side">
-          <div className="my-processes-header-actions">
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={() => {
-                resetFormState('novo');
-                setShowForm(true);
-              }}
-            >
-              <Plus size={16} aria-hidden="true" />
-              Novo Processo
-            </button>
-            <button type="button" className="btn-secondary" onClick={exportCsv}>
-              <Download size={16} aria-hidden="true" />
-              Exportar
-            </button>
-          </div>
-          <aside className="my-processes-focus-card" aria-label="Foco operacional">
-            <span className="my-processes-focus-card-eyebrow">Foco do turno</span>
-            {focusProcess ? (
-              <>
-                <strong>{focusProcess.client}</strong>
-                <p>{focusProcess.title}</p>
-                <small>{focusProcess.nextStep}</small>
-                <div className="my-processes-focus-card-meta">
-                  <span className={`deadline-context deadline-context--${formatDueContext(focusProcess.nextDeadlineAt).tone}`}>
-                    {formatDueContext(focusProcess.nextDeadlineAt).label}
-                  </span>
-                  {renderPriorityBadge(focusProcess.priority)}
-                </div>
-                <button type="button" className="btn-secondary my-processes-focus-card-action" onClick={() => setSelectedProcess(focusProcess)}>
-                  <Eye size={14} aria-hidden="true" />
-                  Abrir foco
-                </button>
-              </>
-            ) : (
-              <>
-                <strong>Nenhum foco aberto</strong>
-                <p>Crie ou ajuste filtros para definir a próxima frente operacional.</p>
-              </>
-            )}
-          </aside>
+        <div className="my-processes-header-actions">
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={() => {
+              resetFormState('novo');
+              setShowForm(true);
+            }}
+          >
+            <Plus size={16} aria-hidden="true" />
+            Novo Processo
+          </button>
+          <button type="button" className="btn-secondary" onClick={exportCsv}>
+            <Download size={16} aria-hidden="true" />
+            Exportar
+          </button>
         </div>
       </header>
 
       <section className="my-processes-kpis" aria-label="Resumo da carteira">
         {kpiData.map((kpi) => (
-          <button key={kpi.label} type="button" className="my-processes-kpi-card" data-kpi-color={kpi.tone} onClick={kpi.onClick}>
-            <div className="kpi-card-top">
-              <strong>{kpi.value}</strong>
-              <span className="kpi-card-icon" aria-hidden="true">
+          <button key={kpi.label} type="button" className="metric-card" data-kpi-color={kpi.tone} onClick={kpi.onClick} aria-label={`${kpi.label}: ${kpi.value}`}>
+            <div className="metric-top-row">
+              <p className="metric-value">{kpi.value}</p>
+              <div className="metric-icon" aria-hidden="true">
                 <kpi.icon size={16} />
-              </span>
+              </div>
             </div>
-            <p>{kpi.label}</p>
-            <small>{kpi.description}</small>
+            <p className="metric-label">{kpi.label}</p>
+            <p className="metric-microtext">{kpi.description}</p>
           </button>
         ))}
       </section>
@@ -1326,14 +1303,6 @@ export function Processes({ user }: ProcessesProps) {
               </div>
             </div>
             <div className="processes-table-controls">
-              <div className="density-toggle" role="group" aria-label="Densidade da tabela">
-                <button type="button" className={`density-toggle__btn${densityMode === 'comfortable' ? ' is-active' : ''}`} onClick={() => setDensityMode('comfortable')}>
-                  Confortável
-                </button>
-                <button type="button" className={`density-toggle__btn${densityMode === 'compact' ? ' is-active' : ''}`} onClick={() => setDensityMode('compact')}>
-                  Compacta
-                </button>
-              </div>
               <label htmlFor="filter-sort">
                 Ordenação
                 <select id="table-sort" value={sortBy} onChange={(event) => setSortBy(event.target.value as SortField)}>
@@ -1342,13 +1311,9 @@ export function Processes({ user }: ProcessesProps) {
                   <option value="lastMovement">Última movimentação</option>
                 </select>
               </label>
-              <button type="button" className="btn-secondary" onClick={() => setViewMode((prev) => (prev === 'table' ? 'kanban' : 'table'))}>
-                <KanbanSquare size={14} aria-hidden="true" />
-                Ver Kanban
-              </button>
             </div>
           </div>
-          <table className={`my-processes-table my-processes-table--${densityMode}`}>
+          <table className="my-processes-table my-processes-table--comfortable">
             <thead>
               <tr>
                 <th scope="col">Processo</th>
@@ -1357,7 +1322,6 @@ export function Processes({ user }: ProcessesProps) {
                 <th scope="col">Situação</th>
                 <th scope="col">Última movimentação</th>
                 <th scope="col">Responsável</th>
-                <th scope="col">Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -1414,32 +1378,6 @@ export function Processes({ user }: ProcessesProps) {
                     </div>
                   </td>
                   <td>{process.owner?.email ?? '—'}</td>
-                  <td className="table-cell-actions">
-                    <div className="row-actions" onClick={(event) => event.stopPropagation()}>
-                      <button type="button" className="btn-link-inline" onClick={() => setSelectedProcess(process)}>Abrir</button>
-                      <button type="button" className="btn-link-inline" onClick={() => openProcessDetail(process.id)}>Detalhe</button>
-                      <button
-                        type="button"
-                        className="row-actions-trigger"
-                        aria-label={`Abrir menu de acoes do processo ${process.id}`}
-                        onClick={() => setMenuOpenId((prev) => (prev === process.id ? null : process.id))}
-                      >
-                        <MoreHorizontal size={16} aria-hidden="true" />
-                      </button>
-                      {menuOpenId === process.id && (
-                        <div className="row-action-menu" role="menu" aria-label="Menu de acoes">
-                          <button type="button" onClick={() => setSelectedProcess(process)}>Detalhe rapido</button>
-                          <button type="button" onClick={() => openProcessDetail(process.id)}>Abrir detalhe</button>
-                          <button type="button">Registrar andamento</button>
-                          <button type="button">Criar tarefa</button>
-                          <button type="button">Anexar documento</button>
-                          <button type="button">Registrar atendimento</button>
-                          <button type="button" onClick={() => handleEdit(process)}>Editar</button>
-                          <button type="button" onClick={() => handleDelete(process.id)}>Excluir</button>
-                        </div>
-                      )}
-                    </div>
-                  </td>
                 </tr>
                 );
               })}

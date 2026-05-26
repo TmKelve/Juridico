@@ -208,7 +208,7 @@ function AppShell({
   const isSelfManaged = ['/tarefas', '/processos', '/prazos', '/agenda', '/documentos', '/clientes', '/atendimentos', '/publicacoes-intimacoes', '/financeiro', '/triagem'].some(r => location.pathname === r || location.pathname.startsWith(r + '/'))
   const shortName = (user.email || getRoleLabel(user.role)).split('@')[0].slice(0, 12)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.innerWidth >= 768)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const loadUsersOnRoute = useEffectEvent(() => {
     if (location.pathname === '/usuarios' && user.role === 'ADM') {
       void fetchUsers()
@@ -278,7 +278,7 @@ function AppShell({
         />
 
         {!isCrmJuridico ? (
-          <header className={`page-header-shell${isDashboard ? ' page-header-shell--dashboard' : ''}`}>
+          <header className={`page-header-shell${isDashboard ? ' page-header-shell--dashboard' : ''}${isSelfManaged ? ' page-header-shell--self-managed' : ''}`}>
             <div>
               <div className="page-header-badge">{pageMeta.badge}</div>
               <h1>{pageMeta.title}</h1>

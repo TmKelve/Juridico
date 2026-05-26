@@ -509,6 +509,86 @@ export interface ApiPublication {
   derivedDeadlineId: number | null;
   observacoes: string;
   lida: boolean;
+  correlationId?: string | null;
+  captureId?: number | null;
+  eventId?: number | null;
+  originStage?: string | null;
+  pipelineStatus?: string | null;
+  consolidationStatus?: string | null;
+  originReference?: ApiOriginReference | null;
+  timeline?: ApiPublicationPipelineItem[];
+  derivedActions?: ApiDerivedActionRecord[];
+}
+
+export interface ApiPublicationPipelineItem {
+  id: string;
+  entityType: string;
+  entityId: number | null;
+  stage: string;
+  title: string;
+  summary: string;
+  status: string;
+  occurredAt: string;
+  sourceType?: string | null;
+  sourceReference?: string | null;
+  link?: string | null;
+}
+
+export interface ApiDerivedActionRecord {
+  entityType: 'triage' | 'crm_lead' | 'crm_opportunity' | 'deadline' | 'task' | string;
+  entityId: number;
+  correlationId: string;
+  sourceType: string;
+  sourceReference: string;
+  originStage: string;
+  status: string;
+  title: string;
+  summary: string | null;
+  url: string | null;
+  createdAt: string;
+}
+
+export interface ApiOriginReference {
+  correlationId: string;
+  sourceType: string;
+  sourceReference: string;
+  originKind: 'capture' | 'publication' | string;
+  originLabel: string;
+  originStage: string;
+  consolidationStatus: 'nao_consolidado' | 'aguardando_consolidacao' | 'consolidado' | 'descartado' | 'falhou' | string;
+  captureId: number | null;
+  eventId: number | null;
+  publicationId: number | null;
+  pipelineStatus?: string | null;
+  evidenceUrl: string | null;
+  publicationUrl: string | null;
+  timelineUrl: string | null;
+}
+
+export interface ApiPublicationCapture {
+  id: number;
+  correlationId: string;
+  sourceType: 'cpf' | 'oab' | 'processo' | 'cnj' | 'diario' | 'manual' | 'other' | string;
+  sourceReference: string;
+  originStage: 'capturado' | 'normalizado' | string;
+  pipelineStatus: string;
+  capturedAt: string;
+  occurredAt: string;
+  evidenceText: string;
+  normalizedText: string;
+  tribunal: string | null;
+  processNumber: string | null;
+  cpfCnpj: string | null;
+  oabNumber: string | null;
+  personName: string | null;
+  consolidationStatus: 'nao_consolidado' | 'aguardando_consolidacao' | 'consolidado' | 'descartado' | 'falhou' | string;
+  metadata: Record<string, unknown>;
+}
+
+export interface ApiPublicationCaptureEvidence {
+  capture: ApiPublicationCapture;
+  timeline: ApiPublicationPipelineItem[];
+  derivedActions: ApiDerivedActionRecord[];
 }
 
 export interface ApiTemplateVersion {
@@ -609,6 +689,11 @@ export interface ApiTriageItem {
     normalizedText: string;
   };
   event: ApiTriageEvent | null;
+  correlationId?: string | null;
+  originStage?: string | null;
+  pipelineStatus?: string | null;
+  originReference?: ApiOriginReference | null;
+  derivedActions?: ApiDerivedActionRecord[];
   decisions?: ApiTriageDecision[];
   timeline?: Array<{
     id: number;
@@ -664,6 +749,15 @@ export interface ApiCrmLead {
     createdBy: string;
     createdAt: string;
   }>;
+  correlationId?: string | null;
+  captureId?: number | null;
+  publicationId?: number | null;
+  originStage?: string | null;
+  pipelineStatus?: string | null;
+  consolidationStatus?: string | null;
+  originReference?: ApiOriginReference | null;
+  originTimeline?: ApiPublicationPipelineItem[];
+  derivedActions?: ApiDerivedActionRecord[];
   createdAt: string;
   updatedAt: string;
 }
@@ -690,6 +784,15 @@ export interface ApiCrmOpportunity {
     createdBy: string;
     createdAt: string;
   }>;
+  correlationId?: string | null;
+  captureId?: number | null;
+  publicationId?: number | null;
+  originStage?: string | null;
+  pipelineStatus?: string | null;
+  consolidationStatus?: string | null;
+  originReference?: ApiOriginReference | null;
+  originTimeline?: ApiPublicationPipelineItem[];
+  derivedActions?: ApiDerivedActionRecord[];
   createdAt: string;
   updatedAt: string;
 }
@@ -1246,6 +1349,18 @@ export const api = {
 
   getPublication: (id: number) =>
     apiClient<ApiPublication>(`/publications/${id}`),
+
+  getPublicationCapture: (id: number) =>
+    apiClient<ApiPublicationCapture>(`/publication-captures/${id}`),
+
+  getPublicationCaptureEvidence: (id: number) =>
+    apiClient<ApiPublicationCaptureEvidence>(`/publication-captures/${id}/evidence`),
+
+  getPublicationPipeline: (correlationId: string) =>
+    apiClient<{ correlationId: string; items: ApiPublicationPipelineItem[] }>(`/publication-pipeline/${encodeURIComponent(correlationId)}`),
+
+  getPublicationPipelineActions: (correlationId: string) =>
+    apiClient<ApiDerivedActionRecord[]>(`/publication-pipeline/${encodeURIComponent(correlationId)}/actions`),
 
   createPublication: (data: {
     processId: number;
