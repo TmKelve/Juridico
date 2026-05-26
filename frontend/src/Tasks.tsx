@@ -5,6 +5,7 @@ import {
   Calendar,
   CalendarPlus,
   CheckCircle2,
+  ChevronDown,
   ClipboardCheck,
   Clock,
   Download,
@@ -26,7 +27,7 @@ import {
 import { api, type ApiTask } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import { ProcessCombobox } from './ProcessCombobox';
-import { EmptyState, FilterBar, PageHeader, PriorityBadge as ProductPriorityBadge, StatusPill } from './components/product';
+import { EmptyState, FilterBar, PriorityBadge as ProductPriorityBadge, StatusPill } from './components/product';
 import './Tasks.css';
 
 interface TasksProps {
@@ -404,6 +405,7 @@ export function Tasks({ user }: TasksProps) {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<NewTaskForm>(EMPTY_FORM);
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
 
   const ITEMS_PER_PAGE = 12;
   const isAdv = user.role === 'ADV';
@@ -725,18 +727,36 @@ export function Tasks({ user }: TasksProps) {
 
   return (
     <div className="tasks-page" onClick={() => { if (openMenuId) setOpenMenuId(null); }}>
-      <div className="tsk-header-card">
-        <PageHeader
-          className="tsk-page-header"
-          title="Tarefas"
-          subtitle="Priorize entregas críticas, redistribua carga e avance a fila com rastreabilidade por processo e cliente."
-          actions={(
-            <div className="tsk-header-actions">
-              <button className="btn-primary" onClick={() => setShowForm(true)} aria-label="Criar nova tarefa"><Plus size={14} /> Nova Tarefa</button>
-              <button className="btn-secondary" onClick={() => exportCsv(sorted)} aria-label="Exportar tarefas"><Download size={14} /> Exportar</button>
-            </div>
-          )}
-        />
+
+      {/* Toolbar de ações + KPIs — substitui o header duplicado */}
+      <div className="tsk-top-strip">
+        <div className="tsk-kpis" aria-label="Indicadores de tarefas">
+          <button type="button" className={`tsk-kpi-card${activeKpi === 'today' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('today')} aria-pressed={activeKpi === 'today'}>
+            <div className="tsk-kpi-top"><p>Tarefas hoje</p><Clock size={15} className="tsk-kpi-icon" /></div>
+            <strong>{loading ? '—' : kpis.today}</strong>
+          </button>
+          <button type="button" className={`tsk-kpi-card tsk-kpi-card--danger${activeKpi === 'overdue' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('overdue')} aria-pressed={activeKpi === 'overdue'}>
+            <div className="tsk-kpi-top"><p>Atrasadas</p><TriangleAlert size={15} className="tsk-kpi-icon tsk-kpi-icon--danger" /></div>
+            <strong>{loading ? '—' : kpis.overdue}</strong>
+          </button>
+          <button type="button" className={`tsk-kpi-card tsk-kpi-card--warning${activeKpi === 'high' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('high')} aria-pressed={activeKpi === 'high'}>
+            <div className="tsk-kpi-top"><p>Alta prioridade</p><Zap size={15} className="tsk-kpi-icon tsk-kpi-icon--warning" /></div>
+            <strong>{loading ? '—' : kpis.high}</strong>
+          </button>
+          <button type="button" className={`tsk-kpi-card${activeKpi === 'delegated' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('delegated')} aria-pressed={activeKpi === 'delegated'}>
+            <div className="tsk-kpi-top"><p>Delegadas</p><UserRoundPlus size={15} className="tsk-kpi-icon" /></div>
+            <strong>{loading ? '—' : kpis.delegated}</strong>
+          </button>
+          <button type="button" className={`tsk-kpi-card tsk-kpi-card--success${activeKpi === 'doneWeek' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('doneWeek')} aria-pressed={activeKpi === 'doneWeek'}>
+            <div className="tsk-kpi-top"><p>Concluídas semana</p><CheckCircle2 size={15} className="tsk-kpi-icon tsk-kpi-icon--success" /></div>
+            <strong>{loading ? '—' : kpis.doneWeek}</strong>
+          </button>
+        </div>
+
+        <div className="tsk-main-actions">
+          <button className="btn-primary" onClick={() => setShowForm(true)} aria-label="Criar nova tarefa"><Plus size={14} /> Nova Tarefa</button>
+          <button className="btn-secondary" onClick={() => exportCsv(sorted)} aria-label="Exportar tarefas"><Download size={14} /> Exportar</button>
+        </div>
       </div>
 
       {error && (
@@ -753,58 +773,56 @@ export function Tasks({ user }: TasksProps) {
         </div>
       )}
 
-      <div className="tsk-kpis" aria-label="Indicadores de tarefas">
-        <button type="button" className={`tsk-kpi-card${activeKpi === 'today' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('today')} aria-pressed={activeKpi === 'today'}>
-          <div className="tsk-kpi-top"><p>Tarefas hoje</p><Clock size={15} className="tsk-kpi-icon" /></div>
-          <strong>{loading ? '—' : kpis.today}</strong>
-        </button>
-        <button type="button" className={`tsk-kpi-card tsk-kpi-card--danger${activeKpi === 'overdue' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('overdue')} aria-pressed={activeKpi === 'overdue'}>
-          <div className="tsk-kpi-top"><p>Atrasadas</p><TriangleAlert size={15} className="tsk-kpi-icon tsk-kpi-icon--danger" /></div>
-          <strong>{loading ? '—' : kpis.overdue}</strong>
-        </button>
-        <button type="button" className={`tsk-kpi-card tsk-kpi-card--warning${activeKpi === 'high' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('high')} aria-pressed={activeKpi === 'high'}>
-          <div className="tsk-kpi-top"><p>Alta prioridade</p><Zap size={15} className="tsk-kpi-icon tsk-kpi-icon--warning" /></div>
-          <strong>{loading ? '—' : kpis.high}</strong>
-        </button>
-        <button type="button" className={`tsk-kpi-card${activeKpi === 'delegated' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('delegated')} aria-pressed={activeKpi === 'delegated'}>
-          <div className="tsk-kpi-top"><p>Delegadas</p><UserRoundPlus size={15} className="tsk-kpi-icon" /></div>
-          <strong>{loading ? '—' : kpis.delegated}</strong>
-        </button>
-        <button type="button" className={`tsk-kpi-card tsk-kpi-card--success${activeKpi === 'doneWeek' ? ' is-active' : ''}`} onClick={() => applyKpiFilter('doneWeek')} aria-pressed={activeKpi === 'doneWeek'}>
-          <div className="tsk-kpi-top"><p>Concluídas semana</p><CheckCircle2 size={15} className="tsk-kpi-icon tsk-kpi-icon--success" /></div>
-          <strong>{loading ? '—' : kpis.doneWeek}</strong>
-        </button>
-      </div>
-
+      {/* Painel de filtros — busca principal sempre visível, filtros avançados colápsaveis */}
       <div className="tsk-filters">
-        <FilterBar
-          className="tsk-filterbar"
-          searchId="tsk-search"
-          searchAriaLabel="Buscar tarefa"
-          searchPlaceholder="Buscar por título, cliente, processo, responsável, observação ou origem..."
-          searchValue={filters.query}
-          onSearchChange={(value) => updateFilter('query', value)}
-        >
-          <div className="tsk-filters-top">
+        {/* Linha 1: busca + filtros rápidos + controles */}
+        <div className="tsk-filters-row1">
+          <FilterBar
+            className="tsk-filterbar"
+            searchId="tsk-search"
+            searchAriaLabel="Buscar tarefa"
+            searchPlaceholder="Buscar por título, cliente, processo, responsável..."
+            searchValue={filters.query}
+            onSearchChange={(value) => updateFilter('query', value)}
+          />
+
+          <div className="tsk-quick-filters">
             <div className="tsk-field"><label htmlFor="tsk-status">Status</label><select id="tsk-status" value={filters.status} onChange={(e) => updateFilter('status', e.target.value)}><option value="">Todos</option>{(Object.entries(STATUS_CFG) as Array<[TaskStatus, { label: string }]>).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
             <div className="tsk-field"><label htmlFor="tsk-priority">Prioridade</label><select id="tsk-priority" value={filters.priority} onChange={(e) => updateFilter('priority', e.target.value)}><option value="">Todas</option>{(Object.entries(PRIORITY_CFG) as Array<[TaskPriority, { label: string }]>).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
+            <div className="tsk-field"><label htmlFor="tsk-prazo">Prazo</label><select id="tsk-prazo" value={filters.prazo} onChange={(e) => updateFilter('prazo', e.target.value)}><option value="">Todos</option><option value="hoje">Hoje</option><option value="atrasado">Atrasado</option></select></div>
+          </div>
+
+          <button
+            className={`tsk-expand-btn${filtersExpanded ? ' is-open' : ''}`}
+            onClick={() => setFiltersExpanded((v) => !v)}
+            aria-expanded={filtersExpanded}
+            type="button"
+          >
+            <Filter size={13} />
+            {filtersExpanded ? 'Menos filtros' : 'Mais filtros'}
+            <ChevronDown size={13} className="tsk-expand-chevron" />
+          </button>
+        </div>
+
+        {/* Linha 2: filtros avançados (colápsaveis) */}
+        {filtersExpanded && (
+          <div className="tsk-filters-advanced">
             <div className="tsk-field"><label htmlFor="tsk-owner">Responsável</label><select id="tsk-owner" value={filters.owner} onChange={(e) => updateFilter('owner', e.target.value)}><option value="">Todos</option>{uniqueOwners.map((o) => <option key={o} value={o}>{o}</option>)}</select></div>
             <div className="tsk-field"><label htmlFor="tsk-scope">Escopo</label><select id="tsk-scope" value={filters.scope} onChange={(e) => updateFilter('scope', e.target.value)}><option value="">Todos</option><option value="minha">Tarefa minha</option><option value="delegada_por_mim">Delegada por mim</option></select></div>
-            <div className="tsk-field"><label htmlFor="tsk-process">Processo</label><ProcessCombobox id="tsk-process" value={filters.process} onChange={(value) => updateFilter('process', value)} options={processOptions} placeholder="Buscar processo" emptyLabel="Todos" /></div>
+            <div className="tsk-field tsk-field--wide"><label htmlFor="tsk-process">Processo</label><ProcessCombobox id="tsk-process" value={filters.process} onChange={(value) => updateFilter('process', value)} options={processOptions} placeholder="Buscar processo" emptyLabel="Todos" /></div>
             <div className="tsk-field"><label htmlFor="tsk-client">Cliente</label><select id="tsk-client" value={filters.client} onChange={(e) => updateFilter('client', e.target.value)}><option value="">Todos</option>{uniqueClients.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
-            <div className="tsk-field"><label htmlFor="tsk-prazo">Prazo</label><select id="tsk-prazo" value={filters.prazo} onChange={(e) => updateFilter('prazo', e.target.value)}><option value="">Todos</option><option value="hoje">Hoje</option><option value="atrasado">Atrasado</option></select></div>
             <div className="tsk-field"><label htmlFor="tsk-origin">Origem</label><select id="tsk-origin" value={filters.origin} onChange={(e) => updateFilter('origin', e.target.value)}><option value="">Todas</option>{(Object.entries(ORIGIN_LABEL) as Array<[TaskOrigin, string]>).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
             <div className="tsk-field"><label htmlFor="tsk-link">Vinculada a</label><select id="tsk-link" value={filters.vinculada} onChange={(e) => updateFilter('vinculada', e.target.value)}><option value="">Todas</option><option value="prazo">Prazo</option><option value="publicacao">Publicação</option><option value="documento">Documento</option><option value="atendimento">Atendimento</option></select></div>
             <div className="tsk-field"><label htmlFor="tsk-period">Período</label><select id="tsk-period" value={filters.period} onChange={(e) => updateFilter('period', e.target.value)}><option value="">Todos</option><option value="hoje">Hoje</option><option value="7">7 dias</option><option value="30">30 dias</option></select></div>
           </div>
-        </FilterBar>
+        )}
 
+        {/* Linha 3: status + controles de view */}
         <div className="tsk-filters-bottom">
           <div className="tsk-filters-bottom-left">
             {hasActiveFilters && <span className="tsk-filter-summary"><Filter size={12} /><strong>{filtered.length}</strong> de {tasks.length}</span>}
           </div>
           <div className="tsk-filters-bottom-right">
-            {/* View toggle aqui — sempre visível, independente de viewMode */}
             <div className="tsk-view-toggle" role="group" aria-label="Modo de visualização">
               <button
                 className={`tsk-view-btn${viewMode === 'lista' ? ' tsk-view-btn--active' : ''}`}
@@ -822,8 +840,8 @@ export function Tasks({ user }: TasksProps) {
               </button>
             </div>
             <div className="tsk-filter-actions">
-              <button className="btn-ghost" onClick={clearFilters}><X size={13} /> Limpar filtros</button>
-              <button className="btn-ghost" onClick={saveFilters}><Save size={13} /> Salvar filtro</button>
+              <button className="btn-ghost" onClick={clearFilters}><X size={13} /> Limpar</button>
+              <button className="btn-ghost" onClick={saveFilters}><Save size={13} /> Salvar</button>
             </div>
           </div>
         </div>
@@ -918,21 +936,37 @@ export function Tasks({ user }: TasksProps) {
                     <span>{col.items.length}</span>
                   </header>
                   <div className="tsk-kanban-list">
-                    {col.items.map((t) => (
-                      <article key={t.id} className="tsk-kanban-card" onClick={() => setSelected(t)} tabIndex={0} role="button" onKeyDown={(e) => e.key === 'Enter' && setSelected(t)}>
-                        <strong>{t.title}</strong>
-                        <p>{t.client} • {t.processLabel}</p>
-                        <div className="tsk-kanban-meta">
-                          <span><Calendar size={11} /> {formatDate(t.dueDate)}</span>
-                          <PriorityBadge priority={t.priority} />
-                        </div>
-                        <div className="tsk-kanban-meta">
-                          <span>{t.owner}</span>
-                          <OriginChip origin={t.origin} />
-                        </div>
-                        <OperationalContext task={t} />
-                      </article>
-                    ))}
+                    {col.items.map((t) => {
+                      const isUrgent = t.immediateAction || (isOverdue(t.dueDate) && t.status !== 'concluida');
+                      const isDueToday = isToday(t.dueDate) && t.status !== 'concluida';
+                      return (
+                        <article
+                          key={t.id}
+                          className={`tsk-kanban-card${isUrgent ? ' tsk-kanban-card--urgent' : isDueToday ? ' tsk-kanban-card--today' : ''}`}
+                          onClick={() => setSelected(t)}
+                          tabIndex={0}
+                          role="button"
+                          onKeyDown={(e) => e.key === 'Enter' && setSelected(t)}
+                        >
+                          <div className="tsk-kanban-card-title">
+                            <strong>{t.title}</strong>
+                            {isUrgent && <span className="tsk-kanban-urgent-dot" aria-label="Urgente" />}
+                          </div>
+                          <p>{t.client}{t.processLabel ? ` · ${t.processLabel}` : ''}</p>
+                          <div className="tsk-kanban-meta">
+                            <span className={isOverdue(t.dueDate) && t.status !== 'concluida' ? 'tsk-due--overdue' : isDueToday ? 'tsk-due--today' : ''}>
+                              <Calendar size={11} /> {formatDate(t.dueDate)}
+                            </span>
+                            <PriorityBadge priority={t.priority} />
+                          </div>
+                          <div className="tsk-kanban-meta">
+                            <span className="tsk-owner-label">{t.owner}</span>
+                            <OriginChip origin={t.origin} />
+                          </div>
+                          <OperationalContext task={t} />
+                        </article>
+                      );
+                    })}
                   </div>
                 </section>
               ))}
