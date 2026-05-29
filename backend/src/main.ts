@@ -41,6 +41,7 @@ import { CreateDeadlineFromPublicationService } from './publications/deadline-au
 import { buildDeadlinePayload } from './deadlines.contract';
 import { buildDocumentPayload } from './documents.contract';
 import { lookupExternalProcess } from './process-lookup.provider';
+import { lookupDataJud } from './datajud.provider';
 import { createPublicationScheduler } from './shared/scheduler/publication-schedule';
 import { planTriageDecision } from './triage/decision-engine';
 import { assistTriageDecision } from './triage/decision/assisted-triage-decision';
@@ -7272,6 +7273,26 @@ app.get('/processes/lookup', async (req, res) => {
     });
   }
 
+  // ── DataJud CNJ API (gratuito, configurar DATAJUD_API_KEY) ──────────────────
+  const datajudKey = process.env.DATAJUD_API_KEY?.trim();
+  if (datajudKey) {
+    try {
+      const datajudResult = await lookupDataJud(number, datajudKey);
+      if (datajudResult) {
+        return res.json({
+          found: true,
+          alreadyRegistered: false,
+          source: 'external',
+          process: datajudResult,
+        });
+      }
+    } catch (datajudError) {
+      // Non-fatal: log and fall through to next source
+      console.warn('[DataJud] Falha na consulta:', (datajudError as Error).message);
+    }
+  }
+
+  // ── Generic external API (PROCESS_LOOKUP_URL) ────────────────────────────────
   try {
     const external = await lookupExternalProcess(number);
     if (external) {
@@ -7288,6 +7309,7 @@ app.get('/processes/lookup', async (req, res) => {
     });
   }
 
+  // ── Fallback registry (dados de demonstração) ────────────────────────────────
   const suggested = externalProcessRegistry.find((item) => item.processNumber === number);
   if (!suggested) {
     return res.status(404).send({ message: 'Nenhuma informacao encontrada para esse numero de processo' });
