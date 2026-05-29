@@ -2,7 +2,7 @@ import type { HTMLAttributes, ReactNode } from 'react'
 
 import { Search } from 'lucide-react'
 
-import { Button, Input } from '@/components/ui'
+import { Button } from '@/components/ui'
 import { cn } from '@/lib/cn'
 
 interface FilterBarProps extends HTMLAttributes<HTMLDivElement> {
@@ -33,11 +33,13 @@ export function FilterBar({
       )}
       {...props}
     >
-      <div className="relative min-w-[220px] flex-1">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-        <Input
+      {/* Search: flex-row pattern — icon sibling, no padding-left override needed */}
+      <div className="filterbar-search-wrap">
+        <Search className="filterbar-search-icon" aria-hidden="true" />
+        <input
           id={searchId}
-          className="pl-9"
+          className="filterbar-search-input"
+          type="search"
           placeholder={searchPlaceholder}
           value={searchValue}
           aria-label={searchAriaLabel}

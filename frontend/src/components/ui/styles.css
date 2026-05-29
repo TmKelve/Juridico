@@ -131,3 +131,46 @@
   width: 1px;
   height: 100%;
 }
+
+/* ── FilterBar search ─────────────────────────────────────────────────────── */
+/* Flex-sibling pattern: icon + input side by side, no padding-left override  */
+.filterbar-search-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 220px;
+  flex: 1;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--border-default, #d1d5db);
+  border-radius: 8px;
+  background: var(--surface-primary, #ffffff);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.filterbar-search-wrap:focus-within {
+  border-color: var(--brand-primary, #2563eb);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.10);
+}
+
+.filterbar-search-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted, #9ca3af);
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.filterbar-search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 0.875rem;
+  color: var(--text-primary, #111827);
+  min-height: 34px;
+}
+
+.filterbar-search-input::placeholder {
+  color: var(--text-muted, #9ca3af);
+}
