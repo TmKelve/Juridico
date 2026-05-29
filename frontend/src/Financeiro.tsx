@@ -25,6 +25,7 @@ import { ProcessCombobox } from './ProcessCombobox'
 import { FinanceDelinquencyCard } from './components/finance/FinanceDelinquencyCard'
 import { FinanceInstallmentPlanCard } from './components/finance/FinanceInstallmentPlanCard'
 import { FinanceMetricCard } from './components/finance/FinanceMetricCard'
+import './Dashboard.css'
 import './Financeiro.css'
 
 type User = { id: number; email: string; role: string }
@@ -715,11 +716,35 @@ export function Financeiro({ user: _user }: { user: User }) {
     <div className="fin-page">
 
       {/* ── HERO ── */}
-      <header className="fin-hero">
-        <div>
-          <span className="fin-eyebrow">Financeiro</span>
-          <h2>Gestão Financeira</h2>
+      <header className="fin-hero" aria-label="Cabeçalho financeiro">
+        <div className="fin-hero-copy">
+          <p className="fin-hero-eyebrow">FINANCEIRO</p>
+          <h1 className="fin-hero-title">Gestão Financeira</h1>
           <p className="fin-hero-subtitle">Controle de recebíveis, pagamentos, inadimplência e parcelamentos.</p>
+          <div className="fin-hero-chips">
+            <div className="fin-hero-chip">
+              <strong>{formatMoney(aging.indicators.totalReceivablesCents)}</strong>
+              <span>carteira aberta</span>
+            </div>
+            {aging.indicators.overdueAmountCents > 0 && (
+              <div className="fin-hero-chip" data-tone="critical">
+                <strong>{formatMoney(aging.indicators.overdueAmountCents)}</strong>
+                <span>em atraso</span>
+              </div>
+            )}
+            {cashflow.totals.netCents !== 0 && (
+              <div className="fin-hero-chip" data-tone={cashflow.totals.netCents >= 0 ? 'success' : 'attention'}>
+                <strong>{formatMoney(cashflow.totals.netCents)}</strong>
+                <span>fluxo líquido</span>
+              </div>
+            )}
+            {installmentSummary.overdue > 0 && (
+              <div className="fin-hero-chip" data-tone="attention">
+                <strong>{installmentSummary.overdue}</strong>
+                <span>parcela{installmentSummary.overdue !== 1 ? 's' : ''} atrasada{installmentSummary.overdue !== 1 ? 's' : ''}</span>
+              </div>
+            )}
+          </div>
         </div>
         <div className="fin-hero-actions">
           <button
@@ -727,7 +752,7 @@ export function Financeiro({ user: _user }: { user: User }) {
             onClick={() => void loadFinanceData()}
             disabled={loading || submitting}
           >
-            <RefreshCw size={14} style={{ marginRight: 6 }} />
+            <RefreshCw size={14} />
             Atualizar
           </button>
           <button
@@ -735,7 +760,7 @@ export function Financeiro({ user: _user }: { user: User }) {
             onClick={() => openModal('avulso')}
             disabled={!canEntry}
           >
-            <Plus size={14} style={{ marginRight: 6 }} />
+            <Plus size={14} />
             Novo Lançamento
           </button>
         </div>
