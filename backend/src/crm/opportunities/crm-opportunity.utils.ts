@@ -71,7 +71,7 @@ export function validateOpportunityCommercialRules(input: {
   const nextIndex = OPPORTUNITY_STAGE_SEQUENCE.indexOf(nextStatus as (typeof OPPORTUNITY_STAGE_SEQUENCE)[number]);
 
   if (nextStatus === 'em_contato' && !nextContactAt) {
-    return 'O estágio em_contato exige próximo contato preenchido.';
+    return 'O estágio "Em contato" exige próximo contato preenchido.';
   }
 
   if (nextStatus !== 'acao_recomendada' && !responsible) {
@@ -98,7 +98,7 @@ export function assertOpportunityReadyForConversion(opportunity: CrmOpportunityR
     throw new CrmContractError(
       'CRM_OPPORTUNITY_NEXT_CONTACT_REQUIRED',
       400,
-      'O estágio em_contato exige próximo contato antes da conversão.',
+      'O estágio "Em contato" exige próximo contato antes da conversão.',
     );
   }
 }

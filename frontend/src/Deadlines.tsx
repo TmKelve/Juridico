@@ -644,7 +644,7 @@ export function Deadlines({ user }: DeadlinesProps) {
         >
           <div className="metric-top-row">
             <p className="metric-value">{kpis.today}</p>
-            <div className="metric-icon" aria-hidden="true"><CalendarDays size={16} /></div>
+            <div className="metric-icon" aria-hidden="true"><CalendarDays size={20} /></div>
           </div>
           <p className="metric-label">Prazos hoje</p>
           <p className="metric-microtext">Foco diário imediato</p>
@@ -655,7 +655,7 @@ export function Deadlines({ user }: DeadlinesProps) {
         >
           <div className="metric-top-row">
             <p className="metric-value">{kpis.week}</p>
-            <div className="metric-icon" aria-hidden="true"><CalendarDays size={16} /></div>
+            <div className="metric-icon" aria-hidden="true"><CalendarDays size={20} /></div>
           </div>
           <p className="metric-label">Próximos 7 dias</p>
           <p className="metric-microtext">Cadência semanal</p>
@@ -666,7 +666,7 @@ export function Deadlines({ user }: DeadlinesProps) {
         >
           <div className="metric-top-row">
             <p className="metric-value">{kpis.critical}</p>
-            <div className="metric-icon" aria-hidden="true"><ShieldAlert size={16} /></div>
+            <div className="metric-icon" aria-hidden="true"><ShieldAlert size={20} /></div>
           </div>
           <p className="metric-label">Críticos</p>
           <p className="metric-microtext">48h ou menos</p>
@@ -677,7 +677,7 @@ export function Deadlines({ user }: DeadlinesProps) {
         >
           <div className="metric-top-row">
             <p className="metric-value">{kpis.overdue}</p>
-            <div className="metric-icon" aria-hidden="true"><AlertTriangle size={16} /></div>
+            <div className="metric-icon" aria-hidden="true"><AlertTriangle size={20} /></div>
           </div>
           <p className="metric-label">Atrasados</p>
           <p className="metric-microtext">Ação imediata</p>
@@ -688,7 +688,7 @@ export function Deadlines({ user }: DeadlinesProps) {
         >
           <div className="metric-top-row">
             <p className="metric-value">{kpis.audited}</p>
-            <div className="metric-icon" aria-hidden="true"><CheckCircle2 size={16} /></div>
+            <div className="metric-icon" aria-hidden="true"><CheckCircle2 size={20} /></div>
           </div>
           <p className="metric-label">Auditáveis</p>
           <p className="metric-microtext">Concluídos com trilha</p>

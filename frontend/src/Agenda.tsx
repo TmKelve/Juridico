@@ -709,52 +709,52 @@ export function Agenda({ user }: AgendaProps) {
           onClick={() => updateFilter('period', 'hoje')}
           aria-label={`Compromissos hoje: ${kpis.today}`}>
           <div className="metric-top-row">
-            <div className="metric-icon"><CalendarDays size={16} aria-hidden="true" /></div>
-            <span className="metric-microtext">Foco imediato</span>
+            <p className="metric-value">{kpis.today}</p>
+            <div className="metric-icon" aria-hidden="true"><CalendarDays size={20} /></div>
           </div>
-          <p className="metric-value">{kpis.today}</p>
           <p className="metric-label">Hoje</p>
+          <p className="metric-microtext">Foco imediato</p>
         </button>
         <button type="button" className="metric-card" data-kpi-color="info"
           onClick={() => updateFilter('audienciaOnly', !filters.audienciaOnly)}
           aria-label={`Audiências da semana: ${kpis.audienceWeek}`}>
           <div className="metric-top-row">
-            <div className="metric-icon"><CalendarClock size={16} aria-hidden="true" /></div>
-            <span className="metric-microtext">Esta semana</span>
+            <p className="metric-value">{kpis.audienceWeek}</p>
+            <div className="metric-icon" aria-hidden="true"><CalendarClock size={20} /></div>
           </div>
-          <p className="metric-value">{kpis.audienceWeek}</p>
           <p className="metric-label">Audiências</p>
+          <p className="metric-microtext">Esta semana</p>
         </button>
         <button type="button" className="metric-card"
           data-kpi-color={kpis.pendingReturns > 0 ? 'warning' : 'success'}
           onClick={() => updateFilter('retornoOnly', !filters.retornoOnly)}
           aria-label={`Retornos pendentes: ${kpis.pendingReturns}`}>
           <div className="metric-top-row">
-            <div className="metric-icon"><Phone size={16} aria-hidden="true" /></div>
-            <span className="metric-microtext">Exigem acompanhamento</span>
+            <p className="metric-value">{kpis.pendingReturns}</p>
+            <div className="metric-icon" aria-hidden="true"><Phone size={20} /></div>
           </div>
-          <p className="metric-value">{kpis.pendingReturns}</p>
           <p className="metric-label">Retornos pendentes</p>
+          <p className="metric-microtext">Exigem acompanhamento</p>
         </button>
         <button type="button" className="metric-card" data-kpi-color="primary"
           onClick={() => updateFilter('prazoOnly', !filters.prazoOnly)}
           aria-label={`Prazos no calendário: ${kpis.deadlines}`}>
           <div className="metric-top-row">
-            <div className="metric-icon"><Clock3 size={16} aria-hidden="true" /></div>
-            <span className="metric-microtext">Vinculados a entrega</span>
+            <p className="metric-value">{kpis.deadlines}</p>
+            <div className="metric-icon" aria-hidden="true"><Clock3 size={20} /></div>
           </div>
-          <p className="metric-value">{kpis.deadlines}</p>
           <p className="metric-label">Prazos</p>
+          <p className="metric-microtext">Vinculados a entrega</p>
         </button>
         <button type="button" className="metric-card"
           data-kpi-color={kpis.overlaps > 0 ? 'error' : 'success'}
           aria-label={`Conflitos: ${kpis.overlaps}`}>
           <div className="metric-top-row">
-            <div className="metric-icon"><AlertTriangle size={16} aria-hidden="true" /></div>
-            <span className="metric-microtext">{kpis.overlaps > 0 ? 'Sobreposições' : 'Sem choque'}</span>
+            <p className="metric-value">{kpis.overlaps}</p>
+            <div className="metric-icon" aria-hidden="true"><AlertTriangle size={20} /></div>
           </div>
-          <p className="metric-value">{kpis.overlaps}</p>
           <p className="metric-label">Conflitos</p>
+          <p className="metric-microtext">{kpis.overlaps > 0 ? 'Sobreposições' : 'Sem choque'}</p>
         </button>
       </section>
 
