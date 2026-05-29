@@ -827,7 +827,7 @@ export function Processes({ user }: ProcessesProps) {
       trackEvent('whatsapp_document_request', { processId: process.id });
     } catch (err) {
       setError('Erro ao preparar a solicitação. Tente novamente.');
-      captureException(err);
+      captureException(err as Error);
     } finally {
       setAttachLoading(false);
     }
@@ -896,7 +896,7 @@ export function Processes({ user }: ProcessesProps) {
       trackEvent('documents_uploaded', { processId: selectedProcess.id, source: 'quick_drawer' });
     } catch (err) {
       setError('Erro ao enviar o documento. Tente novamente.');
-      captureException(err);
+      captureException(err as Error);
     } finally {
       setAttachLoading(false);
     }

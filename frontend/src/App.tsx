@@ -529,7 +529,7 @@ function App() {
     try {
       const res = await api.login(email, password)
       if (res.status === 200) {
-        const loginUser = res.data.user as Record<string, unknown>
+        const loginUser = res.data.user as unknown as Record<string, unknown>
         setSessionContextMeta((current) => ({
           ...current,
           companyStatus: asCompanyStatus(loginUser.companyStatus ?? loginUser.status),

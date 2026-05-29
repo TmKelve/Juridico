@@ -521,19 +521,6 @@ export function Agenda({ user }: AgendaProps) {
   }, [filtered]);
 
   const hasActiveFilter = useMemo(() => JSON.stringify(filters) !== JSON.stringify(EMPTY_FILTERS), [filters]);
-  const activeFilterChips = useMemo(() => {
-    const chips: string[] = [];
-    if (filters.search) chips.push(`Busca: ${filters.search}`);
-    if (filters.type) chips.push(`Tipo: ${EVENT_TYPE_LABEL[filters.type as AgendaEventType]}`);
-    if (filters.client) chips.push(`Cliente: ${filters.client}`);
-    if (filters.process) chips.push(`Processo: ${filters.process}`);
-    if (filters.responsible) chips.push(`Responsável: ${filters.responsible}`);
-    if (filters.priority) chips.push(`Prioridade: ${filters.priority}`);
-    if (filters.audienciaOnly) chips.push('Audiências');
-    if (filters.retornoOnly) chips.push('Retornos');
-    if (filters.prazoOnly) chips.push('Prazos');
-    return chips;
-  }, [filters]);
 
   const clients = useMemo(() => Array.from(new Set(events.map((event) => event.client))), [events]);
   const responsibles = useMemo(() => Array.from(new Set(events.map((event) => event.responsible))), [events]);
@@ -630,15 +617,6 @@ export function Agenda({ user }: AgendaProps) {
     : focusEvent?.priority === 'alta'
       ? 'critical'
       : 'neutral';
-  const focusMeta = focusEvent
-    ? `${formatPtDate(focusEvent.date)} · ${focusEvent.startTime}–${focusEvent.endTime} · ${focusEvent.responsible}`
-    : 'Nenhum evento focal para este recorte.';
-  const headerSummaryItems = [
-    { label: 'Em exibição', value: sorted.length, tone: 'neutral' },
-    { label: 'Hoje', value: visibleTodayCount, tone: visibleTodayCount > 0 ? 'info' : 'neutral' },
-    { label: 'Atenção', value: visibleAttentionCount, tone: visibleAttentionCount > 0 ? 'warning' : 'neutral' },
-    { label: 'Prazos', value: visibleDeadlineCount, tone: visibleDeadlineCount > 0 ? 'critical' : 'neutral' },
-  ] as const;
 
   if (loading) {
     return (

@@ -311,7 +311,7 @@ export function Deadlines({ user }: DeadlinesProps) {
     [viewItems],
   );
 
-  const focusDeadline = topQueue[0] ?? null;
+  // removed focusDeadline
   const hasActiveFilter = JSON.stringify(filters) !== JSON.stringify(EMPTY_FILTERS);
 
   const activeQuickView = useMemo(() => {
@@ -571,8 +571,7 @@ export function Deadlines({ user }: DeadlinesProps) {
     setSelectedIds((prev) => prev.filter((id) => !actionableItems.some((item) => item.id === id)));
   }
 
-  const visibleCriticalCount = sortedDeadlines.filter((item) => item.riskTone === 'warning').length;
-  const visibleOverdueCount = sortedDeadlines.filter((item) => item.riskTone === 'danger').length;
+  // removed visibleCriticalCount and visibleOverdueCount
   const visiblePublicationCount = sortedDeadlines.filter((item) => item.origin === 'publicacao').length;
   const selectedActionableCount = selectedItems.filter((item) => item.massActionEligible).length;
 

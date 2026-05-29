@@ -23,6 +23,7 @@ import {
 import { api, type ApiDocument, type ApiProcess } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import { ProcessDocumentModal } from './ProcessDocumentModal';
+import { deriveArea } from './checklistTemplates';
 import './Dashboard.css';
 import './Documents.css';
 
@@ -160,7 +161,8 @@ export function Documents({ user }: DocumentsProps) {
 
   const [checklistStateByProcess, setChecklistStateByProcess] = useState<Record<string, ChecklistItem[]>>({});
   const checklistUploadRef = useRef<HTMLInputElement | null>(null);
-  const [pendingChecklistUploadItemId, setPendingChecklistUploadItemId] = useState<string | null>(null);
+  // Stores the full item + processId so handleChecklistItemUpload doesn't need to re-derive it
+  const [pendingChecklistUpload, setPendingChecklistUpload] = useState<{ processId: number; item: ChecklistItem } | null>(null);
 
   const itemsPerPage = 10;
   const loadDocumentsOnMount = useEffectEvent(loadDocuments);
@@ -246,7 +248,8 @@ export function Documents({ user }: DocumentsProps) {
   function resolveUploadProcessId() {
     if (selectedDocument?.processId) return selectedDocument.processId;
     if (filters.process) return Number(filters.process);
-    if (pagedDocuments.length === 1) return pagedDocuments[0].processId;
+    const uniqueProcesses = new Set(filteredDocuments.map(d => d.processId));
+    if (uniqueProcesses.size === 1) return Array.from(uniqueProcesses)[0];
     return null;
   }
 
@@ -405,49 +408,12 @@ export function Documents({ user }: DocumentsProps) {
 
   // ── CHECKLIST HELPERS ──────────────────────────────────────────────────────
 
-  function updateChecklistItem(
-    processId: string,
-    itemId: string,
-    patch: Partial<Pick<ChecklistItem, 'status' | 'linkedDocumentId'>>,
-  ) {
-    // Capture current activeChecklist from closure (safe – called from event handlers)
-    const base = activeChecklist;
-    setChecklistStateByProcess((prev) => ({
-      ...prev,
-      [processId]: base.map((i) => (i.id === itemId ? { ...i, ...patch } : i)),
-    }));
-  }
-
-  function linkChecklistDoc(processId: string, itemId: string, documentId: string) {
-    const linkedDoc = scopedChecklistDocuments.find((d) => String(d.id) === documentId);
-    updateChecklistItem(processId, itemId, {
-      linkedDocumentId: documentId ? Number(documentId) : null,
-      status: linkedDoc?.status === 'validado'
-        ? 'validado'
-        : linkedDoc
-          ? 'aguardando_validacao'
-          : 'faltante',
-    });
-  }
-
-  async function validateChecklistItem(processId: string, itemId: string, documentId: number | null) {
-    if (documentId) await validateDocument(documentId);
-    updateChecklistItem(processId, itemId, { status: 'validado' });
-  }
-
-  async function rejectChecklistItem(processId: string, itemId: string, documentId: number | null) {
-    if (documentId) await rejectDocument(documentId);
-    updateChecklistItem(processId, itemId, { status: 'rejeitado' });
-  }
-
   async function handleChecklistItemUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = '';
-    if (!file || !pendingChecklistUploadItemId || !activeChecklistProcess) return;
+    if (!file || !pendingChecklistUpload) return;
 
-    const processId = activeChecklistProcess.id;
-    const item = activeChecklist.find((i) => i.id === pendingChecklistUploadItemId);
-    if (!item) { setPendingChecklistUploadItemId(null); return; }
+    const { processId, item } = pendingChecklistUpload;
 
     const contentBase64 = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
@@ -461,7 +427,7 @@ export function Documents({ user }: DocumentsProps) {
 
     const res = await api.createDocument({
       title: item.title,
-      processId: Number(processId),
+      processId,
       category: item.category,
       status: 'aguardando_validacao',
       origin: 'upload',
@@ -483,18 +449,30 @@ export function Documents({ user }: DocumentsProps) {
 
     if (res.status !== 201 || !res.data) {
       setError(res.error || 'Não foi possível fazer upload do documento de checklist.');
-      setPendingChecklistUploadItemId(null);
+      setPendingChecklistUpload(null);
       return;
     }
 
     setDocuments((prev) => [res.data!, ...prev]);
-    updateChecklistItem(processId, pendingChecklistUploadItemId, {
-      status: 'aguardando_validacao',
-      linkedDocumentId: res.data!.id,
+    setChecklistStateByProcess((prev) => {
+      const procIdStr = String(processId);
+      const currentList = prev[procIdStr] ?? [];
+      const updatedItem: ChecklistItem = {
+        ...item,
+        status: 'aguardando_validacao',
+        linkedDocumentId: res.data!.id,
+      };
+      const idx = currentList.findIndex((i) => i.id === item.id);
+      if (idx >= 0) {
+        const newList = [...currentList];
+        newList[idx] = updatedItem;
+        return { ...prev, [procIdStr]: newList };
+      }
+      return { ...prev, [procIdStr]: [...currentList, updatedItem] };
     });
     setSuccess(`"${item.title}" enviado para validação.`);
-    setPendingChecklistUploadItemId(null);
-    trackEvent('checklist_item_uploaded', { processId, itemId: pendingChecklistUploadItemId });
+    setPendingChecklistUpload(null);
+    trackEvent('checklist_item_uploaded', { processId, itemId: item.id });
   }
 
   const clients = useMemo(() => Array.from(new Set(documents.map((doc) => doc.client))), [documents]);
@@ -600,7 +578,7 @@ export function Documents({ user }: DocumentsProps) {
   const activeChecklist = useMemo((): ChecklistItem[] => {
     if (!activeChecklistProcess) return [];
     const area = activeChecklistProcess.area ?? '_default';
-    const template = CHECKLIST_TEMPLATES[area] ?? CHECKLIST_TEMPLATES._default;
+    const template = CHECKLIST_TEMPLATES[area as keyof typeof CHECKLIST_TEMPLATES] ?? CHECKLIST_TEMPLATES._default;
     const saved = checklistStateByProcess[activeChecklistProcess.id];
     if (saved) return saved;
     // Derive initial state from template + auto-match against validated docs in scope
@@ -725,6 +703,13 @@ export function Documents({ user }: DocumentsProps) {
         type="file"
         hidden
         onChange={handleUploadFile}
+        aria-hidden="true"
+      />
+      <input
+        ref={checklistUploadRef}
+        type="file"
+        hidden
+        onChange={handleChecklistItemUpload}
         aria-hidden="true"
       />
       {/* ── HERO ── */}
@@ -1265,42 +1250,46 @@ export function Documents({ user }: DocumentsProps) {
         </>
       )}
 
-      {selectedProcessForModal && (
-        <ProcessDocumentModal
-          processId={selectedProcessForModal.id}
-          processLabel={selectedProcessForModal.processNumber || `PRC-${selectedProcessForModal.id}`}
-          processTitle={selectedProcessForModal.title}
-          client={selectedProcessForModal.client}
-          area={['Trabalhista', 'Civel', 'Tributario', 'Empresarial', 'Previdenciario'][selectedProcessForModal.id % 5] || 'Trabalhista'}
-          currentPhase={selectedProcessForModal.phase}
-          documents={documents.filter((d) => d.processId === selectedProcessForModal.id)}
-          checklistStateByProcess={checklistStateByProcess}
-          onClose={() => setSelectedProcessForModal(null)}
-          onSaveChecklistItem={(procId, item) => {
-            setChecklistStateByProcess((prev) => {
-              const currentList = prev[procId] || [];
-              const idx = currentList.findIndex(i => i.id === item.id);
-              if (idx >= 0) {
-                const newList = [...currentList];
-                newList[idx] = item;
-                return { ...prev, [procId]: newList };
-              }
-              return { ...prev, [procId]: [...currentList, item] };
-            });
-          }}
-          onValidateDocument={validateDocument}
-          onRejectDocument={rejectDocument}
-          onRequestUploadForItem={(procId, itemId) => {
-            // Reusing the checklist upload logic
-            const proc = processesList.find(p => p.id === Number(procId));
-            if (!proc) return;
-            // set active checklist process
-            updateFilter('process', procId);
-            setPendingChecklistUploadItemId(itemId);
-            checklistUploadRef.current?.click();
-          }}
-        />
-      )}
+      {selectedProcessForModal && (() => {
+        // Derive area from the documents belonging to this process (fallback to processNumber prefix)
+        const modalDocs = documents.filter((d) => d.processId === selectedProcessForModal.id);
+        const modalArea = modalDocs.length > 0
+          ? deriveArea(modalDocs[0].processLabel)
+          : deriveArea(selectedProcessForModal.processNumber ?? `PRC-${selectedProcessForModal.id}`);
+
+        return (
+          <ProcessDocumentModal
+            processId={selectedProcessForModal.id}
+            processLabel={selectedProcessForModal.processNumber ?? `PRC-${selectedProcessForModal.id}`}
+            processTitle={selectedProcessForModal.title}
+            client={selectedProcessForModal.client}
+            area={modalArea}
+            currentPhase={selectedProcessForModal.phase}
+            documents={modalDocs}
+            checklistStateByProcess={checklistStateByProcess}
+            onClose={() => setSelectedProcessForModal(null)}
+            onSaveChecklistItem={(procId, item) => {
+              setChecklistStateByProcess((prev) => {
+                const currentList = prev[procId] ?? [];
+                const idx = currentList.findIndex((i) => i.id === item.id);
+                if (idx >= 0) {
+                  const newList = [...currentList];
+                  newList[idx] = item;
+                  return { ...prev, [procId]: newList };
+                }
+                return { ...prev, [procId]: [...currentList, item] };
+              });
+            }}
+            onValidateDocument={validateDocument}
+            onRejectDocument={rejectDocument}
+            onRequestUploadForItem={(procId, item) => {
+              // Store the full item so handleChecklistItemUpload doesn't need to re-derive it
+              setPendingChecklistUpload({ processId: Number(procId), item });
+              checklistUploadRef.current?.click();
+            }}
+          />
+        );
+      })()}
     </section>
   );
 }
