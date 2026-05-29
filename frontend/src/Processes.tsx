@@ -39,6 +39,7 @@ interface Process {
   title: string;
   processNumber?: string | null;
   client: string;
+  area?: string | null;
   phase: string;
   status: string;
   ownerId: number;
@@ -49,6 +50,7 @@ interface ProcessFormData {
   title: string;
   processNumber: string;
   client: string;
+  area: string;
   phase: string;
   status: string;
 }
@@ -224,7 +226,7 @@ function formatStaleContext(target: Date) {
 
 function enrichProcess(process: Process, index: number): EnrichedProcess {
   const today = new Date();
-  const area = AREAS[(process.id + index) % AREAS.length];
+  const area = process.area || AREAS[(process.id + index) % AREAS.length];
   const tribunal = TRIBUNAIS[(process.id + index * 2) % TRIBUNAIS.length];
   const party = PARTIES[(process.id + index * 3) % PARTIES.length];
   const deadlineOffset = ((process.id + index) % 14) - 3;
@@ -272,6 +274,7 @@ export function Processes({ user }: ProcessesProps) {
     title: '',
     processNumber: '',
     client: '',
+    area: '',
     phase: 'Inicial',
     status: 'ativo',
   });
@@ -403,6 +406,7 @@ export function Processes({ user }: ProcessesProps) {
       title: '',
       processNumber: '',
       client: '',
+      area: '',
       phase: 'Inicial',
       status: 'ativo',
     });
@@ -1170,6 +1174,19 @@ export function Processes({ user }: ProcessesProps) {
                     <small className="client-field-helper">
                       Vincule a um cliente já cadastrado ou clique em <strong>Novo cliente</strong> para criar um.
                     </small>
+                  </label>
+                  <label htmlFor="process-area">
+                    Área jurídica
+                    <select
+                      id="process-area"
+                      value={formData.area}
+                      onChange={(event) => setFormData((prev) => ({ ...prev, area: event.target.value }))}
+                    >
+                      <option value="">Selecionar área</option>
+                      {AREAS.map((a) => (
+                        <option key={a} value={a}>{a}</option>
+                      ))}
+                    </select>
                   </label>
                   <div className="form-row-2">
                     <label htmlFor="process-phase">

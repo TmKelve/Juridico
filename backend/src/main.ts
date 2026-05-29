@@ -7328,7 +7328,7 @@ app.post('/processes', async (req, res) => {
   const decoded = getUserFromReq(req);
   if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
 
-  const { title, client, phase, status } = req.body;
+  const { title, client, phase, status, area } = req.body;
   const processNumber = normalizeProcessNumber(req.body?.processNumber);
   if (!title || !client || !phase || !status) return res.status(400).send({ message: 'Dados incompletos' });
 
@@ -7343,13 +7343,11 @@ app.post('/processes', async (req, res) => {
     where: { name: client.trim() },
     update: {
       responsible: getResponsibleLabel(decoded.email),
-      legalArea: phase,
     },
     create: {
       name: client.trim(),
       type: 'PJ',
       status: 'ativo',
-      legalArea: phase,
       responsible: getResponsibleLabel(decoded.email),
       notes: 'Cliente criado automaticamente a partir de um processo.',
     },
@@ -7361,6 +7359,7 @@ app.post('/processes', async (req, res) => {
       processNumber: processNumber || null,
       client,
       clientId: linkedClient.id,
+      area: area || null,
       phase,
       status,
       ownerId: decoded.sub
@@ -7379,7 +7378,7 @@ app.put('/processes/:id', async (req, res) => {
   if (!process) return res.status(404).send({ message: 'Processo não encontrado' });
   if (decoded.role !== 'ADM' && decoded.role !== 'FIN' && process.ownerId !== decoded.sub) return res.status(403).send({ message: 'Acesso negado' });
 
-  const { title, client, phase, status } = req.body;
+  const { title, client, phase, status, area } = req.body;
   const processNumber = normalizeProcessNumber(req.body?.processNumber);
   let nextClientId = (process as { clientId?: number | null }).clientId ?? null;
   let nextClientName = process.client;
@@ -7402,13 +7401,11 @@ app.put('/processes/:id', async (req, res) => {
       where: { name: client.trim() },
       update: {
         responsible: getResponsibleLabel(decoded.email),
-        legalArea: (phase ?? process.phase) as string,
       },
       create: {
         name: client.trim(),
         type: 'PJ',
         status: 'ativo',
-        legalArea: (phase ?? process.phase) as string,
         responsible: getResponsibleLabel(decoded.email),
         notes: 'Cliente criado automaticamente a partir de uma atualização de processo.',
       },
@@ -7424,6 +7421,7 @@ app.put('/processes/:id', async (req, res) => {
       processNumber: processNumber || null,
       client: nextClientName,
       clientId: nextClientId,
+      area: area !== undefined ? (area || null) : (process as { area?: string | null }).area,
       phase: phase ?? process.phase,
       status: status ?? process.status
     },

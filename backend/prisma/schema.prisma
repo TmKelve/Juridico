@@ -234,6 +234,7 @@ model Process {
   client       String
   clientId     Int?
   clientRecord Client?       @relation(fields: [clientId], references: [id])
+  area         String?
   phase        String
   status       String
   ownerId      Int
