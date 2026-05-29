@@ -997,6 +997,7 @@ export function Financeiro({ user: _user }: { user: User }) {
         {/* ── Parcelamentos ── */}
         {!loading && tab === 'parcelamentos' && (
           <div className="fin-section-stack">
+            {/* Summary metric cards */}
             <div className="fin-plan-summary">
               <FinanceMetricCard label="Planos ativos" value={String(installmentPlans.length)} detail="Visão contratual" />
               <FinanceMetricCard label="Pagas" value={String(installmentSummary.paid)} tone="success" detail={`de ${installmentSummary.total} parcelas`} />
@@ -1004,29 +1005,36 @@ export function Financeiro({ user: _user }: { user: User }) {
               <FinanceMetricCard label="Atrasadas" value={String(installmentSummary.overdue)} tone="danger" detail={`${installmentSummary.remaining} restantes`} />
             </div>
 
-            <div className="fin-inline-note">
-              <span className={`fin-status-badge fin-status-badge--${installmentCapability === 'native' ? 'native' : installmentCapability === 'unavailable' ? 'unavailable' : 'error'}`}>
-                {installmentCapability === 'native' ? 'parcelamento ativo' : installmentCapability === 'unavailable' ? 'aguardando endpoint' : 'falha no endpoint'}
-              </span>
-              <p>
-                {installmentCapability === 'native'
-                  ? 'O frontend está consumindo o contrato explícito de planos e parcelas.'
-                  : installmentCapability === 'unavailable'
+            {/* Backend capability note — only shown when not native */}
+            {installmentCapability !== 'native' && (
+              <div className="fin-inline-note">
+                <span className={`fin-status-badge fin-status-badge--${installmentCapability === 'unavailable' ? 'unavailable' : 'error'}`}>
+                  {installmentCapability === 'unavailable' ? 'aguardando endpoint' : 'falha no endpoint'}
+                </span>
+                <p>
+                  {installmentCapability === 'unavailable'
                     ? 'A experiência de parcelamento ficará operacional quando o backend expuser /finance/installments/plans.'
                     : 'O backend respondeu com erro ao carregar parcelamentos nesta execução.'}
-              </p>
-            </div>
+                </p>
+              </div>
+            )}
 
+            {/* Two-column layout: card list + detail panel */}
             <div className="fin-plan-layout">
+              {/* Left: plan cards list */}
               <div className="fin-plan-list">
                 {installmentPlans.map((plan) => (
                   <button
                     key={plan.id}
                     type="button"
-                    className={`fin-plan-list__item${selectedPlan?.id === plan.id ? ' is-active' : ''}`}
+                    className="fin-plan-list__item"
                     onClick={() => setSelectedPlanId(plan.id)}
                   >
-                    <FinanceInstallmentPlanCard plan={plan} formatMoney={formatMoney} />
+                    <FinanceInstallmentPlanCard
+                      plan={plan}
+                      formatMoney={formatMoney}
+                      isActive={selectedPlan?.id === plan.id}
+                    />
                   </button>
                 ))}
                 {!installmentPlans.length && (
@@ -1034,53 +1042,116 @@ export function Financeiro({ user: _user }: { user: User }) {
                 )}
               </div>
 
+              {/* Right: detail panel */}
               <div className="fin-plan-detail">
                 {selectedPlan ? (
                   <>
-                    <div className="fin-panel-subheader">
+                    {/* Header */}
+                    <div className="fin-plan-detail__header">
                       <div>
-                        <h4>{selectedPlan.contractLabel}</h4>
-                        <p>{selectedPlan.description}</p>
+                        <h4 className="fin-plan-detail__title">{selectedPlan.contractLabel}</h4>
+                        {selectedPlan.description && (
+                          <p className="fin-plan-detail__desc">{selectedPlan.description}</p>
+                        )}
+                        <div className="fin-plan-detail__meta-row">
+                          <span><CreditCard size={11} />{selectedPlan.clientName}</span>
+                          {(selectedPlan.processNumber || selectedPlan.processTitle) && (
+                            <span>{selectedPlan.processNumber || selectedPlan.processTitle}</span>
+                          )}
+                          <span>Todo dia {selectedPlan.dayOfMonth}</span>
+                        </div>
                       </div>
-                      <span className={`fin-status-badge fin-status-badge--${selectedPlan.status}`}>
+                      <span className={`fin-plan-chip fin-plan-chip--${selectedPlan.status}`}>
                         {statusLabel(selectedPlan.status)}
                       </span>
                     </div>
-                    <div className="fin-plan-detail__meta">
-                      <span>Cliente: {selectedPlan.clientName}</span>
-                      <span>Processo: {selectedPlan.processNumber || selectedPlan.processTitle || 'Sem processo vinculado'}</span>
-                      <span>Dia base: todo dia {selectedPlan.dayOfMonth}</span>
-                      <span>Saldo restante: {formatMoney(selectedPlan.metrics.remainingAmountCents)}</span>
+
+                    {/* Stats strip */}
+                    <div className="fin-plan-detail__stats">
+                      <div className="fin-plan-stat">
+                        <p>Saldo restante</p>
+                        <strong>{formatMoney(selectedPlan.metrics.remainingAmountCents)}</strong>
+                      </div>
+                      <div className="fin-plan-stat fin-plan-stat--success">
+                        <p>Pagas</p>
+                        <strong>
+                          {selectedPlan.metrics.paidCount}
+                          <span>/{selectedPlan.installmentCount}</span>
+                        </strong>
+                      </div>
+                      <div className={`fin-plan-stat${selectedPlan.metrics.overdueCount > 0 ? ' fin-plan-stat--error' : ''}`}>
+                        <p>Atrasadas</p>
+                        <strong>{selectedPlan.metrics.overdueCount}</strong>
+                      </div>
+                      <div className="fin-plan-stat">
+                        <p>A vencer</p>
+                        <strong>{selectedPlan.metrics.remainingCount}</strong>
+                      </div>
                     </div>
+
+                    {/* Progress bar */}
+                    <div className="fin-plan-detail__progress-wrap">
+                      <div className="fin-plan-progress-bar fin-plan-progress-bar--lg">
+                        <div
+                          className={`fin-plan-progress-fill${selectedPlan.metrics.overdueCount > 0 ? ' has-overdue' : ''}`}
+                          style={{
+                            width: `${selectedPlan.installmentCount > 0
+                              ? Math.round((selectedPlan.metrics.paidCount / selectedPlan.installmentCount) * 100)
+                              : 0}%`
+                          }}
+                        />
+                      </div>
+                      <span className="fin-plan-progress-pct">
+                        {selectedPlan.installmentCount > 0
+                          ? Math.round((selectedPlan.metrics.paidCount / selectedPlan.installmentCount) * 100)
+                          : 0}%
+                      </span>
+                    </div>
+
+                    {/* Installments table */}
                     <div className="fin-table-wrap">
-                      <table className="fin-table fin-table--compact">
+                      <table className="fin-table fin-table--compact fin-plan-installs-table">
                         <thead>
                           <tr>
-                            <th>Parcela</th>
+                            <th>#</th>
                             <th>Vencimento</th>
                             <th>Valor</th>
                             <th>Status</th>
-                            <th>Cobrança</th>
                             <th>Liquidação</th>
                           </tr>
                         </thead>
                         <tbody>
                           {selectedPlan.installments.map((inst) => (
-                            <tr key={`${selectedPlan.id}-${inst.installmentNumber}`}>
-                              <td>{inst.installmentNumber}/{selectedPlan.installmentCount}</td>
-                              <td>{formatDate(inst.dueDate)}</td>
-                              <td>{formatMoney(inst.amountCents)}</td>
-                              <td><span className={`fin-status-badge fin-status-badge--${inst.status}`}>{statusLabel(inst.status)}</span></td>
-                              <td><span className="fin-cell-muted">{inst.chargeStatus || '—'}</span></td>
-                              <td><span className="fin-cell-muted">{inst.settlementDate ? formatDate(inst.settlementDate) : 'Em aberto'}</span></td>
+                            <tr
+                              key={`${selectedPlan.id}-${inst.installmentNumber}`}
+                              data-status={inst.status}
+                            >
+                              <td><span className="fin-cell-id">{inst.installmentNumber}/{selectedPlan.installmentCount}</span></td>
+                              <td><span className="fin-cell-date">{formatDate(inst.dueDate)}</span></td>
+                              <td><span className="fin-cell-amount">{formatMoney(inst.amountCents)}</span></td>
+                              <td>
+                                <span className={`fin-status-badge fin-status-badge--${inst.status}`}>
+                                  {statusLabel(inst.status)}
+                                </span>
+                              </td>
+                              <td>
+                                <span className="fin-cell-muted">
+                                  {inst.settlementDate ? formatDate(inst.settlementDate) : '—'}
+                                </span>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
+                      {!selectedPlan.installments.length && (
+                        <div className="fin-empty">Nenhuma parcela registrada neste plano.</div>
+                      )}
                     </div>
                   </>
                 ) : (
-                  <div className="fin-empty">Selecione um plano para acompanhar as parcelas.</div>
+                  <div className="fin-empty" style={{ padding: 'var(--space-8)' }}>
+                    Selecione um plano para acompanhar as parcelas.
+                  </div>
                 )}
               </div>
             </div>
@@ -1121,30 +1192,40 @@ export function Financeiro({ user: _user }: { user: User }) {
           <div className="fin-modal" role="dialog" aria-modal="true" aria-label="Novo Lançamento">
             {/* Header */}
             <div className="fin-modal-header">
-              <h3>Novo Lançamento</h3>
+              <div className="fin-modal-title">
+                <div className="fin-modal-icon">
+                  <Plus size={18} />
+                </div>
+                <div>
+                  <h3>Novo Lançamento</h3>
+                  <p>Adicione uma nova entrada avulsa ou plano parcelado</p>
+                </div>
+              </div>
               <button className="fin-modal-close" onClick={closeModal} aria-label="Fechar">
                 <X size={16} />
               </button>
             </div>
 
             {/* Tabs */}
-            <div className="fin-modal-tabs" role="tablist">
-              <button
-                role="tab"
-                aria-selected={modalTab === 'avulso'}
-                className={`fin-modal-tab${modalTab === 'avulso' ? ' is-active' : ''}`}
-                onClick={() => setModalTab('avulso')}
-              >
-                Avulso
-              </button>
-              <button
-                role="tab"
-                aria-selected={modalTab === 'parcelado'}
-                className={`fin-modal-tab${modalTab === 'parcelado' ? ' is-active' : ''}`}
-                onClick={() => setModalTab('parcelado')}
-              >
-                Parcelado
-              </button>
+            <div className="fin-modal-tabs-wrapper">
+              <div className="fin-modal-tabs" role="tablist">
+                <button
+                  role="tab"
+                  aria-selected={modalTab === 'avulso'}
+                  className={`fin-modal-tab${modalTab === 'avulso' ? ' is-active' : ''}`}
+                  onClick={() => setModalTab('avulso')}
+                >
+                  Lançamento Avulso
+                </button>
+                <button
+                  role="tab"
+                  aria-selected={modalTab === 'parcelado'}
+                  className={`fin-modal-tab${modalTab === 'parcelado' ? ' is-active' : ''}`}
+                  onClick={() => setModalTab('parcelado')}
+                >
+                  Plano Parcelado
+                </button>
+              </div>
             </div>
 
             {/* Body */}
