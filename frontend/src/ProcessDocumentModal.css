@@ -393,11 +393,12 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
+  padding: 10px var(--space-3);
   border-radius: var(--radius-md);
   background: var(--white);
   border: 1px solid var(--neutral-100);
   transition: background 0.12s, border-color 0.12s;
+  min-height: 52px;
 }
 .pdm-checklist-row:hover { background: var(--neutral-50); }
 
@@ -461,25 +462,27 @@
 .pdm-item-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   flex-shrink: 0;
 }
 
 .pdm-item-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 28px;
+  gap: 5px;
   height: 28px;
+  padding: 0 10px;
   border-radius: var(--radius-md);
   border: 1px solid var(--neutral-200);
   background: var(--neutral-50);
   cursor: pointer;
   color: var(--neutral-600);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
   transition: background 0.12s, color 0.12s, border-color 0.12s, box-shadow 0.12s;
   text-decoration: none;
   flex-shrink: 0;
-  position: relative;
 }
 .pdm-item-btn:hover {
   background: var(--neutral-100);

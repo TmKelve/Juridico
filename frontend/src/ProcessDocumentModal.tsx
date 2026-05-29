@@ -512,8 +512,9 @@ function ChecklistRow({
 
       <div className="pdm-item-actions">
         {item.status !== 'validado' && (
-          <button className="pdm-item-btn pdm-item-btn--upload" onClick={onUpload} title="Upload de arquivo">
-            <Upload size={13} />
+          <button className="pdm-item-btn pdm-item-btn--upload" onClick={onUpload} aria-label="Upload de arquivo">
+            <Upload size={12} aria-hidden="true" />
+            <span>Upload</span>
           </button>
         )}
 
@@ -523,27 +524,31 @@ function ChecklistRow({
             target="_blank"
             rel="noopener noreferrer"
             className="pdm-item-btn pdm-item-btn--whatsapp"
-            title="Solicitar via WhatsApp"
+            aria-label="Solicitar via WhatsApp"
           >
-            <MessageSquare size={13} />
+            <MessageSquare size={12} aria-hidden="true" />
+            <span>WhatsApp</span>
           </a>
         )}
 
         {(item.status === 'aguardando_validacao' || item.status === 'faltante') && (
-          <button className="pdm-item-btn pdm-item-btn--validate" onClick={onValidate} title="Marcar como validado">
-            <CheckCircle2 size={13} />
+          <button className="pdm-item-btn pdm-item-btn--validate" onClick={onValidate} aria-label="Marcar como validado">
+            <CheckCircle2 size={12} aria-hidden="true" />
+            <span>Validar</span>
           </button>
         )}
 
         {item.status === 'aguardando_validacao' && (
-          <button className="pdm-item-btn pdm-item-btn--reject" onClick={onReject} title="Rejeitar">
-            <XCircle size={13} />
+          <button className="pdm-item-btn pdm-item-btn--reject" onClick={onReject} aria-label="Rejeitar documento">
+            <XCircle size={12} aria-hidden="true" />
+            <span>Rejeitar</span>
           </button>
         )}
 
         {item.status === 'validado' && (
-          <button className="pdm-item-btn pdm-item-btn--undo" onClick={onMarkMissing} title="Desfazer validação">
-            <FileUp size={13} />
+          <button className="pdm-item-btn pdm-item-btn--undo" onClick={onMarkMissing} aria-label="Desfazer validação">
+            <FileUp size={12} aria-hidden="true" />
+            <span>Desfazer</span>
           </button>
         )}
       </div>
