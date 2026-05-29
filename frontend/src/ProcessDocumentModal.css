@@ -153,10 +153,10 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  border: 1px solid var(--neutral-200);
+  border: 1px solid var(--neutral-300);
   border-radius: var(--radius-md);
   background: var(--white);
-  color: var(--neutral-500);
+  color: var(--neutral-700);
   cursor: pointer;
   flex-shrink: 0;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
@@ -164,10 +164,10 @@
 .pdm-phase-arrow:hover:not(:disabled) {
   background: var(--neutral-100);
   color: var(--neutral-950);
-  border-color: var(--neutral-300);
+  border-color: var(--neutral-400);
 }
 .pdm-phase-arrow:disabled {
-  opacity: 0.35;
+  opacity: 0.3;
   cursor: not-allowed;
 }
 
@@ -250,8 +250,6 @@
   background: var(--brand-600);
   border-color: var(--brand-700);
   box-shadow: 0 0 0 3px var(--brand-100);
-  width: 12px;
-  height: 12px;
 }
 .pdm-phase-step.is-current .pdm-step-label {
   color: var(--brand-700);
