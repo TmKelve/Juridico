@@ -18,10 +18,11 @@ import {
   Plus,
   RefreshCw,
   Save,
+  Search,
   User,
   X,
 } from 'lucide-react';
-import { EmptyState, FilterBar, KpiCard, PageHeader, StatusPill } from './components/product';
+import { EmptyState, StatusPill } from './components/product';
 import { Badge, Button } from './components/ui';
 import { ClientPortalPanel } from './components/clients/ClientPortalPanel';
 import { ClientCommunicationPanel } from './components/communication/ClientCommunicationPanel';
@@ -512,6 +513,9 @@ export function Clients({ user }: ClientsProps) {
   const [openMenuId, setOpenMenuId]     = useState<string | null>(null);
   const [showForm, setShowForm]         = useState(false);
   const [form, setForm]                 = useState<NewClientForm>(EMPTY_FORM);
+  const [selectedIds, setSelectedIds]   = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting]     = useState(false);
+  const [isFiltersCompact, setIsFiltersCompact] = useState(() => localStorage.getItem('lexora_cli_filters_compact') !== '0');
   const loadDataOnMount = useEffectEvent(loadData);
 
   useEffect(() => {
@@ -623,6 +627,30 @@ export function Clients({ user }: ClientsProps) {
     trackEvent('clients_exported', { count: items.length });
   }
 
+  function toggleFiltersDensity() {
+    setIsFiltersCompact((prev) => {
+      const next = !prev;
+      localStorage.setItem('lexora_cli_filters_compact', next ? '1' : '0');
+      trackEvent('clientes_filters_density_toggled', { mode: next ? 'compact' : 'expanded' });
+      return next;
+    });
+  }
+
+  function applyQuickPreset(preset: string) {
+    if (preset === 'sem_contato_recente') {
+      setFilters({ ...EMPTY_FILTERS, period: 'sem_contato' });
+      setSuccess('Filtro aplicado: Sem contato recente.');
+    }
+    if (preset === 'aguardando_retorno') {
+      setFilters({ ...EMPTY_FILTERS, aguardandoRetorno: true });
+      setSuccess('Filtro aplicado: Aguardando retorno.');
+    }
+    if (preset === 'documentos_faltantes') {
+      setFilters({ ...EMPTY_FILTERS, comDocumentoFaltante: true });
+      setSuccess('Filtro aplicado: Documentos faltantes.');
+    }
+  }
+
   async function submitForm(ev: React.FormEvent) {
     ev.preventDefault();
     setError('');
@@ -650,6 +678,57 @@ export function Clients({ user }: ClientsProps) {
     setForm(EMPTY_FORM);
     setSuccess('Cliente cadastrado com sucesso.');
     trackEvent('client_created', { tipo: newClient.tipo });
+  }
+
+  // ─── row / bulk selection ─────────────────────────────────────────────────
+
+  function handleSelectRow(id: string, checked: boolean) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id); else next.delete(id);
+      return next;
+    });
+  }
+
+  function handleSelectAll(checked: boolean) {
+    setSelectedIds(checked ? new Set(pageItems.map((c) => c.id)) : new Set());
+  }
+
+  async function handleDeleteClient(id: string) {
+    setIsDeleting(true);
+    try {
+      const res = await api.deleteClient(Number(id));
+      if (res.status !== 200 && res.status !== 204) {
+        setError(res.error || 'Não foi possível excluir o cliente.');
+        return;
+      }
+      setClients((prev) => prev.filter((c) => c.id !== id));
+      setSelectedIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
+      setSuccess('Cliente excluído.');
+      trackEvent('client_deleted', { id });
+    } catch (err) {
+      setError((err as Error).message || 'Erro ao excluir cliente');
+      captureException(err as Error, { context: 'deleteClient' });
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  async function handleBulkDelete() {
+    const count = selectedIds.size;
+    setIsDeleting(true);
+    try {
+      await Promise.all([...selectedIds].map((id) => api.deleteClient(Number(id))));
+      setClients((prev) => prev.filter((c) => !selectedIds.has(c.id)));
+      setSelectedIds(new Set());
+      setSuccess(`${count} cliente(s) excluído(s).`);
+      trackEvent('clients_bulk_deleted', { count });
+    } catch (err) {
+      setError((err as Error).message || 'Erro ao excluir clientes');
+      captureException(err as Error, { context: 'bulkDeleteClients' });
+    } finally {
+      setIsDeleting(false);
+    }
   }
 
   // ─── computed ──────────────────────────────────────────────────────────────
@@ -717,15 +796,24 @@ export function Clients({ user }: ClientsProps) {
 
   function renderRow(c: ClientItem) {
     const isMenuOpen = openMenuId === c.id;
+    const isSelected = selectedIds.has(c.id);
     return (
       <tr
         key={c.id}
-        className="cli-table-row"
+        className={`cli-table-row${isSelected ? ' is-selected-row' : ''}`}
         onClick={() => openClientDetail(c)}
         tabIndex={0}
         aria-label={`Cliente ${c.nome}`}
         onKeyDown={(e) => e.key === 'Enter' && openClientDetail(c)}
       >
+        <td className="cli-td-checkbox" onClick={e => e.stopPropagation()}>
+          <input 
+            type="checkbox" 
+            checked={isSelected}
+            onChange={e => handleSelectRow(c.id, e.target.checked)}
+            aria-label={`Selecionar ${c.nome}`}
+          />
+        </td>
         <td className="cli-td-client">
           <span className="cli-avatar-sm" aria-hidden="true">{c.nome.charAt(0)}</span>
           <div>
@@ -816,6 +904,13 @@ export function Clients({ user }: ClientsProps) {
                     <FileText size={13} /> Ver documentos
                   </button>
                 </li>
+                {user.role === 'ADM' || user.role === 'FIN' ? (
+                  <li role="none">
+                    <button role="menuitem" className="cli-danger-action" onClick={() => { handleDeleteClient(c.id); setOpenMenuId(null); }}>
+                      <X size={13} /> Excluir cliente
+                    </button>
+                  </li>
+                ) : null}
               </ul>
             )}
           </div>
@@ -833,30 +928,59 @@ export function Clients({ user }: ClientsProps) {
     >
 
       {/* ── Header ──────────────────────────────────────────────── */}
-      <div className="cli-header-card">
-        <p className="cli-eyebrow">Carteira e relacionamento</p>
-        <PageHeader
-          title="Acompanhe clientes, retornos e vínculos com processos."
-          subtitle="Busque rapidamente, filtre por contexto operacional e acione atendimento ou processo sem sair da carteira."
-          actions={(
-            <>
-              <Button onClick={() => setShowForm(true)} aria-label="Cadastrar novo cliente">
-                <Plus size={14} /> Novo Cliente
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => { goToAtendimento(); trackEvent('header_register_atd'); }}
-                aria-label="Registrar atendimento rápido"
-              >
-                <MessageSquare size={14} /> Registrar Atendimento
-              </Button>
-              <Button variant="outline" onClick={() => exportCsv(sorted)} aria-label="Exportar clientes como CSV">
-                <Download size={14} /> Exportar
-              </Button>
-            </>
-          )}
-        />
-      </div>
+      <header className="my-processes-header" aria-label="Cabeçalho da carteira de clientes">
+        <div className="my-processes-header-copy">
+          <p className="my-processes-header-eyebrow">CARTEIRA E RELACIONAMENTO</p>
+          <h1 className="my-processes-header-title">Clientes</h1>
+          <p className="my-processes-header-subtitle">Acompanhe clientes, retornos e vínculos com processos. Busque rapidamente e acione atendimento ou processo sem sair da carteira.</p>
+          <div className="my-processes-header-chips" aria-label="Pulso da carteira">
+            <div className="my-processes-header-summary-chip" data-tone="positive">
+              <strong>{kpis.ativos}</strong>
+              <span>Ativos</span>
+            </div>
+            <div className="my-processes-header-summary-chip" data-tone="warning">
+              <strong>{kpis.aguard}</strong>
+              <span>Aguardando Retorno</span>
+            </div>
+            <div className="my-processes-header-summary-chip" data-tone="critical">
+              <strong>{kpis.docFalt}</strong>
+              <span>Doc. Faltante</span>
+            </div>
+            <div className="my-processes-header-pulse" data-tone={kpis.aguard > 0 || kpis.docFalt > 0 ? "warning" : "positive"}>
+              <span className="my-processes-header-pulse-dot" aria-hidden="true" />
+              <span>{kpis.aguard > 0 || kpis.docFalt > 0 ? 'Atenção Necessária' : 'Carteira Saudável'}</span>
+            </div>
+          </div>
+        </div>
+        <div className="my-processes-header-actions">
+          <button className="btn-primary" onClick={() => setShowForm(true)} aria-label="Cadastrar novo cliente">
+            <Plus size={14} /> Novo Cliente
+          </button>
+          <button className="btn-secondary" onClick={() => goToAtendimento()} aria-label="Registrar atendimento rápido">
+            <MessageSquare size={14} /> Registrar Atendimento
+          </button>
+          <button className="btn-secondary" onClick={() => exportCsv(sorted)} aria-label="Exportar clientes como CSV">
+            <Download size={14} /> Exportar
+          </button>
+        </div>
+      </header>
+
+      {/* ── Bulk Actions Bar ────────────────────────────────────── */}
+      {selectedIds.size > 0 && (
+        <div className="cli-bulk-bar">
+          <span className="cli-bulk-count">{selectedIds.size} selecionado(s)</span>
+          <div className="cli-bulk-actions">
+            {user.role === 'ADM' || user.role === 'FIN' ? (
+              <button className="btn-danger" onClick={handleBulkDelete} disabled={isDeleting}>
+                <X size={14} /> Excluir Selecionados
+              </button>
+            ) : null}
+            <button className="btn-ghost" onClick={() => setSelectedIds(new Set())}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Alerts ──────────────────────────────────────────────── */}
       {error && (
@@ -875,148 +999,153 @@ export function Clients({ user }: ClientsProps) {
       )}
 
       {/* ── KPIs ────────────────────────────────────────────────── */}
-      <div className="cli-kpis" aria-label="Indicadores da carteira de clientes">
-        <KpiCard label="Total de clientes" value={loading ? '—' : String(kpis.total)} />
-        <KpiCard label="Clientes ativos" value={loading ? '—' : String(kpis.ativos)} trend="up" />
-        <KpiCard label="Com processo ativo" value={loading ? '—' : String(kpis.comProc)} />
-        <button
-          type="button"
-          className={`cli-kpi-card cli-kpi-card--warning cli-kpi-card--button${filters.aguardandoRetorno ? ' cli-kpi-card--selected' : ''}`}
-          onClick={() => updateFilter('aguardandoRetorno', !filters.aguardandoRetorno)}
-          aria-pressed={filters.aguardandoRetorno}
-          aria-label="Filtrar clientes aguardando retorno"
-        >
-          <p>Aguardando retorno</p>
-          <strong>{loading ? '—' : kpis.aguard}</strong>
+      <section className="my-processes-kpis" aria-label="Resumo da carteira">
+        <button type="button" className="metric-card" data-kpi-color="neutral" onClick={() => clearFilters()} aria-label={`Total de clientes: ${kpis.total}`}>
+          <div className="metric-top-row">
+            <p className="metric-value">{loading ? '—' : kpis.total}</p>
+            <div className="metric-icon" aria-hidden="true"><User size={16} /></div>
+          </div>
+          <p className="metric-label">Total de clientes</p>
+          <p className="metric-microtext">Na sua carteira</p>
         </button>
-        <KpiCard label="Pendência documental" value={loading ? '—' : String(kpis.docFalt)} trend="down" />
-      </div>
+        <button type="button" className="metric-card" data-kpi-color="positive" onClick={() => updateFilter('status', 'ativo')} aria-label={`Clientes ativos: ${kpis.ativos}`}>
+          <div className="metric-top-row">
+            <p className="metric-value">{loading ? '—' : kpis.ativos}</p>
+            <div className="metric-icon" aria-hidden="true"><CheckCircle2 size={16} /></div>
+          </div>
+          <p className="metric-label">Clientes ativos</p>
+          <p className="metric-microtext">Status regular</p>
+        </button>
+        <button type="button" className="metric-card" data-kpi-color="info" onClick={() => updateFilter('comProcessoAtivo', !filters.comProcessoAtivo)} aria-pressed={filters.comProcessoAtivo} aria-label={`Com processo ativo: ${kpis.comProc}`}>
+          <div className="metric-top-row">
+            <p className="metric-value">{loading ? '—' : kpis.comProc}</p>
+            <div className="metric-icon" aria-hidden="true"><Briefcase size={16} /></div>
+          </div>
+          <p className="metric-label">Com processo ativo</p>
+          <p className="metric-microtext">Em andamento</p>
+        </button>
+        <button type="button" className="metric-card" data-kpi-color="warning" onClick={() => updateFilter('aguardandoRetorno', !filters.aguardandoRetorno)} aria-pressed={filters.aguardandoRetorno} aria-label={`Aguardando retorno: ${kpis.aguard}`}>
+          <div className="metric-top-row">
+            <p className="metric-value">{loading ? '—' : kpis.aguard}</p>
+            <div className="metric-icon" aria-hidden="true"><AlertTriangle size={16} /></div>
+          </div>
+          <p className="metric-label">Aguardando retorno</p>
+          <p className="metric-microtext">Atenção necessária</p>
+        </button>
+        <button type="button" className="metric-card" data-kpi-color="critical" onClick={() => updateFilter('comDocumentoFaltante', !filters.comDocumentoFaltante)} aria-pressed={filters.comDocumentoFaltante} aria-label={`Pendência documental: ${kpis.docFalt}`}>
+          <div className="metric-top-row">
+            <p className="metric-value">{loading ? '—' : kpis.docFalt}</p>
+            <div className="metric-icon" aria-hidden="true"><FileText size={16} /></div>
+          </div>
+          <p className="metric-label">Pendência documental</p>
+          <p className="metric-microtext">Faltam documentos</p>
+        </button>
+      </section>
 
       {/* ── Filters ─────────────────────────────────────────────── */}
-      <FilterBar
-        className="cli-filters"
-        searchPlaceholder="Buscar por nome, CPF/CNPJ, telefone, e-mail ou processo…"
-        searchValue={filters.query}
-        searchId="cli-search"
-        searchAriaLabel="Buscar cliente"
-        onSearchChange={(value) => updateFilter('query', value)}
-      >
-        <div className="cli-filters-top">
+      <section className={`my-processes-filters${isFiltersCompact ? ' is-compact' : ''}`} aria-label="Filtros e pesquisa">
+        <div className="filters-header">
+          <div className="filter-input-wrap search-wrap">
+            <Search size={16} aria-hidden="true" />
+            <input
+              type="text"
+              placeholder="Buscar por nome, CPF/CNPJ, telefone, e-mail..."
+              value={filters.query}
+              onChange={(e) => updateFilter('query', e.target.value)}
+              aria-label="Buscar cliente"
+            />
+          </div>
+          <div className="filter-presets" aria-label="Filtros rápidos">
+            <button type="button" className="btn-ghost" onClick={() => applyQuickPreset('sem_contato_recente')}>Sem contato</button>
+            <button type="button" className="btn-ghost" onClick={() => applyQuickPreset('aguardando_retorno')}>Aguardando retorno</button>
+            <button type="button" className="btn-ghost" onClick={() => applyQuickPreset('documentos_faltantes')}>Doc. faltante</button>
+          </div>
+          <button
+            type="button"
+            className="btn-ghost toggle-density-btn"
+            onClick={toggleFiltersDensity}
+            aria-expanded={!isFiltersCompact}
+          >
+            {isFiltersCompact ? <List size={16} /> : <Filter size={16} />}
+            {isFiltersCompact ? 'Mais filtros' : 'Ocultar filtros'}
+          </button>
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => setViewMode((m) => m === 'lista' ? 'cards' : 'lista')}
+            aria-label={viewMode === 'lista' ? 'Ver em cards' : 'Ver em lista'}
+            title={viewMode === 'lista' ? 'Ver em cards' : 'Ver em lista'}
+          >
+            {viewMode === 'lista' ? <LayoutGrid size={16} aria-hidden="true" /> : <List size={16} aria-hidden="true" />}
+          </button>
+        </div>
 
-          <div className="cli-field">
-            <label htmlFor="cli-status">Status</label>
-            <select id="cli-status" value={filters.status} onChange={(e) => updateFilter('status', e.target.value)}>
-              <option value="">Todos</option>
-              {(Object.entries(STATUS_CFG) as [ClientStatus, { label: string; variant: string }][]).map(([k, v]) =>
-                <option key={k} value={k}>{v.label}</option>
+        {!isFiltersCompact && (
+          <div className="filters-grid">
+            <label className="filter-field">
+              Status
+              <select value={filters.status} onChange={(e) => updateFilter('status', e.target.value)}>
+                <option value="">Todos</option>
+                {(Object.entries(STATUS_CFG) as [ClientStatus, { label: string; variant: string }][]).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+              </select>
+            </label>
+            <label className="filter-field">
+              Área
+              <select value={filters.area} onChange={(e) => updateFilter('area', e.target.value)}>
+                <option value="">Todas</option>
+                {uniqueAreas.map((a) => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </label>
+            <label className="filter-field">
+              Responsável
+              <select value={filters.responsible} onChange={(e) => updateFilter('responsible', e.target.value)}>
+                <option value="">Todos</option>
+                {uniqueResponsaveis.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </label>
+            <label className="filter-field">
+              Tipo
+              <select value={filters.tipo} onChange={(e) => updateFilter('tipo', e.target.value)}>
+                <option value="">Todos</option>
+                <option value="PF">Pessoa Física</option>
+                <option value="PJ">Pessoa Jurídica</option>
+              </select>
+            </label>
+            <label className="filter-field">
+              Último contato
+              <select value={filters.period} onChange={(e) => updateFilter('period', e.target.value)}>
+                <option value="">Todos</option>
+                <option value="recente">Últimos 30 dias</option>
+                <option value="sem_contato">Sem contato recente</option>
+              </select>
+            </label>
+
+            <div className="filter-checkbox-group">
+              <label className="cli-checkline">
+                <input type="checkbox" checked={filters.comProcessoAtivo} onChange={(e) => updateFilter('comProcessoAtivo', e.target.checked)} />
+                Com processo ativo
+              </label>
+              <label className="cli-checkline">
+                <input type="checkbox" checked={filters.aguardandoRetorno} onChange={(e) => updateFilter('aguardandoRetorno', e.target.checked)} />
+                Aguardando retorno
+              </label>
+              <label className="cli-checkline">
+                <input type="checkbox" checked={filters.comDocumentoFaltante} onChange={(e) => updateFilter('comDocumentoFaltante', e.target.checked)} />
+                Doc. faltante
+              </label>
+            </div>
+
+            <div className="filters-footer">
+              {hasActiveFilters && (
+                <button type="button" className="btn-ghost" onClick={clearFilters}>Limpar tudo</button>
               )}
-            </select>
+              <button type="button" className="btn-ghost" onClick={saveFilters} aria-label="Salvar filtro atual">
+                <Save size={13} aria-hidden="true" /> Salvar filtro
+              </button>
+            </div>
           </div>
-
-          <div className="cli-field">
-            <label htmlFor="cli-area">Área</label>
-            <select id="cli-area" value={filters.area} onChange={(e) => updateFilter('area', e.target.value)}>
-              <option value="">Todas</option>
-              {uniqueAreas.map((a) => <option key={a} value={a}>{a}</option>)}
-            </select>
-          </div>
-
-          <div className="cli-field">
-            <label htmlFor="cli-resp">Responsável</label>
-            <select id="cli-resp" value={filters.responsible} onChange={(e) => updateFilter('responsible', e.target.value)}>
-              <option value="">Todos</option>
-              {uniqueResponsaveis.map((r) => <option key={r} value={r}>{r}</option>)}
-            </select>
-          </div>
-
-          <div className="cli-field">
-            <label htmlFor="cli-tipo">Tipo</label>
-            <select id="cli-tipo" value={filters.tipo} onChange={(e) => updateFilter('tipo', e.target.value)}>
-              <option value="">Todos</option>
-              <option value="PF">Pessoa Física</option>
-              <option value="PJ">Pessoa Jurídica</option>
-            </select>
-          </div>
-
-          <div className="cli-field">
-            <label htmlFor="cli-period">Último contato</label>
-            <select id="cli-period" value={filters.period} onChange={(e) => updateFilter('period', e.target.value)}>
-              <option value="">Todos</option>
-              <option value="recente">Últimos 30 dias</option>
-              <option value="sem_contato">Sem contato recente</option>
-            </select>
-          </div>
-        </div>
-        <div className="cli-filters-bottom">
-          <div className="cli-toggle-group" aria-label="Filtros rápidos">
-            <label className="cli-checkline">
-              <input
-                type="checkbox"
-                checked={filters.comProcessoAtivo}
-                onChange={(e) => updateFilter('comProcessoAtivo', e.target.checked)}
-                aria-label="Mostrar apenas clientes com processo ativo"
-              />
-              Com processo ativo
-            </label>
-            <label className="cli-checkline">
-              <input
-                type="checkbox"
-                checked={filters.aguardandoRetorno}
-                onChange={(e) => updateFilter('aguardandoRetorno', e.target.checked)}
-                aria-label="Mostrar apenas clientes aguardando retorno"
-              />
-              Aguardando retorno
-            </label>
-            <label className="cli-checkline">
-              <input
-                type="checkbox"
-                checked={filters.comDocumentoFaltante}
-                onChange={(e) => updateFilter('comDocumentoFaltante', e.target.checked)}
-                aria-label="Mostrar apenas clientes com documento faltante"
-              />
-              Doc. faltante
-            </label>
-          </div>
-
-          <div className="cli-filter-actions">
-            {hasActiveFilters && (
-              <span className="cli-filter-summary">
-                <Filter size={12} />
-                <strong>{filtered.length}</strong> de {clients.length}
-              </span>
-            )}
-            <Button variant="ghost" size="sm" onClick={clearFilters} aria-label="Limpar todos os filtros">
-              <X size={13} /> Limpar
-            </Button>
-            <Button variant="ghost" size="sm" onClick={saveFilters} aria-label="Salvar filtro atual">
-              <Save size={13} /> Salvar filtro
-            </Button>
-          </div>
-
-          <div className="cli-view-toggle" role="group" aria-label="Modo de visualização">
-            <Button
-              className={`cli-view-btn${viewMode === 'lista' ? ' cli-view-btn--active' : ''}`}
-              variant="ghost"
-              size="sm"
-              onClick={() => setViewMode('lista')}
-              aria-pressed={viewMode === 'lista'}
-              aria-label="Modo lista"
-            >
-              <List size={13} /> Lista
-            </Button>
-            <Button
-              className={`cli-view-btn${viewMode === 'cards' ? ' cli-view-btn--active' : ''}`}
-              variant="ghost"
-              size="sm"
-              onClick={() => setViewMode('cards')}
-              aria-pressed={viewMode === 'cards'}
-              aria-label="Modo cards"
-            >
-              <LayoutGrid size={13} /> Cards
-            </Button>
-          </div>
-        </div>
-      </FilterBar>
+        )}
+      </section>
 
       {/* ── Loading ──────────────────────────────────────────────── */}
       {loading && (
@@ -1104,6 +1233,15 @@ export function Clients({ user }: ClientsProps) {
                 <table className="cli-table" aria-label="Lista de clientes">
                   <thead>
                     <tr>
+                      <th scope="col" className="cli-th-checkbox">
+                        <input 
+                          type="checkbox" 
+                          checked={selectedIds.size > 0 && selectedIds.size === pageItems.length}
+                          ref={(input) => { if (input) input.indeterminate = selectedIds.size > 0 && selectedIds.size < pageItems.length; }}
+                          onChange={e => handleSelectAll(e.target.checked)}
+                          aria-label="Selecionar todos os clientes da página"
+                        />
+                      </th>
                       <th scope="col">Cliente</th>
                       <th scope="col">Contato</th>
                       <th scope="col">Área / Tipo</th>
