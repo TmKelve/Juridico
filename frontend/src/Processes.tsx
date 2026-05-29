@@ -288,6 +288,7 @@ export function Processes({ user }: ProcessesProps) {
   const [, setMenuOpenId] = useState<number | null>(null);
   const attachInputRef = useRef<HTMLInputElement | null>(null);
   const [attachLoading, setAttachLoading] = useState(false);
+  const [whatsappConfirmProcess, setWhatsappConfirmProcess] = useState<EnrichedProcess | null>(null);
   const [checklistOverrides, setChecklistOverrides] = useState<Record<number, Partial<Record<'doc' | 'pub' | 'prazo' | 'andamento', boolean>>>>({});
   const [clientSuggestionIndex, setClientSuggestionIndex] = useState(-1);
   const [isFiltersCompact, setIsFiltersCompact] = useState(true);
@@ -796,7 +797,7 @@ export function Processes({ user }: ProcessesProps) {
       return;
     }
     if (action === 'Solicitar documento') {
-      handleSolicitarDocumento(process);
+      setWhatsappConfirmProcess(process);
       return;
     }
 
@@ -1756,6 +1757,65 @@ export function Processes({ user }: ProcessesProps) {
             </div>
           </aside>
         </>
+      )}
+
+      {/* ── MODAL DE CONFIRMAÇÃO WHATSAPP ── */}
+      {whatsappConfirmProcess && (
+        <div
+          className="process-form-modal-backdrop"
+          role="presentation"
+          onClick={() => setWhatsappConfirmProcess(null)}
+        >
+          <div
+            className="whatsapp-confirm-modal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="wa-confirm-title"
+            aria-describedby="wa-confirm-desc"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="wa-confirm-icon" aria-hidden="true">
+              <Send size={24} />
+            </div>
+
+            <div className="wa-confirm-content">
+              <h3 id="wa-confirm-title">Solicitar documentos via WhatsApp</h3>
+              <p id="wa-confirm-desc">
+                Esta ação abrirá o <strong>WhatsApp Web</strong> com uma mensagem
+                pré-preenchida listando os documentos pendentes do processo{' '}
+                <strong>{whatsappConfirmProcess.processNumber ?? whatsappConfirmProcess.title}</strong>.
+              </p>
+              <p className="wa-confirm-warning">
+                ⚠️ Certifique-se de que o <strong>WhatsApp Web está aberto</strong> no
+                seu navegador antes de prosseguir, caso contrário a mensagem pode não
+                ser enviada corretamente.
+              </p>
+              <p className="wa-confirm-question">Deseja prosseguir?</p>
+            </div>
+
+            <div className="wa-confirm-actions">
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => {
+                  const process = whatsappConfirmProcess;
+                  setWhatsappConfirmProcess(null);
+                  void handleSolicitarDocumento(process);
+                }}
+              >
+                <Send size={15} aria-hidden="true" />
+                Sim, abrir WhatsApp
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setWhatsappConfirmProcess(null)}
+              >
+                Não, cancelar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </section>
   );

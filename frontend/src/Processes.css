@@ -2630,3 +2630,74 @@
 }
 
 
+
+/* ── WhatsApp Confirm Modal ─────────────────────────────────────────────────── */
+
+.whatsapp-confirm-modal {
+  background: var(--white);
+  border-radius: var(--radius-2xl);
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.18), 0 4px 16px rgba(15, 23, 42, 0.10);
+  width: min(460px, calc(100vw - 32px));
+  padding: var(--space-7, 28px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5, 20px);
+  animation: pdm-enter 0.18s ease;
+}
+
+.wa-confirm-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--brand-50) 80%, white);
+  border: 1px solid var(--brand-200);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--brand-600, #1d4ed8);
+}
+
+.wa-confirm-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+}
+
+.wa-confirm-content h3 {
+  font-size: var(--font-size-base);
+  font-weight: 700;
+  color: var(--neutral-950);
+  margin: 0;
+}
+
+.wa-confirm-content p {
+  font-size: var(--font-size-sm);
+  color: var(--neutral-700);
+  line-height: 1.55;
+  margin: 0;
+}
+
+.wa-confirm-warning {
+  background: var(--warning-100);
+  border: 1px solid color-mix(in srgb, var(--warning-600) 30%, transparent);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  color: var(--warning-700, #92400e) !important;
+  font-size: var(--font-size-sm) !important;
+}
+
+.wa-confirm-question {
+  font-weight: 600;
+  color: var(--neutral-950) !important;
+}
+
+.wa-confirm-actions {
+  display: flex;
+  gap: var(--space-3, 12px);
+}
+
+.wa-confirm-actions .btn-primary,
+.wa-confirm-actions .btn-secondary {
+  flex: 1;
+  justify-content: center;
+}
