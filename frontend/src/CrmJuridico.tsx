@@ -45,7 +45,7 @@ import {
 import { OriginInsightPanel } from './components/audit/OriginInsightPanel';
 import { buildFallbackOriginReference, buildOriginOperationalSummary } from './components/audit/origin-model';
 import { loadOriginBundle } from './components/audit/loadOriginBundle';
-import { CrmOriginSummary } from './components/crm/CrmOriginSummary';
+
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import './CrmJuridico.css';
 
@@ -306,7 +306,8 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
 
   useEffect(() => {
     setDrawerTab('overview');
-  }, [tab, selectedLead, selectedOpportunity]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, selectedLead?.id, selectedOpportunity?.id]);
 
   useEffect(() => {
     if (!selectedOpportunity) return;
@@ -648,17 +649,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
     });
   }, [criticalOnly, nextContactFilter, opportunities, responsibleFilter, search, stageFilter]);
 
-  useEffect(() => {
-    if (tab === 'leads') {
-      if (filteredLeads.length > 0 && !filteredLeads.some((item) => item.id === selectedLead?.id)) {
-        setSelectedLead(filteredLeads[0]);
-      }
-      return;
-    }
-    if (filteredOpportunities.length > 0 && !filteredOpportunities.some((item) => item.id === selectedOpportunity?.id)) {
-      setSelectedOpportunity(filteredOpportunities[0]);
-    }
-  }, [filteredLeads, filteredOpportunities, selectedLead?.id, selectedOpportunity?.id, tab]);
+  // Removed auto-select logic so users can close the modal and view the Kanban fully.
 
   const responsibleOptions = useMemo(() => {
     const values = new Set<string>();
@@ -1139,7 +1130,7 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
         })}
       </section>
 
-      <section className={`crm-workspace${(tab === 'leads' ? !selectedLead : !selectedOpportunity) ? ' crm-workspace--no-selection' : ''}`}>
+      <section className="crm-workspace">
         <div className="crm-main">
           <section className="crm-executive-strip">
             {executiveStrip.map((item) => {
@@ -1299,28 +1290,6 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                     <p>{item.client || 'Sem cliente vinculado'} · {item.source}</p>
                     <small>{item.cpf || 'CPF não informado'}</small>
                     <div className="crm-card__summary">{getSummaryPreview(item.summary)}</div>
-                    <CrmOriginSummary
-                      compact
-                      source={item.source}
-                      originReference={buildFallbackOriginReference({
-                        source: item.source,
-                        sourceReference: item.cpf || item.personName,
-                        originReference: item.originReference ?? null,
-                        correlationId: item.correlationId ?? null,
-                        captureId: item.captureId ?? null,
-                        publicationId: item.publicationId ?? null,
-                        originStage: item.originStage ?? null,
-                        pipelineStatus: item.pipelineStatus ?? null,
-                        consolidationStatus: item.consolidationStatus ?? null,
-                      })}
-                      originStage={item.originStage}
-                      pipelineStatus={item.pipelineStatus}
-                      consolidationStatus={item.consolidationStatus}
-                      onOpenDetails={() => {
-                        setSelectedLead(item);
-                        setDrawerTab('overview');
-                      }}
-                    />
                     <div className="crm-card__meta">
                       <span>{item.triageCount} triagem(ns)</span>
                       {item.responsible ? <span>{item.responsible}</span> : <span className="crm-card__warning">Sem responsável</span>}
@@ -1378,17 +1347,12 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                             className={`crm-card crm-card--opportunity ${selectedOpportunity?.id === item.id ? 'is-selected' : ''}`}
                             title={item.personName}
                             account={formatSourceLabel(item.source)}
-                            accountSub={item.responsible || 'Sem responsável'}
-                            accountSubClass={item.responsible ? 'text-slate-500' : 'text-amber-600 font-semibold'}
                             value={getSummaryPreview(item.summary)}
                             badges={(
                               <>
                                 <span className="crm-chip crm-chip--blue">
                                   {OPPORTUNITY_STAGE_LABELS[item.status as keyof typeof OPPORTUNITY_STAGE_LABELS] ?? item.status}
                                 </span>
-                                {!item.responsible ? (
-                                  <span className="crm-chip crm-chip--warning">Sem responsável</span>
-                                ) : null}
                                 {item.hasCriticalTriage ? (
                                   <span className="crm-chip crm-chip--neutral">Triagem crítica</span>
                                 ) : null}
@@ -1398,28 +1362,6 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                             onClick={() => setSelectedOpportunity(item)}
                             footer={(
                               <div className="crm-card__footer-stack">
-                                <CrmOriginSummary
-                                  compact
-                                  source={item.source}
-                                  originReference={buildFallbackOriginReference({
-                                    source: item.source,
-                                    sourceReference: item.cpf || item.personName,
-                                    originReference: item.originReference ?? null,
-                                    correlationId: item.correlationId ?? null,
-                                    captureId: item.captureId ?? null,
-                                    publicationId: item.publicationId ?? null,
-                                    originStage: item.originStage ?? null,
-                                    pipelineStatus: item.pipelineStatus ?? null,
-                                    consolidationStatus: item.consolidationStatus ?? null,
-                                  })}
-                                  originStage={item.originStage}
-                                  pipelineStatus={item.pipelineStatus}
-                                  consolidationStatus={item.consolidationStatus}
-                                  onOpenDetails={() => {
-                                    setSelectedOpportunity(item);
-                                    setDrawerTab('overview');
-                                  }}
-                                />
                                 {(item.triageCount > 0 || !item.responsible) ? (
                                   <div className="crm-card__footer-meta">
                                     {item.triageCount > 0 ? (
@@ -1478,12 +1420,20 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
             </div>
           )}
         </div>
+      </section>
 
-        <aside className="crm-drawer">
-          {tab === 'leads' ? (
-            selectedLead ? (
+      {((tab === 'leads' && selectedLead) || (tab === 'opportunities' && selectedOpportunity)) ? (
+        <div className="crm-dialog" role="dialog" aria-modal="true" aria-label="Detalhe da oportunidade">
+          <div className="crm-dialog__backdrop" onClick={() => {
+            setSelectedLead(null);
+            setSelectedOpportunity(null);
+          }} />
+          <div className="crm-dialog__panel crm-dialog__panel--detail">
+            <aside className="crm-drawer">
+              {tab === 'leads' && selectedLead ? (
               <>
-                <div className="crm-drawer__intro">
+                <div className="crm-drawer__fixed-header">
+                  <div className="crm-drawer__intro">
                   <span className="crm-eyebrow">Detalhe do lead</span>
                   <div className="crm-drawer__title-row">
                     <div>
@@ -1528,7 +1478,8 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                     </button>
                   ))}
                 </nav>
-
+                </div>
+                <div className="crm-drawer__scrollable-body">
                 {drawerTab === 'overview' ? (
                   <>
                     <div className="crm-drawer__meta">
@@ -1668,11 +1619,12 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                     </div>
                   </section>
                 ) : null}
+                </div>
               </>
-            ) : null
-          ) : selectedOpportunity ? (
+            ) : tab === 'opportunities' && selectedOpportunity ? (
             <>
-              <div className="crm-drawer__intro">
+              <div className="crm-drawer__fixed-header">
+                <div className="crm-drawer__intro">
                 <span className="crm-eyebrow">Detalhe da oportunidade</span>
                 <div className="crm-drawer__title-row">
                   <div>
@@ -1724,8 +1676,9 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                   </button>
                 ))}
               </nav>
-
-              {drawerTab === 'overview' ? (
+              </div>
+              <div className="crm-drawer__scrollable-body">
+                {drawerTab === 'overview' ? (
                 <>
                   <div className="crm-drawer__meta">
                     <div><span>Status</span><strong>{OPPORTUNITY_STAGE_LABELS[selectedOpportunity.status as keyof typeof OPPORTUNITY_STAGE_LABELS] ?? selectedOpportunity.status}</strong></div>
@@ -2076,42 +2029,36 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                 </section>
               ) : null}
 
-              <div className="crm-drawer__footer">
-                <p>Converta apenas após definir responsável e registrar o primeiro contato.</p>
-                <div className="crm-drawer__footer-actions">
-                  <button
-                    className="btn-secondary"
-                    onClick={() => {
-                      if (selectedOpportunity.convertedProcessId) {
-                        navigate(`/processos/${selectedOpportunity.convertedProcessId}`);
-                      } else {
-                        setDrawerTab('overview');
-                      }
-                    }}
-                  >
-                    Ver detalhes completos
-                  </button>
-                  <button
-                    className="btn-primary"
-                    disabled={!selectedOpportunity.convertedProcessId && !selectedOpportunityReadyToConvert}
-                    title={!selectedOpportunity.convertedProcessId && !selectedOpportunityReadyToConvert ? 'Defina responsável e próximo contato quando estiver em contato.' : undefined}
-                    onClick={() => {
-                      if (selectedOpportunity.convertedProcessId) {
-                        navigate(`/processos/${selectedOpportunity.convertedProcessId}`);
-                        return;
-                      }
-                      setDrawerTab('process');
-                      setShowOpportunityConversion(true);
-                    }}
-                  >
-                    {selectedOpportunity.convertedProcessId ? 'Abrir processo' : 'Converter oportunidade'}
-                  </button>
-                </div>
               </div>
+              {drawerTab === 'overview' ? (
+                <div className="crm-drawer__fixed-footer">
+                  <p>Converta apenas após definir responsável e registrar o primeiro contato.</p>
+                  <div className="crm-drawer__footer-actions">
+                    {/* "Ver detalhes completos" removed */}
+                    <button
+                      className="btn-primary"
+                      disabled={!selectedOpportunity.convertedProcessId && !selectedOpportunityReadyToConvert}
+                      title={!selectedOpportunity.convertedProcessId && !selectedOpportunityReadyToConvert ? 'Defina responsável e próximo contato quando estiver em contato.' : undefined}
+                      onClick={() => {
+                        if (selectedOpportunity.convertedProcessId) {
+                          navigate(`/processos/${selectedOpportunity.convertedProcessId}`);
+                          return;
+                        }
+                        setDrawerTab('process');
+                        setShowOpportunityConversion(true);
+                      }}
+                    >
+                      {selectedOpportunity.convertedProcessId ? 'Abrir processo' : 'Converter oportunidade'}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </>
           ) : null}
-        </aside>
-      </section>
+            </aside>
+          </div>
+        </div>
+      ) : null}
 
       {showConvertConfirmDialog && selectedOpportunity ? (
         <div className="crm-dialog" role="dialog" aria-modal="true" aria-label="Confirmar conversão da oportunidade">
