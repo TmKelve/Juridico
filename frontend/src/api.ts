@@ -918,6 +918,53 @@ export async function apiClient<T = unknown>(
   }
 }
 
+export interface ApiPlatformAdminCompany {
+  id: string;
+  name: string;
+  tenantSlug: string;
+  status: 'active' | 'grace_period' | 'read_only' | 'suspended' | 'cancelled';
+  scope: 'platform' | 'tenant';
+  membersCount: number;
+  pendingInvitesCount: number;
+  ownerName: string;
+  planName: string;
+}
+
+export interface ApiPlatformAdminMembership {
+  id: string;
+  userName: string;
+  email: string;
+  scope: 'platform' | 'tenant';
+  role: 'owner' | 'admin' | 'manager' | 'member' | 'billing' | 'viewer';
+}
+
+export interface ApiPlatformAdminInvitation {
+  id: string;
+  email: string;
+  role: ApiPlatformAdminMembership['role'];
+  scope: 'platform' | 'tenant';
+  expiresAt: string;
+}
+
+export interface ApiPlatformAdminAuditEntry {
+  id: string;
+  occurredAt: string;
+  actor: string;
+  action: string;
+  entity: string;
+  status: 'success' | 'warning' | 'error';
+  summary: string;
+}
+
+export interface ApiPlatformAdminSupportContext {
+  id: string;
+  title: string;
+  description: string;
+  owner: string;
+  updatedAt: string;
+  link: string;
+}
+
 /**
  * Convenience methods
  */
@@ -935,6 +982,50 @@ export const api = {
 
   getMe: () =>
     apiClient<MeResponse>('/me'),
+
+  // === Profile & Notifications (Topbar evolution) ===
+
+  updateAvatar: (avatarUrl: string) =>
+    apiClient<{ success: boolean; avatarUrl: string }>('/me/avatar', {
+      method: 'PUT',
+      body: { avatarUrl },
+    }),
+
+  updateProfile: (data: { phone?: string }) =>
+    apiClient<{ success: boolean }>('/me/profile', {
+      method: 'PUT',
+      body: data,
+    }),
+
+  changePassword: (currentPassword: string, newPassword: string) =>
+    apiClient<{ success: boolean }>('/me/change-password', {
+      method: 'POST',
+      body: { currentPassword, newPassword },
+    }),
+
+  getNotifications: () =>
+    apiClient<{ notifications: Array<{
+      id: number;
+      type: string;
+      title: string;
+      body: string;
+      href: string;
+      read: boolean;
+      createdAt: string;
+    }> }>('/notifications'),
+
+  markNotificationRead: (id: number) =>
+    apiClient<{ success: boolean }>(`/notifications/${id}/read`, {
+      method: 'POST',
+    }),
+
+  markAllNotificationsRead: () =>
+    apiClient<{ success: boolean }>('/notifications/read-all', {
+      method: 'POST',
+    }),
+
+  getNotificationCount: () =>
+    apiClient<{ count: number }>('/notifications/count'),
 
   getPermissions: () =>
     apiClient<string[]>('/permissions'),
@@ -1845,4 +1936,128 @@ export const api = {
       agendaEvents: Array<Record<string, unknown>>;
       idempotency: { key: string; status: 'completed' | 'replayed'; replayed: boolean };
     }>('/deadlines/bulk-action', { method: 'POST', body: data }),
+
+  // Platform Admin Console (isolated block)
+  getPlatformAdminCompanies: () =>
+    apiClient<ApiPlatformAdminCompany[]>('/platform/companies').then((res) => ({
+      ...res,
+      data: { companies: Array.isArray(res.data) ? res.data : [] },
+    })),
+
+  getPlatformAdminCompanyDetail: (companyId: string) =>
+    apiClient<ApiPlatformAdminCompany>(`/platform/companies/${encodeURIComponent(companyId)}`).then((res) => ({
+      ...res,
+      data: { company: res.data as ApiPlatformAdminCompany },
+    })),
+
+  performPlatformAdminCompanyAction: (
+    companyId: string,
+    data: { type: 'suspend' | 'activate' | 'reset_owner_password'; note?: string }
+  ) =>
+    apiClient<{ companyId: number; status: string }>(
+      data.type === 'activate'
+        ? `/platform/companies/${encodeURIComponent(companyId)}/activate`
+        : `/platform/companies/${encodeURIComponent(companyId)}/block`,
+      { method: 'POST', body: { reason: data.note ?? 'Ação operacional de plataforma' } }
+    ).then((res) => ({
+      ...res,
+      data: {
+        accepted: res.status === 200,
+        company: {
+          id: String((res.data as any).companyId ?? companyId),
+          name: `Empresa ${companyId}`,
+          tenantSlug: `tenant-${companyId}`,
+          status: ((res.data as any).status ?? 'active') as ApiPlatformAdminCompany['status'],
+          scope: 'tenant',
+          membersCount: 0,
+          pendingInvitesCount: 0,
+          ownerName: 'Não informado',
+          planName: 'Não informado',
+        },
+      },
+    })),
+
+  getPlatformAdminMemberships: (companyId: string) =>
+    Promise.all([
+      apiClient<{ items: any[] }>(`/platform/memberships?companyId=${encodeURIComponent(companyId)}`),
+      apiClient<{ items: any[] }>(`/platform/invitations/history?companyId=${encodeURIComponent(companyId)}`),
+    ]).then(([membersRes, invitesRes]) => ({
+      status: membersRes.status === 200 ? 200 : membersRes.status,
+      error: membersRes.error ?? invitesRes.error,
+      data: {
+        memberships: (membersRes.data.items ?? []).map((item: any) => ({
+          id: String(item.id),
+          userName: item.email ?? `Usuário ${item.userId ?? item.id}`,
+          email: item.email ?? 'email@indefinido.local',
+          scope: 'tenant',
+          role: item.role ?? 'viewer',
+        })),
+        invites: (invitesRes.data.items ?? []).map((item: any) => ({
+          id: String(item.id),
+          email: item.email ?? 'email@indefinido.local',
+          role: item.role ?? 'viewer',
+          scope: 'tenant',
+          expiresAt: item.expiresAt ?? new Date().toISOString(),
+        })),
+      },
+    })),
+
+  updatePlatformAdminMembershipRole: (
+    companyId: string,
+    membershipId: string,
+    data: { role: ApiPlatformAdminMembership['role'] }
+  ) =>
+    apiClient<{ membership: any }>(
+      `/platform/memberships/${encodeURIComponent(membershipId)}/assign-role`,
+      { method: 'POST', body: { companyId: Number(companyId), role: data.role } }
+    ),
+
+  createPlatformAdminInvitation: (
+    companyId: string,
+    data: { email: string; role: ApiPlatformAdminMembership['role']; scope: 'platform' | 'tenant' }
+  ) =>
+    apiClient<{ invitationId: number; email: string; role: string; createdAt: string }>(
+      `/platform/invitations`,
+      { method: 'POST', body: { companyId: Number(companyId), email: data.email, role: data.role } }
+    ).then((res) => ({
+      ...res,
+      data: {
+        invitation: {
+          id: String((res.data as any).invitationId ?? 'new'),
+          email: (res.data as any).email ?? data.email,
+          role: ((res.data as any).role ?? data.role) as ApiPlatformAdminInvitation['role'],
+          scope: data.scope,
+          expiresAt: new Date().toISOString(),
+        },
+      },
+    })),
+
+  getPlatformAdminAuditTimeline: (filters?: { companyId?: string; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (filters?.companyId) params.set('companyId', filters.companyId);
+    if (typeof filters?.limit === 'number') params.set('limit', String(filters.limit));
+    const query = params.toString();
+    return apiClient<{ items: ApiPlatformAdminAuditEntry[] }>(
+      query ? `/platform/audit?${query}` : '/platform/audit'
+    );
+  },
+
+  getPlatformAdminSupportContext: (companyId: string) =>
+    apiClient<any>(
+      `/platform/company/${encodeURIComponent(companyId)}/support-view`
+    ).then((res) => ({
+      ...res,
+      data: {
+        items: [
+          {
+            id: `support-${companyId}`,
+            title: 'Contexto operacional',
+            description: 'Snapshot read-only para suporte',
+            owner: 'platform_support',
+            updatedAt: new Date().toISOString(),
+            link: `/platform/company/${companyId}/support-view`,
+          },
+        ],
+      },
+    })),
 };

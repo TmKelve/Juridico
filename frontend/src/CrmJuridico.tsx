@@ -43,7 +43,7 @@ import {
   type ApiPublicationPipelineItem,
 } from './api';
 import { OriginInsightPanel } from './components/audit/OriginInsightPanel';
-import { buildFallbackOriginReference } from './components/audit/origin-model';
+import { buildFallbackOriginReference, buildOriginOperationalSummary } from './components/audit/origin-model';
 import { loadOriginBundle } from './components/audit/loadOriginBundle';
 import { CrmOriginSummary } from './components/crm/CrmOriginSummary';
 import { captureException, trackEvent, trackPageView } from './monitoring';
@@ -334,6 +334,12 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
         })
       : null
   ), [activeCrmRecord]);
+  const activeOriginSummary = useMemo(() => buildOriginOperationalSummary({
+    originReference: activeOriginReference,
+    sourceType: activeCrmRecord?.source ?? null,
+    pipelineStatus: activeCrmRecord?.pipelineStatus ?? null,
+    consolidationStatus: activeCrmRecord?.consolidationStatus ?? null,
+  }), [activeCrmRecord, activeOriginReference]);
 
   useEffect(() => {
     let active = true;
@@ -1539,6 +1545,18 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                       <h4>Resumo</h4>
                       <p>{selectedLead.summary}</p>
                     </section>
+                    <section className="crm-origin-callout">
+                      <div>
+                        <span>Por que entrou no CRM</span>
+                        <strong>{activeOriginSummary.headline}</strong>
+                        <p>{activeOriginSummary.detail}</p>
+                      </div>
+                      <div>
+                        <span>O que o time comercial deve saber</span>
+                        <strong>{activeOriginSummary.nextStep}</strong>
+                        <p>Use a evidencia e a timeline para decidir se o caso segue como lead ou se deve ser descartado/reclassificado.</p>
+                      </div>
+                    </section>
                     <OriginInsightPanel
                       title="Origem comercial do lead"
                       originReference={activeOriginReference}
@@ -1723,6 +1741,18 @@ export function CrmJuridico({ user }: CrmJuridicoProps) {
                     <h4>Resumo</h4>
                     <p>{selectedOpportunity.summary}</p>
                     <small>Oportunidade criada automaticamente para análise comercial e possível conversão operacional.</small>
+                  </section>
+                  <section className="crm-origin-callout">
+                    <div>
+                      <span>Por que entrou no CRM</span>
+                      <strong>{activeOriginSummary.headline}</strong>
+                      <p>{activeOriginSummary.detail}</p>
+                    </div>
+                    <div>
+                      <span>O que o comercial deve validar</span>
+                      <strong>{activeOriginSummary.nextStep}</strong>
+                      <p>Confirme se a oportunidade veio apenas de captura ou se ja existe publicacao consolidada antes de avançar a negociação.</p>
+                    </div>
                   </section>
                   <OriginInsightPanel
                     title="Origem comercial da oportunidade"

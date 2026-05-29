@@ -69,8 +69,8 @@
   --border-default: var(--neutral-200);
   --border-strong: var(--neutral-300);
 
-  --action-primary: var(--brand-800);
-  --action-primary-hover: var(--brand-900);
+  --action-primary: #1d4ed8;
+  --action-primary-hover: #1e40af;
   --action-secondary: var(--neutral-100);
   --action-secondary-hover: var(--neutral-200);
 
@@ -299,7 +299,7 @@ button:disabled {
 
 .btn-primary {
   background-color: var(--action-primary);
-  color: var(--text-inverse);
+  color: #ffffff !important;
 }
 
 .btn-primary:hover:not(:disabled) {

@@ -14,7 +14,6 @@
 .tsk-hero {
   background: linear-gradient(135deg, color-mix(in srgb, var(--brand-50) 72%, white) 0%, var(--white) 58%);
   border: 1px solid color-mix(in srgb, var(--brand-200) 50%, var(--neutral-200));
-  border-left: 4px solid var(--brand-500);
   border-radius: var(--radius-2xl);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 6px 20px rgba(15, 23, 42, 0.04);
   padding: var(--space-6);
@@ -24,6 +23,16 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-6);
+}
+.tsk-hero::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: #1d4ed8;
+  box-shadow: 2px 0 10px rgba(29, 78, 216, 0.30);
 }
 
 .tsk-hero::after {
@@ -45,10 +54,10 @@
 .tsk-hero-eyebrow {
   margin: 0 0 var(--space-1);
   font-size: 11px;
-  font-weight: var(--font-weight-bold);
-  letter-spacing: 0.1em;
+  font-weight: 800;
+  letter-spacing: 0;
   text-transform: uppercase;
-  color: var(--brand-600);
+  color: #1d4ed8;
 }
 
 .tsk-hero-title {

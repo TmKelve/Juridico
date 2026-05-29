@@ -1,0 +1,717 @@
+/* ── ProcessDocumentModal ────────────────────────────────────────────────────
+   Full-overlay modal for process-level document management + checklist
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* Backdrop */
+.pdm-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(2px);
+  z-index: 200;
+  border: none;
+  cursor: default;
+}
+
+/* Modal card */
+.pdm-card {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 201;
+  width: min(960px, calc(100vw - 32px));
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--white);
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-2xl);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18), 0 4px 16px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  animation: pdm-enter 0.18s ease-out both;
+}
+
+@keyframes pdm-enter {
+  from { opacity: 0; transform: translate(-50%, -48%); }
+  to   { opacity: 1; transform: translate(-50%, -50%); }
+}
+
+/* ── HEADER ── */
+.pdm-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-6);
+  border-bottom: 1px solid var(--neutral-100);
+  background: var(--neutral-50);
+  flex-shrink: 0;
+}
+
+.pdm-header-meta {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.pdm-header-title-group {
+  flex: 1;
+  min-width: 0;
+}
+
+.pdm-process-label {
+  font-size: var(--font-size-base);
+  font-weight: 700;
+  color: var(--neutral-950);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.pdm-process-title {
+  font-size: var(--font-size-sm);
+  color: var(--neutral-500);
+  margin: 2px 0 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pdm-area-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+.pdm-area--trabalhista  { background: var(--warning-100); color: var(--warning-700); }
+.pdm-area--civel        { background: var(--info-100);    color: var(--info-600);    }
+.pdm-area--tributario   { background: var(--error-100);   color: var(--error-700);   }
+.pdm-area--empresarial  { background: var(--brand-50);    color: var(--brand-700);   }
+.pdm-area--previdenciario { background: var(--success-100); color: var(--success-600); }
+.pdm-area--_default     { background: var(--neutral-100); color: var(--neutral-700); }
+
+.pdm-client-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 var(--space-2);
+  background: var(--neutral-100);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-xs);
+  color: var(--neutral-700);
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+.pdm-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-md);
+  color: var(--neutral-500);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+.pdm-close:hover {
+  background: var(--neutral-100);
+  color: var(--neutral-950);
+}
+
+/* ── PHASE STEPPER ── */
+.pdm-phase-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-6);
+  border-bottom: 1px solid var(--neutral-100);
+  background: var(--white);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.pdm-phase-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  color: var(--neutral-500);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.pdm-phase-arrow:hover:not(:disabled) {
+  background: var(--neutral-100);
+  color: var(--neutral-950);
+  border-color: var(--neutral-300);
+}
+.pdm-phase-arrow:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.pdm-phase-steps {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  justify-content: center;
+}
+
+.pdm-phase-steps li {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+/* connecting line between steps */
+.pdm-phase-steps li + li::before {
+  content: '';
+  display: block;
+  height: 2px;
+  flex: 1;
+  background: var(--neutral-200);
+  min-width: 12px;
+}
+
+.pdm-phase-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: var(--radius-md);
+  transition: background 0.12s;
+  min-width: 60px;
+}
+.pdm-phase-step:hover {
+  background: var(--neutral-50);
+}
+
+.pdm-step-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--neutral-200);
+  border: 2px solid var(--neutral-300);
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+  flex-shrink: 0;
+}
+
+.pdm-step-label {
+  font-size: 11px;
+  color: var(--neutral-500);
+  white-space: nowrap;
+  transition: color 0.15s, font-weight 0.15s;
+}
+
+/* Past phase */
+.pdm-phase-step.is-past .pdm-step-dot {
+  background: var(--brand-600);
+  border-color: var(--brand-600);
+}
+.pdm-phase-step.is-past .pdm-step-label {
+  color: var(--brand-600);
+}
+.pdm-phase-steps li:has(.is-past) + li::before {
+  background: var(--brand-100);
+}
+
+/* Current (actual process phase) */
+.pdm-phase-step.is-current .pdm-step-dot {
+  background: var(--brand-600);
+  border-color: var(--brand-700);
+  box-shadow: 0 0 0 3px var(--brand-100);
+  width: 12px;
+  height: 12px;
+}
+.pdm-phase-step.is-current .pdm-step-label {
+  color: var(--brand-700);
+  font-weight: 600;
+}
+
+/* Selected (what the user is viewing) */
+.pdm-phase-step.is-selected .pdm-step-dot {
+  outline: 2px solid var(--brand-600);
+  outline-offset: 2px;
+}
+.pdm-phase-step.is-selected .pdm-step-label {
+  font-weight: 600;
+}
+
+/* Future phase */
+.pdm-phase-step.is-future .pdm-step-dot {
+  background: var(--neutral-100);
+  border-color: var(--neutral-200);
+}
+
+/* ── BODY ── */
+.pdm-body {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 0;
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── CHECKLIST SECTION ── */
+.pdm-checklist-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-6);
+  overflow-y: auto;
+  border-right: 1px solid var(--neutral-100);
+}
+
+.pdm-checklist-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--neutral-50);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--neutral-100);
+}
+
+.pdm-checklist-progress-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pdm-checklist-phase-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--neutral-700);
+}
+
+.pdm-current-tag {
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  background: var(--brand-50);
+  color: var(--brand-700);
+  padding: 1px 6px;
+  border-radius: 99px;
+}
+
+.pdm-checklist-fraction {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--neutral-500);
+}
+
+.pdm-progress-bar {
+  height: 6px;
+  background: var(--neutral-200);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.pdm-progress-fill {
+  height: 100%;
+  background: var(--brand-600);
+  border-radius: 99px;
+  transition: width 0.3s ease;
+}
+
+.pdm-missing-alert {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  color: var(--error-700);
+  margin: 0;
+}
+
+/* Checklist groups */
+.pdm-checklist-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.pdm-group-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0 0 var(--space-1);
+  border-bottom: 1px solid var(--neutral-100);
+  margin: 0;
+}
+.pdm-group-label--blocking { color: var(--error-700);   }
+.pdm-group-label--required  { color: var(--warning-700); }
+.pdm-group-label--optional  { color: var(--neutral-500); }
+
+.pdm-checklist-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Checklist row */
+.pdm-checklist-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  border: 1px solid var(--neutral-100);
+  transition: background 0.12s, border-color 0.12s;
+}
+.pdm-checklist-row:hover { background: var(--neutral-50); }
+
+.pdm-checklist-row--validado            { border-left: 3px solid var(--success-600); }
+.pdm-checklist-row--aguardando_validacao { border-left: 3px solid var(--info-600);   }
+.pdm-checklist-row--rejeitado           { border-left: 3px solid var(--error-500);   }
+.pdm-checklist-row--faltante            { border-left: 3px solid var(--neutral-300); }
+
+.pdm-item-icon-wrap { flex-shrink: 0; display: flex; }
+
+.pdm-item-icon--validado   { color: var(--success-600); }
+.pdm-item-icon--aguardando { color: var(--info-600);    }
+.pdm-item-icon--rejeitado  { color: var(--error-500);   }
+.pdm-item-icon--faltante   { color: var(--neutral-400); }
+
+.pdm-item-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pdm-item-title {
+  font-size: var(--font-size-sm);
+  color: var(--neutral-950);
+  font-weight: 500;
+}
+
+.pdm-item-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.pdm-item-cat {
+  font-size: var(--font-size-xs);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+.pdm-item-cat--peticao    { background: var(--brand-50);    color: var(--brand-700);   }
+.pdm-item-cat--contrato   { background: var(--neutral-100); color: var(--neutral-700); }
+.pdm-item-cat--prova      { background: var(--warning-100); color: var(--warning-700); }
+.pdm-item-cat--financeiro { background: var(--success-100); color: var(--success-600); }
+.pdm-item-cat--checklist  { background: var(--info-100);    color: var(--info-600);    }
+
+.pdm-item-linked {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--font-size-xs);
+  color: var(--neutral-500);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 160px;
+}
+
+.pdm-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.pdm-item-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--neutral-200);
+  background: var(--white);
+  cursor: pointer;
+  color: var(--neutral-500);
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  text-decoration: none;
+}
+.pdm-item-btn:hover { background: var(--neutral-100); color: var(--neutral-950); }
+.pdm-item-btn--validate:hover { background: var(--success-100); color: var(--success-600); border-color: var(--success-600); }
+.pdm-item-btn--reject:hover   { background: var(--error-100);   color: var(--error-700);   border-color: var(--error-700);   }
+.pdm-item-btn--upload:hover   { background: var(--brand-50);    color: var(--brand-700);   border-color: var(--brand-600);   }
+.pdm-item-btn--whatsapp:hover { background: #dcfce7; color: #16a34a; border-color: #16a34a; }
+.pdm-item-btn--undo:hover     { background: var(--warning-100); color: var(--warning-700); border-color: var(--warning-600); }
+
+/* ── DOCUMENTS SECTION ── */
+.pdm-docs-section {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pdm-docs-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5);
+  border: none;
+  border-bottom: 1px solid var(--neutral-100);
+  background: var(--neutral-50);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--neutral-700);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+  flex-shrink: 0;
+}
+.pdm-docs-toggle:hover { background: var(--neutral-100); }
+
+.pdm-docs-chevron {
+  margin-left: auto;
+  color: var(--neutral-400);
+  transition: transform 0.2s;
+  transform: rotate(-90deg);
+}
+.pdm-docs-chevron.is-open {
+  transform: rotate(90deg);
+}
+
+.pdm-docs-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.pdm-docs-empty {
+  font-size: var(--font-size-sm);
+  color: var(--neutral-500);
+  text-align: center;
+  padding: var(--space-6) 0;
+  margin: 0;
+}
+
+.pdm-docs-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pdm-docs-group-label {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--neutral-500);
+  padding: 4px 0 2px;
+  margin: 0;
+}
+
+.pdm-doc-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--neutral-100);
+  background: var(--white);
+  transition: background 0.12s;
+}
+.pdm-doc-row:hover { background: var(--neutral-50); }
+
+.pdm-doc-row--pendente            { border-left: 3px solid var(--warning-600); }
+.pdm-doc-row--aguardando_validacao { border-left: 3px solid var(--info-600);   }
+.pdm-doc-row--validado            { border-left: 3px solid var(--success-600); }
+.pdm-doc-row--rejeitado           { border-left: 3px solid var(--error-500);   }
+
+.pdm-doc-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pdm-doc-name {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--neutral-950);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pdm-doc-meta {
+  font-size: 11px;
+  color: var(--neutral-400);
+}
+
+.pdm-doc-row-aside {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.pdm-doc-date {
+  font-size: 11px;
+  color: var(--neutral-500);
+  white-space: nowrap;
+}
+
+.pdm-doc-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.pdm-doc-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-md);
+  color: var(--neutral-400);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.pdm-doc-action:hover { background: var(--neutral-100); color: var(--neutral-700); }
+.pdm-doc-action--validate:hover { background: var(--success-100); color: var(--success-600); }
+.pdm-doc-action--reject:hover   { background: var(--error-100);   color: var(--error-700);   }
+
+/* ── FOOTER ── */
+.pdm-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--neutral-100);
+  background: var(--neutral-50);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.pdm-footer-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.pdm-footer-stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  color: var(--neutral-500);
+}
+.pdm-footer-stat--warn   { color: var(--warning-700); }
+.pdm-footer-stat--danger { color: var(--error-700);   }
+
+.pdm-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.pdm-whatsapp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 7px var(--space-4);
+  background: #16a34a;
+  color: #fff;
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.pdm-whatsapp-btn:hover { background: #15803d; }
+
+/* ── Responsive: narrow modal ── */
+@media (max-width: 720px) {
+  .pdm-body {
+    grid-template-columns: 1fr;
+  }
+
+  .pdm-docs-section {
+    border-right: none;
+    border-top: 1px solid var(--neutral-100);
+  }
+
+  .pdm-phase-steps {
+    gap: 0;
+  }
+
+  .pdm-step-label {
+    display: none;
+  }
+
+  .pdm-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pdm-footer-actions {
+    flex-direction: column;
+  }
+
+  .pdm-whatsapp-btn {
+    justify-content: center;
+  }
+}

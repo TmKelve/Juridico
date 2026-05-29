@@ -9,6 +9,7 @@ test('normalizeOabPublicationPayload maps oab publication payload', async () => 
     oab: 'SP123456',
     numeroProcesso: '10000011120265020001',
     tribunal: 'TJSP',
+    sourceUrl: 'https://oab.exemplo/OAB-1',
     title: 'Intimação localizada por OAB',
     resumo: 'Prazo em aberto.',
     textoIntegral: 'Intimação vinculada à OAB com prazo em aberto.',
@@ -21,4 +22,5 @@ test('normalizeOabPublicationPayload maps oab publication payload', async () => 
   assert.equal(payload.oabNumber, 'SP123456');
   assert.equal(payload.processNumber, '10000011120265020001');
   assert.equal(payload.lawyerName, 'advogado');
+  assert.equal(payload.sourceUrl, 'https://oab.exemplo/OAB-1');
 });

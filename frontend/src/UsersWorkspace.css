@@ -12,6 +12,18 @@
   background:
     radial-gradient(circle at top right, rgba(16, 185, 129, 0.16), transparent 35%),
     linear-gradient(135deg, rgba(248, 250, 252, 0.98), rgba(226, 232, 240, 0.96));
+  position: relative;
+  overflow: hidden;
+}
+.users-hero::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: #1d4ed8;
+  box-shadow: 2px 0 10px rgba(29, 78, 216, 0.30);
 }
 
 .users-hero-copy {
@@ -22,10 +34,10 @@
 .users-eyebrow {
   margin: 0;
   font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-weight: 800;
+  letter-spacing: 0;
   text-transform: uppercase;
-  color: #0f766e;
+  color: #1d4ed8;
 }
 
 .users-hero-copy h2,

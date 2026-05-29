@@ -8,7 +8,6 @@
 .my-processes-header {
   background: linear-gradient(135deg, color-mix(in srgb, var(--brand-50) 72%, white) 0%, var(--white) 58%);
   border: 1px solid color-mix(in srgb, var(--brand-200) 50%, var(--neutral-200));
-  border-left: 4px solid var(--brand-500);
   border-radius: var(--radius-2xl);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 6px 20px rgba(15, 23, 42, 0.04);
   padding: var(--space-6);
@@ -18,6 +17,16 @@
   align-items: flex-end;
   justify-content: space-between;
   gap: var(--space-6);
+}
+.my-processes-header::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: #1d4ed8;
+  box-shadow: 2px 0 10px rgba(29, 78, 216, 0.30);
 }
 
 /* Halo decorativo canto direito */
@@ -46,10 +55,10 @@
 .my-processes-header-eyebrow {
   margin: 0 0 var(--space-1);
   font-size: 11px;
-  font-weight: var(--font-weight-bold);
-  letter-spacing: 0.1em;
+  font-weight: 800;
+  letter-spacing: 0;
   text-transform: uppercase;
-  color: var(--brand-600);
+  color: #1d4ed8;
 }
 
 .my-processes-header-title {
@@ -453,10 +462,23 @@
 .process-lookup-panel {
   border: 1px solid var(--brand-200);
   border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, var(--brand-50) 0%, var(--white) 100%);
-  padding: var(--space-3);
+  background: linear-gradient(135deg, var(--brand-50) 0%, var(--white) 100%);
+  padding: var(--space-4);
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-3);
+}
+
+.process-lookup-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.process-lookup-panel-head h4 {
+  margin: 4px 0 0;
+  font-size: var(--font-size-md);
+  color: var(--neutral-900);
 }
 
 .process-lookup-panel label {
@@ -534,27 +556,133 @@
   border-color: var(--brand-500);
 }
 
+/* ── Process form fields (new flat layout) ───────────────────────── */
+
+.process-form-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.process-form-fields.is-locked {
+  opacity: 0.55;
+  pointer-events: none;
+  user-select: none;
+}
+
+.process-form-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--neutral-700);
+  letter-spacing: 0.02em;
+}
+
+.process-form-fields input,
+.process-form-fields select {
+  min-height: 44px;
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-md);
+  padding: 0 var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--neutral-800);
+  background: var(--white);
+  transition: border-color 120ms;
+}
+
+.process-form-fields input:hover,
+.process-form-fields select:hover {
+  border-color: var(--neutral-300);
+}
+
+.process-form-fields input:focus-visible,
+.process-form-fields select:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+  border-color: var(--brand-500);
+}
+
+.process-form-fields input:disabled,
+.process-form-fields select:disabled {
+  background: var(--neutral-50);
+  color: var(--neutral-400);
+  cursor: not-allowed;
+}
+
+.form-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.form-fields-locked-hint {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--neutral-50);
+  border: 1px solid var(--neutral-200);
+  font-size: var(--font-size-xs);
+  color: var(--neutral-600);
+}
+
+/* ── Client field row (input + Novo cliente btn) ─────────────────── */
+
+.client-field-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.client-field-row .client-search-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.btn-new-client {
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--brand-300);
+  border-radius: var(--radius-md);
+  background: var(--brand-50);
+  color: var(--brand-700);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: background 120ms, border-color 120ms;
+}
+
+.btn-new-client:hover {
+  background: var(--brand-100);
+  border-color: var(--brand-400);
+}
+
+/* ── Form actions ────────────────────────────────────────────────── */
+
 .form-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--space-2);
   flex-wrap: wrap;
   border-top: 1px solid var(--neutral-100);
-  padding-top: var(--space-3);
-}
-
-.form-actions-note {
-  margin: 0 auto 0 0;
-  font-size: var(--font-size-xs);
-  color: var(--neutral-500);
-  line-height: 1.45;
-  max-width: 420px;
+  padding-top: var(--space-4);
 }
 
 .client-search-field {
   display: flex;
   flex-direction: column;
   position: relative;
+}
+
+.client-search-field input {
+  width: 100%;
 }
 
 .client-suggestion-list {
@@ -2171,12 +2299,22 @@
 }
 
 .drawer-checklist h4 {
-  margin: 0;
-  display: inline-flex;
+  margin: 0 0 var(--space-1);
+  display: flex;
   align-items: center;
   gap: var(--space-2);
   font-size: var(--font-size-sm);
   color: var(--neutral-900);
+}
+
+.drawer-checklist-count {
+  margin-left: auto;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--neutral-500);
+  background: var(--neutral-100);
+  padding: 1px 7px;
+  border-radius: 999px;
 }
 
 .drawer-checklist label {
@@ -2185,10 +2323,24 @@
   gap: var(--space-2);
   font-size: var(--font-size-sm);
   color: var(--neutral-700);
+  cursor: pointer;
+  padding: 2px 0;
+  transition: color 0.15s;
+}
+
+.drawer-checklist label:hover {
+  color: var(--neutral-900);
+}
+
+.drawer-checklist label.drawer-checklist-done {
+  color: var(--neutral-400);
+  text-decoration: line-through;
 }
 
 .drawer-checklist input {
-  accent-color: var(--brand-700);
+  accent-color: #1d4ed8;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 .checklist-handle {

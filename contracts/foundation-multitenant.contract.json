@@ -1,0 +1,242 @@
+{
+  "epic": "Fase 1 - Fundacao SaaS Multiempresa",
+  "version": "2026-05-27",
+  "decisions": {
+    "userModel": "global_identity_with_company_membership",
+    "platformAndTenantUsers": "shared_user_table_with_explicit_user_type",
+    "companyScopeEnforcement": "hybrid_request_context_and_repository_helpers",
+    "companyStatusPolicy": {
+      "read_only": "permite leitura e bloqueia mutacoes operacionais do tenant",
+      "suspended": "bloqueia login tenant e operacoes; platform users seguem por regra explicita",
+      "cancelled": "bloqueia login e operacoes; retencao minima de 180 dias para auditoria"
+    }
+  },
+  "validationScenarios": {
+    "integrationMinimum": [
+      "auth.login resolves userType/companyId/membershipId claims",
+      "session.resolveCompanyContext denies cross-tenant membership mismatches",
+      "resource.companyScope.validate blocks divergent company filters",
+      "auth.access.evaluate keeps sensitive deny-by-default behavior"
+    ]
+  },
+  "commands": {
+    "company.create": {
+      "input": {
+        "legalName": "string",
+        "tradeName": "string|null",
+        "slug": "string",
+        "documentNumber": "string|null",
+        "status": "active|grace_period|read_only|suspended|cancelled",
+        "createdByUserId": "number",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "company": {
+          "id": "number",
+          "slug": "string",
+          "status": "active|grace_period|read_only|suspended|cancelled",
+          "createdAt": "ISO-8601 datetime",
+          "updatedAt": "ISO-8601 datetime"
+        },
+        "auditEvent": "audit.event"
+      },
+      "errors": [
+        "COMPANY_SLUG_CONFLICT",
+        "COMPANY_INVALID_PAYLOAD",
+        "IDEMPOTENCY_CONFLICT"
+      ],
+      "idempotency": {
+        "scope": "company.create",
+        "dedupeBy": ["scope", "idempotencyKey"]
+      },
+      "companyContextRequired": false
+    },
+    "company.updateStatus": {
+      "input": {
+        "companyId": "number",
+        "toStatus": "active|grace_period|read_only|suspended|cancelled",
+        "reason": "string|null",
+        "actorUserId": "number",
+        "idempotencyKey": "string|null"
+      },
+      "output": {
+        "company": {
+          "id": "number",
+          "status": "active|grace_period|read_only|suspended|cancelled",
+          "updatedAt": "ISO-8601 datetime"
+        },
+        "auditEvent": "audit.event"
+      },
+      "errors": [
+        "COMPANY_NOT_FOUND",
+        "COMPANY_STATUS_TRANSITION_INVALID",
+        "COMPANY_STATUS_PERMISSION_DENIED",
+        "IDEMPOTENCY_CONFLICT"
+      ],
+      "idempotency": {
+        "scope": "company.updateStatus",
+        "dedupeBy": ["scope", "companyId", "idempotencyKey"]
+      },
+      "companyContextRequired": false
+    },
+    "company.membership.create": {
+      "input": {
+        "companyId": "number",
+        "userId": "number",
+        "role": "company_admin|manager|lawyer|assistant|company_finance",
+        "userType": "tenant|platform",
+        "isPrimary": "boolean"
+      },
+      "output": {
+        "membership": {
+          "id": "number",
+          "companyId": "number",
+          "userId": "number",
+          "role": "company_admin|manager|lawyer|assistant|company_finance",
+          "status": "active|invited|inactive"
+        },
+        "auditEvent": "audit.event"
+      },
+      "errors": [
+        "COMPANY_NOT_FOUND",
+        "USER_NOT_FOUND",
+        "MEMBERSHIP_ALREADY_EXISTS",
+        "MEMBERSHIP_ROLE_INVALID",
+        "MEMBERSHIP_PERMISSION_DENIED"
+      ],
+      "companyContextRequired": false
+    },
+    "company.membership.updateRole": {
+      "input": {
+        "membershipId": "number",
+        "role": "company_admin|manager|lawyer|assistant|company_finance",
+        "actorUserId": "number"
+      },
+      "output": {
+        "membership": {
+          "id": "number",
+          "companyId": "number",
+          "role": "company_admin|manager|lawyer|assistant|company_finance",
+          "updatedAt": "ISO-8601 datetime"
+        },
+        "auditEvent": "audit.event"
+      },
+      "errors": [
+        "MEMBERSHIP_NOT_FOUND",
+        "MEMBERSHIP_ROLE_INVALID",
+        "MEMBERSHIP_PERMISSION_DENIED"
+      ],
+      "companyContextRequired": true
+    },
+    "session.resolveCompanyContext": {
+      "input": {
+        "userId": "number",
+        "preferredCompanyId": "number|null",
+        "tokenCompanyId": "number|null"
+      },
+      "output": {
+        "context": {
+          "companyId": "number|null",
+          "membershipId": "number|null",
+          "role": "string|null",
+          "userType": "tenant|platform",
+          "companyStatus": "active|grace_period|read_only|suspended|cancelled|null"
+        }
+      },
+      "errors": [
+        "SESSION_COMPANY_REQUIRED",
+        "SESSION_COMPANY_NOT_ALLOWED",
+        "SESSION_MEMBERSHIP_NOT_FOUND"
+      ],
+      "companyContextRequired": false
+    },
+    "auth.login": {
+      "input": {
+        "email": "string",
+        "password": "string",
+        "companySlug": "string|null"
+      },
+      "output": {
+        "accessToken": "string",
+        "session": {
+          "userId": "number",
+          "email": "string",
+          "userType": "tenant|platform",
+          "companyId": "number|null",
+          "membershipId": "number|null",
+          "role": "string",
+          "companyStatus": "active|grace_period|read_only|suspended|cancelled|null"
+        }
+      },
+      "errors": [
+        "AUTH_INVALID_CREDENTIALS",
+        "AUTH_COMPANY_REQUIRED",
+        "AUTH_COMPANY_NOT_FOUND",
+        "AUTH_COMPANY_SUSPENDED",
+        "AUTH_COMPANY_CANCELLED"
+      ],
+      "companyContextRequired": false
+    },
+    "auth.access.evaluate": {
+      "input": {
+        "userId": "number",
+        "userType": "tenant|platform",
+        "companyId": "number|null",
+        "companyStatus": "active|grace_period|read_only|suspended|cancelled|null",
+        "action": "read|write|admin|billing|support",
+        "resource": "string"
+      },
+      "output": {
+        "allowed": "boolean",
+        "reason": "string",
+        "effectiveScope": "tenant|platform|none"
+      },
+      "errors": [
+        "AUTH_ACCESS_DENIED",
+        "AUTH_COMPANY_CONTEXT_REQUIRED",
+        "AUTH_PLATFORM_CONTEXT_FORBIDDEN"
+      ],
+      "companyContextRequired": "depends_on_action"
+    },
+    "resource.companyScope.validate": {
+      "input": {
+        "requestCompanyId": "number|null",
+        "resourceCompanyId": "number|null",
+        "userType": "tenant|platform",
+        "allowPlatformBypass": "boolean"
+      },
+      "output": {
+        "valid": "boolean",
+        "reason": "ok|missing_context|cross_tenant_blocked|platform_bypass"
+      },
+      "errors": [
+        "COMPANY_SCOPE_MISSING",
+        "COMPANY_SCOPE_CROSS_TENANT"
+      ],
+      "companyContextRequired": true
+    },
+    "audit.event": {
+      "input": {
+        "scope": "company|membership|auth|authz|resource",
+        "action": "string",
+        "status": "success|warning|error",
+        "actor": {
+          "source": "user|system|api",
+          "userId": "number|null",
+          "role": "string|null"
+        },
+        "companyId": "number|null",
+        "entityType": "string",
+        "entityId": "string|number|null",
+        "context": "object",
+        "idempotencyKey": "string|null",
+        "occurredAt": "ISO-8601 datetime"
+      },
+      "output": {
+        "eventId": "string"
+      },
+      "errors": ["AUDIT_INVALID_PAYLOAD"],
+      "companyContextRequired": "depends_on_scope"
+    }
+  }
+}

@@ -8,6 +8,7 @@ export interface DiarioPublicationCandidate {
 
 export interface DiarioPublicationCapture {
   sourceReference: string;
+  sourceUrl?: string | null;
   occurredAt: string;
   tribunal: string;
   processNumber: string;
@@ -43,6 +44,7 @@ export function normalizeDiarioPublicationPayload(payload: RemotePayload, fallba
 
   return {
     sourceReference: normalizeText(payload.sourceReference ?? payload.id, `DIARIO-${processNumber}-${occurredAt}`),
+    sourceUrl: normalizeText(payload.sourceUrl ?? payload.publicationUrl ?? payload.url ?? payload.link, '') || null,
     occurredAt,
     tribunal: normalizeText(payload.tribunal ?? payload.court, fallbackCandidate?.tribunalHint ?? 'Diário Oficial'),
     processNumber,
@@ -106,6 +108,7 @@ export async function collectDiarioPublications(candidates: DiarioPublicationCan
 
     return {
       sourceReference: `DIARIO-FALLBACK-${candidate.processNumber}-${occurredAt.toISOString()}`,
+      sourceUrl: null,
       occurredAt: occurredAt.toISOString(),
       tribunal: candidate.tribunalHint || 'Diário Oficial',
       processNumber: candidate.processNumber,

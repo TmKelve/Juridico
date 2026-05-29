@@ -5,7 +5,6 @@ import {
   Calendar,
   CalendarPlus,
   CheckCircle2,
-  ChevronDown,
   ClipboardCheck,
   Clock,
   Download,
@@ -27,7 +26,7 @@ import {
 import { api, type ApiTask } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import { ProcessCombobox } from './ProcessCombobox';
-import { EmptyState, FilterBar, PriorityBadge as ProductPriorityBadge, StatusPill } from './components/product';
+import { EmptyState, PriorityBadge as ProductPriorityBadge, StatusPill } from './components/product';
 import './Tasks.css';
 import './Dashboard.css';
 import './Processes.css';

@@ -29,8 +29,54 @@
   color: #64748b;
 }
 
+.crm-origin-summary__headline {
+  margin: 0.35rem 0 0;
+  color: #0f172a;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
 .crm-origin-summary p {
   margin: 0;
   color: #475569;
   font-size: 0.9rem;
+}
+
+.crm-origin-summary__facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.crm-origin-summary__facts div {
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.8rem;
+  border: 1px solid #dbe3ef;
+  background: #fff;
+}
+
+.crm-origin-summary__facts span,
+.crm-origin-summary__next-step {
+  color: #64748b;
+  font-size: 0.76rem;
+}
+
+.crm-origin-summary__facts span {
+  display: block;
+  margin-bottom: 0.22rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.crm-origin-summary__facts strong {
+  color: #0f172a;
+  font-size: 0.84rem;
+}
+
+.crm-origin-summary__next-step {
+  display: block;
+}
+
+.crm-origin-summary--compact .crm-origin-summary__facts {
+  grid-template-columns: 1fr;
 }

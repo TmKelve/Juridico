@@ -1,3 +1,6 @@
+import { listRoleGrants } from '../../permissions/matrix';
+import { resolveRole } from '../../roles/roles';
+
 export const authzScopes = ['own', 'team', 'portfolio', 'global', 'denied'] as const;
 export type AuthzScope = (typeof authzScopes)[number];
 
@@ -59,85 +62,17 @@ export type AuthzGrant = {
   scopes: ManageableAuthzScope[];
 };
 
-const authzRoleGrants: Record<string, AuthzGrant[]> = {
-  ADM: authzPermissionCatalog.map((entry) => ({
-    permissionKey: entry.key,
-    scopes: ['global'],
-  })),
-  ADV: [
-    { permissionKey: 'task.view', scopes: ['own', 'team', 'portfolio'] },
-    { permissionKey: 'task.create', scopes: ['own', 'team', 'portfolio'] },
-    { permissionKey: 'task.update', scopes: ['own', 'team', 'portfolio'] },
-    { permissionKey: 'task.linkEntities', scopes: ['own', 'team', 'portfolio'] },
-    { permissionKey: 'task.followup.schedule', scopes: ['own', 'team', 'portfolio'] },
-    { permissionKey: 'attendance.view', scopes: ['own', 'team', 'portfolio'] },
-    { permissionKey: 'attendance.create', scopes: ['own', 'team', 'portfolio'] },
-    { permissionKey: 'attendance.updateSla', scopes: ['own', 'team', 'portfolio'] },
-    { permissionKey: 'attendance.convertToTask', scopes: ['own', 'team', 'portfolio'] },
-    { permissionKey: 'attendance.convertToDeadline', scopes: ['own', 'team', 'portfolio'] },
-    { permissionKey: 'team.view', scopes: ['team', 'portfolio'] },
-    { permissionKey: 'portfolio.view', scopes: ['portfolio'] },
-    { permissionKey: 'productivity.view', scopes: ['own', 'team', 'portfolio'] },
-    { permissionKey: 'productivity.snapshot', scopes: ['own', 'team', 'portfolio'] },
-    { permissionKey: 'export.tasks', scopes: ['own', 'team', 'portfolio'] },
-    { permissionKey: 'export.attendances', scopes: ['own', 'team', 'portfolio'] },
-    { permissionKey: 'ai.view', scopes: ['own', 'team', 'portfolio'] },
-    { permissionKey: 'ai.summary.generate', scopes: ['own', 'team', 'portfolio'] },
-    { permissionKey: 'ai.recommendation.generate', scopes: ['own', 'team', 'portfolio'] },
-    { permissionKey: 'ai.draft.generate', scopes: ['own', 'team', 'portfolio'] },
-    { permissionKey: 'ai.checklist.suggest', scopes: ['own', 'team', 'portfolio'] },
-    { permissionKey: 'bi.view', scopes: ['own', 'team', 'portfolio'] },
-    { permissionKey: 'bi.snapshot.generate', scopes: ['own', 'team', 'portfolio'] },
-    { permissionKey: 'timesheet.view', scopes: ['own', 'team', 'portfolio'] },
-    { permissionKey: 'timesheet.entry.create', scopes: ['own', 'team', 'portfolio'] },
-    { permissionKey: 'timesheet.entry.update', scopes: ['own', 'team', 'portfolio'] },
-    { permissionKey: 'timesheet.entry.approve', scopes: ['own', 'team', 'portfolio'] },
-    { permissionKey: 'timesheet.report.view', scopes: ['own', 'team', 'portfolio'] },
-    { permissionKey: 'mobile.feed.view', scopes: ['own', 'team', 'portfolio'] },
-  ],
-  ATD: [
-    { permissionKey: 'task.view', scopes: ['own', 'team'] },
-    { permissionKey: 'task.create', scopes: ['own', 'team'] },
-    { permissionKey: 'task.update', scopes: ['own', 'team'] },
-    { permissionKey: 'task.followup.schedule', scopes: ['own', 'team'] },
-    { permissionKey: 'attendance.view', scopes: ['own', 'team'] },
-    { permissionKey: 'attendance.create', scopes: ['own', 'team'] },
-    { permissionKey: 'attendance.updateSla', scopes: ['own', 'team'] },
-    { permissionKey: 'attendance.convertToTask', scopes: ['own', 'team'] },
-    { permissionKey: 'team.view', scopes: ['team'] },
-    { permissionKey: 'portfolio.view', scopes: ['team'] },
-    { permissionKey: 'productivity.view', scopes: ['own', 'team'] },
-    { permissionKey: 'productivity.snapshot', scopes: ['own', 'team'] },
-    { permissionKey: 'export.tasks', scopes: ['own', 'team'] },
-    { permissionKey: 'export.attendances', scopes: ['own', 'team'] },
-    { permissionKey: 'ai.view', scopes: ['own', 'team'] },
-    { permissionKey: 'ai.summary.generate', scopes: ['own', 'team'] },
-    { permissionKey: 'ai.checklist.suggest', scopes: ['own', 'team'] },
-    { permissionKey: 'timesheet.view', scopes: ['own', 'team'] },
-    { permissionKey: 'timesheet.entry.create', scopes: ['own', 'team'] },
-    { permissionKey: 'timesheet.entry.update', scopes: ['own', 'team'] },
-    { permissionKey: 'mobile.feed.view', scopes: ['own', 'team'] },
-  ],
-  FIN: [
-    { permissionKey: 'portfolio.view', scopes: ['global'] },
-    { permissionKey: 'productivity.view', scopes: ['global'] },
-    { permissionKey: 'productivity.snapshot', scopes: ['global'] },
-    { permissionKey: 'productivity.export', scopes: ['global'] },
-    { permissionKey: 'export.productivity', scopes: ['global'] },
-    { permissionKey: 'bi.view', scopes: ['global'] },
-    { permissionKey: 'bi.snapshot.generate', scopes: ['global'] },
-    { permissionKey: 'bi.export.generate', scopes: ['global'] },
-    { permissionKey: 'timesheet.view', scopes: ['global'] },
-    { permissionKey: 'timesheet.report.view', scopes: ['global'] },
-  ],
-};
-
 const permissionCatalogByKey = new Map<AuthzPermissionKey, AuthzPermissionCatalogEntry>(
   authzPermissionCatalog.map((entry) => [entry.key, entry]),
 );
 
 export function listAuthzGrants(role: string): AuthzGrant[] {
-  return authzRoleGrants[role] ?? [];
+  const resolved = resolveRole(role);
+  if (!resolved.role || !resolved.context) {
+    return [];
+  }
+
+  return listRoleGrants(resolved.role, resolved.context);
 }
 
 export function listAuthzPermissions(role: string): AuthzPermissionKey[] {

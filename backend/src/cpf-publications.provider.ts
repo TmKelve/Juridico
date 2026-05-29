@@ -7,6 +7,7 @@ export interface CpfPublicationCandidate {
 
 export interface CpfPublicationCapture {
   sourceReference: string;
+  sourceUrl?: string | null;
   occurredAt: string;
   tribunal: string;
   cpf: string;
@@ -41,6 +42,7 @@ export function normalizeCpfPublicationPayload(payload: RemotePayload, fallbackC
 
   return {
     sourceReference: normalizeText(payload.sourceReference ?? payload.id, `CPF-${cpf}-${occurredAt}`),
+    sourceUrl: normalizeText(payload.sourceUrl ?? payload.publicationUrl ?? payload.url ?? payload.link, '') || null,
     occurredAt,
     tribunal: normalizeText(payload.tribunal ?? payload.court, 'Diário Oficial'),
     cpf,
@@ -103,6 +105,7 @@ export async function collectCpfPublications(candidates: CpfPublicationCandidate
       occurredAt.setHours(6 + (index % 3) * 6, 15 + index * 3, 0, 0);
       return {
         sourceReference: `CPF-FALLBACK-${candidate.cpf}-${occurredAt.toISOString()}`,
+        sourceUrl: null,
         occurredAt: occurredAt.toISOString(),
         tribunal: 'Diário Oficial',
         cpf: candidate.cpf,

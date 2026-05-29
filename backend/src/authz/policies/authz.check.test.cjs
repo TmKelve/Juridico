@@ -169,3 +169,17 @@ test('guard throws with the computed decision when permission is denied', async 
     },
   );
 });
+
+test('authz blocks mixed tenant/platform context', async () => {
+  const { checkAuthorization } = require(authzCheckPath);
+
+  const decision = checkAuthorization({
+    actor: { userId: 1, role: 'platform_admin' },
+    permissionKey: 'portfolio.view',
+    resourceType: 'portfolio',
+    context: { accessContext: 'tenant', allowedScopes: ['global'] },
+  });
+
+  assert.equal(decision.allowed, false);
+  assert.equal(decision.reason, 'AUTHZ_CONTEXT_MISMATCH');
+});

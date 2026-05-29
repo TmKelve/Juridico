@@ -27,7 +27,7 @@ import {
 } from './api';
 import { OriginBadgeRow } from './components/audit/OriginBadgeRow';
 import { OriginInsightPanel } from './components/audit/OriginInsightPanel';
-import { buildFallbackOriginReference } from './components/audit/origin-model';
+import { buildFallbackOriginReference, buildOriginOperationalSummary } from './components/audit/origin-model';
 import { loadOriginBundle } from './components/audit/loadOriginBundle';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import { Button, Input, Textarea } from './components/ui';
@@ -545,7 +545,7 @@ export function Triagem({ user }: TriagemProps) {
       <section className="triage-hero">
         <div>
           <span className="triage-eyebrow">Fila central de triagem</span>
-          <h2>Decida publicações capturadas sem perder governança.</h2>
+          <h2>Decida o significado operacional antes de virar publicação, prazo ou CRM.</h2>
           <p>Itens críticos, sinais comerciais e eventos órfãos ficam centralizados para confirmação humana, auditoria e execução assistida.</p>
         </div>
         <div className="triage-hero-actions">
@@ -554,6 +554,19 @@ export function Triagem({ user }: TriagemProps) {
             Atualizar
           </Button>
         </div>
+      </section>
+
+      <section className="triage-usage-guide">
+        <article className="triage-usage-card triage-usage-card--active">
+          <span className="triage-eyebrow">Quando usar Triagem</span>
+          <strong>Use aqui quando voce ainda precisa decidir o que o item significa.</strong>
+          <p>Triagem serve para confirmar, descartar, revisar ou encaminhar um sinal capturado. Aqui a pergunta e: isso vira publicacao consolidada, prazo, tarefa ou CRM?</p>
+        </article>
+        <article className="triage-usage-card">
+          <span className="triage-eyebrow">Quando ir para Publicacoes</span>
+          <strong>Use Publicacoes quando o item ja virou publicacao operacional.</strong>
+          <p>Publicacoes serve para consulta, tratamento juridico e desdobramento de uma publicacao consolidada. Ali a pergunta nao e mais "o que e isso?", e sim "como tratar isso?".</p>
+        </article>
       </section>
 
       <section className="triage-kpis">
@@ -781,6 +794,27 @@ export function Triagem({ user }: TriagemProps) {
           ) : (
             <div className="triage-list">
               {filteredItems.map((item) => (
+                (() => {
+                  const originReference = buildFallbackOriginReference({
+                    source: item.sourceLabel,
+                    sourceReference: item.capture.sourceReference,
+                    originReference: item.originReference ?? null,
+                    correlationId: item.correlationId ?? null,
+                    captureId: item.capture.id,
+                    publicationId: item.event?.publicationId ?? null,
+                    eventId: item.event?.id ?? null,
+                    originStage: item.originReference?.originStage ?? item.capture.sourceType,
+                    pipelineStatus: item.originReference?.pipelineStatus ?? item.pipelineStatus ?? null,
+                    consolidationStatus: item.originReference?.consolidationStatus ?? null,
+                  });
+                  const originSummary = buildOriginOperationalSummary({
+                    originReference,
+                    sourceType: item.capture.sourceType,
+                    pipelineStatus: item.originReference?.pipelineStatus ?? item.pipelineStatus ?? null,
+                    consolidationStatus: item.originReference?.consolidationStatus ?? null,
+                  });
+
+                  return (
                 <article
                   key={item.id}
                   className={`triage-card triage-card--${item.queueType} ${selected?.id === item.id ? 'is-selected' : ''}`}
@@ -821,23 +855,17 @@ export function Triagem({ user }: TriagemProps) {
                   </div>
 
                   <OriginBadgeRow
-                    originReference={buildFallbackOriginReference({
-                      source: item.sourceLabel,
-                      sourceReference: item.capture.sourceReference,
-                      originReference: item.originReference ?? null,
-                      correlationId: item.correlationId ?? null,
-                      captureId: item.capture.id,
-                      publicationId: item.event?.publicationId ?? null,
-                      eventId: item.event?.id ?? null,
-                      originStage: item.originReference?.originStage ?? item.capture.sourceType,
-                      pipelineStatus: item.originReference?.pipelineStatus ?? item.pipelineStatus ?? null,
-                      consolidationStatus: item.originReference?.consolidationStatus ?? null,
-                    })}
+                    originReference={originReference}
                     originStage={item.originReference?.originStage ?? item.capture.sourceType}
                     pipelineStatus={item.originReference?.pipelineStatus ?? item.pipelineStatus ?? null}
                     consolidationStatus={item.originReference?.consolidationStatus ?? null}
                     compact
                   />
+
+                  <div className="triage-card__origin-hint">
+                    <strong>{originSummary.headline}</strong>
+                    <span>{originSummary.nextStep}</span>
+                  </div>
 
                   <div className="triage-card__reason">{item.suggestedReason}</div>
 
@@ -870,6 +898,8 @@ export function Triagem({ user }: TriagemProps) {
                     </Button>
                   </div>
                 </article>
+                  );
+                })()
               ))}
             </div>
           )}
@@ -888,6 +918,28 @@ export function Triagem({ user }: TriagemProps) {
 
           {selected && !drawerLoading && (
             <>
+              {(() => {
+                const selectedOriginReference = buildFallbackOriginReference({
+                  source: selected.sourceLabel,
+                  sourceReference: selected.capture.sourceReference,
+                  originReference: selected.originReference ?? null,
+                  correlationId: selected.correlationId ?? null,
+                  captureId: selected.capture.id,
+                  publicationId: selected.event?.publicationId ?? null,
+                  eventId: selected.event?.id ?? null,
+                  originStage: selected.originReference?.originStage ?? selected.capture.sourceType,
+                  pipelineStatus: selected.originReference?.pipelineStatus ?? selected.pipelineStatus ?? null,
+                  consolidationStatus: selected.originReference?.consolidationStatus ?? null,
+                });
+                const selectedOriginSummary = buildOriginOperationalSummary({
+                  originReference: selectedOriginReference,
+                  sourceType: selected.capture.sourceType,
+                  pipelineStatus: selected.originReference?.pipelineStatus ?? selected.pipelineStatus ?? null,
+                  consolidationStatus: selected.originReference?.consolidationStatus ?? null,
+                });
+
+                return (
+                  <>
               <div className="triage-drawer__header">
                 <div>
                   <span className="triage-eyebrow">Detalhe da triagem</span>
@@ -905,20 +957,22 @@ export function Triagem({ user }: TriagemProps) {
                 <span className="triage-action-chip">{ACTION_LABEL[selected.suggestedAction]}</span>
               </div>
 
+              <section className="triage-origin-callout">
+                <div>
+                  <span>Por que caiu na triagem</span>
+                  <strong>{selectedOriginSummary.headline}</strong>
+                  <p>{selectedOriginSummary.detail}</p>
+                </div>
+                <div>
+                  <span>O que validar agora</span>
+                  <strong>{selected.suggestedReason}</strong>
+                  <p>{selectedOriginSummary.nextStep}</p>
+                </div>
+              </section>
+
               <OriginInsightPanel
                 title="Origem da triagem"
-                originReference={buildFallbackOriginReference({
-                  source: selected.sourceLabel,
-                  sourceReference: selected.capture.sourceReference,
-                  originReference: selected.originReference ?? null,
-                  correlationId: selected.correlationId ?? null,
-                  captureId: selected.capture.id,
-                  publicationId: selected.event?.publicationId ?? null,
-                  eventId: selected.event?.id ?? null,
-                  originStage: selected.originReference?.originStage ?? selected.capture.sourceType,
-                  pipelineStatus: selected.originReference?.pipelineStatus ?? selected.pipelineStatus ?? null,
-                  consolidationStatus: selected.originReference?.consolidationStatus ?? null,
-                })}
+                originReference={selectedOriginReference}
                 originStage={selected.originReference?.originStage ?? selected.capture.sourceType}
                 pipelineStatus={selected.originReference?.pipelineStatus ?? selected.pipelineStatus ?? null}
                 consolidationStatus={selected.originReference?.consolidationStatus ?? null}
@@ -940,6 +994,9 @@ export function Triagem({ user }: TriagemProps) {
                 fallbackEvidenceText={selected.capture.normalizedText}
                 summary={selected.suggestedReason}
               />
+                  </>
+                );
+              })()}
 
               <section className="triage-panel">
                 <h4>Contexto</h4>

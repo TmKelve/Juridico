@@ -8,6 +8,7 @@ export interface OabPublicationCandidate {
 
 export interface OabPublicationCapture {
   sourceReference: string;
+  sourceUrl?: string | null;
   occurredAt: string;
   tribunal: string;
   processNumber: string;
@@ -45,6 +46,7 @@ export function normalizeOabPublicationPayload(payload: RemotePayload, fallbackC
 
   return {
     sourceReference: normalizeText(payload.sourceReference ?? payload.id, `OAB-${oabNumber}-${occurredAt}`),
+    sourceUrl: normalizeText(payload.sourceUrl ?? payload.publicationUrl ?? payload.url ?? payload.link, '') || null,
     occurredAt,
     tribunal: normalizeText(payload.tribunal ?? payload.court, 'OAB'),
     processNumber,
@@ -109,6 +111,7 @@ export async function collectOabPublications(candidates: OabPublicationCandidate
 
     return {
       sourceReference: `OAB-FALLBACK-${candidate.oabNumber}-${occurredAt.toISOString()}`,
+      sourceUrl: null,
       occurredAt: occurredAt.toISOString(),
       tribunal: 'OAB',
       processNumber: candidate.processNumber,

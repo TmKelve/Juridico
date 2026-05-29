@@ -6,6 +6,7 @@ export interface CnjPublicationCandidate {
 
 export interface CnjPublicationCapture {
   sourceReference: string;
+  sourceUrl?: string | null;
   occurredAt: string;
   tribunal: string;
   processNumber: string;
@@ -41,6 +42,7 @@ export function normalizeCnjPublicationPayload(payload: RemotePayload, fallbackC
 
   return {
     sourceReference: normalizeText(payload.sourceReference ?? payload.id, `CNJ-${processNumber}-${occurredAt}`),
+    sourceUrl: normalizeText(payload.sourceUrl ?? payload.publicationUrl ?? payload.url ?? payload.link, '') || null,
     occurredAt,
     tribunal: normalizeText(payload.tribunal ?? payload.court, 'CNJ'),
     processNumber,
@@ -104,6 +106,7 @@ export async function collectCnjPublications(candidates: CnjPublicationCandidate
     if (index % 2 === 0) {
       return [{
         sourceReference: `CNJ-FALLBACK-${candidate.processNumber}-${baseAt.toISOString()}`,
+        sourceUrl: null,
         occurredAt: baseAt.toISOString(),
         tribunal: 'CNJ',
         processNumber: candidate.processNumber,
@@ -117,6 +120,7 @@ export async function collectCnjPublications(candidates: CnjPublicationCandidate
 
     return [{
       sourceReference: `CNJ-FALLBACK-${candidate.processNumber}-${baseAt.toISOString()}`,
+      sourceUrl: null,
       occurredAt: baseAt.toISOString(),
       tribunal: 'CNJ',
       processNumber: candidate.processNumber,

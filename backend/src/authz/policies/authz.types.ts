@@ -1,8 +1,10 @@
 import type { AuthzPermissionKey, AuthzResourceType, AuthzScope, ManageableAuthzScope } from '../rbac/permissions';
+import type { RoleContext } from '../../roles/roles';
 
 export type AuthzActor = {
   userId: number;
   role: string;
+  userType?: 'operational' | 'platform';
   teamIds?: Array<number | string>;
   portfolioIds?: Array<number | string>;
 };
@@ -19,6 +21,7 @@ export type AuthzCheckContext = {
   allowedScopes?: ManageableAuthzScope[];
   requiresAudit?: boolean;
   sensitive?: boolean;
+  accessContext?: RoleContext;
 };
 
 export type AuthzCheckInput = {

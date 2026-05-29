@@ -1,4 +1,5 @@
 import { getPermissionDefinition, listAuthzGrants, type AuthzGrant, type AuthzPermissionKey } from '../rbac/permissions';
+import { enforcePermissionContext } from '../../permissions/enforcement';
 import { normalizeAllowedScopes, resolveOwnershipScope } from './ownership';
 import type { AuthzCheckInput, AuthzDecision } from './authz.types';
 
@@ -7,6 +8,22 @@ function findGrant(grants: AuthzGrant[], permissionKey: AuthzPermissionKey) {
 }
 
 export function checkAuthorization(input: AuthzCheckInput): AuthzDecision {
+  const contextEnforcement = enforcePermissionContext({
+    role: input.actor.role,
+    targetContext: input.context?.accessContext,
+  });
+
+  if (!contextEnforcement.allowed) {
+    return {
+      allowed: false,
+      permissionKey: input.permissionKey,
+      scope: 'denied',
+      reason: contextEnforcement.reason,
+      sensitive: false,
+      requiresAudit: false,
+    };
+  }
+
   const definition = getPermissionDefinition(input.permissionKey);
 
   if (!definition) {

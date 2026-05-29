@@ -39,6 +39,18 @@
   background:
     linear-gradient(180deg, rgba(248, 251, 255, 0.92), rgba(255, 255, 255, 1)),
     #fff;
+  position: relative;
+  overflow: hidden;
+}
+.crm-hero::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: #1d4ed8;
+  box-shadow: 2px 0 10px rgba(29, 78, 216, 0.30);
 }
 
 .crm-hero > header {
@@ -66,10 +78,10 @@
 .crm-eyebrow {
   display: inline-block;
   margin-bottom: 4px;
-  color: var(--brand-700, #274c77);
+  color: #1d4ed8;
   font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.12em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -343,10 +355,39 @@
   font-weight: 700;
 }
 
+.crm-origin-callout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.crm-origin-callout > div {
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--neutral-200, #dbe2ea);
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+}
+
+.crm-origin-callout span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--neutral-600, #5f6f82);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.crm-origin-callout strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #0f172a;
+}
+
 .crm-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(520px, 580px);
-  overflow: visible;
+  overflow: hidden;
   align-items: start;
   gap: 12px;
 }

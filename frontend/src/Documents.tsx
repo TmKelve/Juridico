@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -18,9 +18,13 @@ import {
   Search,
   Upload,
   X,
+  Zap,
 } from 'lucide-react';
-import { api, type ApiDocument } from './api';
+import { api, type ApiDocument, type ApiProcess } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
+import { ProcessDocumentModal } from './ProcessDocumentModal';
+import { deriveArea } from './checklistTemplates';
+import './Dashboard.css';
 import './Documents.css';
 
 interface DocumentsProps {
@@ -38,13 +42,69 @@ type DocCategory = 'Peticao' | 'Contrato' | 'Prova' | 'Financeiro' | 'Checklist'
 
 type DocumentItem = ApiDocument;
 
-interface ChecklistItem {
+interface ChecklistTemplateItem {
   id: string;
   title: string;
-  required: boolean;
-  received: boolean;
-  linkedDocumentId: string | null;
+  required: boolean;   // obrigatório para o processo
+  blocking: boolean;   // bloqueia andamento sem ele
+  category: DocCategory;
 }
+
+interface ChecklistItem extends ChecklistTemplateItem {
+  status: 'faltante' | 'aguardando_validacao' | 'validado' | 'rejeitado';
+  linkedDocumentId: number | null;
+}
+
+// ── TEMPLATES POR ÁREA ─────────────────────────────────────────────────────
+const CHECKLIST_TEMPLATES: Record<string, ChecklistTemplateItem[]> = {
+  Trabalhista: [
+    { id: 'trb-1', title: 'Procuração assinada',            required: true,  blocking: true,  category: 'Contrato'    },
+    { id: 'trb-2', title: 'Documento de identidade (RG/CPF)', required: true, blocking: true,  category: 'Checklist'   },
+    { id: 'trb-3', title: 'Carteira de Trabalho (CTPS)',    required: true,  blocking: false, category: 'Prova'       },
+    { id: 'trb-4', title: 'Contrato de trabalho / rescisão',required: true,  blocking: false, category: 'Contrato'    },
+    { id: 'trb-5', title: 'Holerites (últimos 3 meses)',    required: true,  blocking: false, category: 'Prova'       },
+    { id: 'trb-6', title: 'Comprovante de residência',      required: false, blocking: false, category: 'Checklist'   },
+    { id: 'trb-7', title: 'Termo de rescisão / TRCT',       required: false, blocking: false, category: 'Contrato'    },
+  ],
+  Civel: [
+    { id: 'civ-1', title: 'Procuração assinada',            required: true,  blocking: true,  category: 'Contrato'    },
+    { id: 'civ-2', title: 'Documento de identidade (RG/CPF)', required: true, blocking: true,  category: 'Checklist'   },
+    { id: 'civ-3', title: 'Contrato ou documento base da ação', required: true, blocking: false, category: 'Contrato'  },
+    { id: 'civ-4', title: 'Comprovante de dano / prova dos fatos', required: true, blocking: false, category: 'Prova'  },
+    { id: 'civ-5', title: 'Comprovante de residência',      required: false, blocking: false, category: 'Checklist'   },
+    { id: 'civ-6', title: 'Laudos / perícias (se aplicável)', required: false, blocking: false, category: 'Prova'     },
+  ],
+  Tributario: [
+    { id: 'tri-1', title: 'Procuração assinada',            required: true,  blocking: true,  category: 'Contrato'    },
+    { id: 'tri-2', title: 'CNPJ / Contrato social',         required: true,  blocking: true,  category: 'Checklist'   },
+    { id: 'tri-3', title: 'Certidão de débitos (CND/PGFN)',  required: true,  blocking: false, category: 'Checklist'   },
+    { id: 'tri-4', title: 'Guias de recolhimento contestadas', required: true, blocking: false, category: 'Financeiro' },
+    { id: 'tri-5', title: 'Balanço / DRE (último exercício)',required: false, blocking: false, category: 'Financeiro'  },
+    { id: 'tri-6', title: 'Declarações fiscais (SPED/ECF)',  required: false, blocking: false, category: 'Financeiro'  },
+  ],
+  Empresarial: [
+    { id: 'emp-1', title: 'Procuração / ata de representação', required: true, blocking: true,  category: 'Contrato'  },
+    { id: 'emp-2', title: 'Contrato social consolidado',     required: true,  blocking: true,  category: 'Contrato'    },
+    { id: 'emp-3', title: 'CNPJ atualizado',                 required: true,  blocking: false, category: 'Checklist'   },
+    { id: 'emp-4', title: 'Certidão de registro na Junta',   required: true,  blocking: false, category: 'Checklist'   },
+    { id: 'emp-5', title: 'Documento base do litígio',       required: true,  blocking: false, category: 'Prova'       },
+    { id: 'emp-6', title: 'Atas societárias relevantes',     required: false, blocking: false, category: 'Contrato'    },
+  ],
+  Previdenciario: [
+    { id: 'prv-1', title: 'Procuração assinada',             required: true,  blocking: true,  category: 'Contrato'   },
+    { id: 'prv-2', title: 'Documento de identidade (RG/CPF)', required: true, blocking: true,  category: 'Checklist'  },
+    { id: 'prv-3', title: 'Extrato CNIS',                    required: true,  blocking: true,  category: 'Prova'      },
+    { id: 'prv-4', title: 'Laudos médicos (se incapacidade)', required: true, blocking: false, category: 'Prova'      },
+    { id: 'prv-5', title: 'Carteira de trabalho (CTPS)',     required: true,  blocking: false, category: 'Prova'      },
+    { id: 'prv-6', title: 'Declaração de IR (últimos 2 anos)', required: false, blocking: false, category: 'Financeiro'},
+    { id: 'prv-7', title: 'Comprovante de residência',       required: false, blocking: false, category: 'Checklist'  },
+  ],
+  _default: [
+    { id: 'def-1', title: 'Procuração assinada',             required: true,  blocking: true,  category: 'Contrato'   },
+    { id: 'def-2', title: 'Documento de identidade (RG/CPF)', required: true, blocking: true,  category: 'Checklist'  },
+    { id: 'def-3', title: 'Documentos da causa',             required: true,  blocking: false, category: 'Prova'      },
+  ],
+};
 
 interface DocumentFilters {
   query: string;
@@ -83,6 +143,7 @@ export function Documents({ user }: DocumentsProps) {
   const location = useLocation();
 
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [processesList, setProcessesList] = useState<ApiProcess[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -92,17 +153,16 @@ export function Documents({ user }: DocumentsProps) {
   const [sortBy, setSortBy] = useState<SortField>('data');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [selectedDocument, setSelectedDocument] = useState<DocumentItem | null>(null);
+  const [selectedProcessForModal, setSelectedProcessForModal] = useState<ApiProcess | null>(null);
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [checklist, setChecklist] = useState<ChecklistItem[]>([
-    { id: 'chk-1', title: 'Documento de identidade', required: true, received: false, linkedDocumentId: null },
-    { id: 'chk-2', title: 'Comprovante de custas', required: true, received: false, linkedDocumentId: null },
-    { id: 'chk-3', title: 'Procuração assinada', required: true, received: false, linkedDocumentId: null },
-    { id: 'chk-4', title: 'Contrato social atualizado', required: false, received: false, linkedDocumentId: null },
-  ]);
+  const [checklistStateByProcess, setChecklistStateByProcess] = useState<Record<string, ChecklistItem[]>>({});
+  const checklistUploadRef = useRef<HTMLInputElement | null>(null);
+  // Stores the full item + processId so handleChecklistItemUpload doesn't need to re-derive it
+  const [pendingChecklistUpload, setPendingChecklistUpload] = useState<{ processId: number; item: ChecklistItem } | null>(null);
 
   const itemsPerPage = 10;
   const loadDocumentsOnMount = useEffectEvent(loadDocuments);
@@ -136,18 +196,31 @@ export function Documents({ user }: DocumentsProps) {
     setError('');
 
     try {
-      const res = await api.getDocuments();
-      if (res.status !== 200 || !Array.isArray(res.data)) {
-        setError(res.error || 'Nao foi possivel carregar documentos.');
+      const [docRes, procRes] = await Promise.all([
+        api.getDocuments(),
+        api.getProcesses()
+      ]);
+
+      if (docRes.status !== 200 || !Array.isArray(docRes.data)) {
+        setError(docRes.error || 'Nao foi possivel carregar documentos.');
         setLoading(false);
         return;
       }
 
-      const loadedDocuments = res.data as ApiDocument[];
+      if (procRes.status !== 200 || !Array.isArray(procRes.data)) {
+        setError(procRes.error || 'Nao foi possivel carregar processos.');
+        setLoading(false);
+        return;
+      }
+
+      const loadedDocuments = docRes.data as ApiDocument[];
+      const loadedProcesses = procRes.data as ApiProcess[];
+      
       setDocuments(loadedDocuments);
+      setProcessesList(loadedProcesses);
       trackEvent('documents_loaded', { count: loadedDocuments.length, role: user.role });
     } catch (err) {
-      setError((err as Error).message || 'Erro ao carregar documentos');
+      setError((err as Error).message || 'Erro ao carregar documentos e processos');
       captureException(err as Error, { context: 'loadDocuments' });
     } finally {
       setLoading(false);
@@ -175,7 +248,8 @@ export function Documents({ user }: DocumentsProps) {
   function resolveUploadProcessId() {
     if (selectedDocument?.processId) return selectedDocument.processId;
     if (filters.process) return Number(filters.process);
-    if (pagedDocuments.length === 1) return pagedDocuments[0].processId;
+    const uniqueProcesses = new Set(filteredDocuments.map(d => d.processId));
+    if (uniqueProcesses.size === 1) return Array.from(uniqueProcesses)[0];
     return null;
   }
 
@@ -332,19 +406,95 @@ export function Documents({ user }: DocumentsProps) {
     setOpenMenuId(null);
   }
 
-  function toggleChecklistReceived(itemId: string) {
-    setChecklist((prev) => prev.map((item) => (item.id === itemId ? { ...item, received: !item.received } : item)));
-  }
+  // ── CHECKLIST HELPERS ──────────────────────────────────────────────────────
 
-  function linkChecklistDocument(itemId: string, documentId: string) {
-    setChecklist((prev) => prev.map((item) => (item.id === itemId ? { ...item, linkedDocumentId: documentId || null } : item)));
+  async function handleChecklistItemUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !pendingChecklistUpload) return;
+
+    const { processId, item } = pendingChecklistUpload;
+
+    const contentBase64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = typeof reader.result === 'string' ? reader.result : '';
+        resolve(result.includes(',') ? result.split(',')[1] ?? '' : result);
+      };
+      reader.onerror = () => reject(reader.error ?? new Error('Falha ao ler arquivo.'));
+      reader.readAsDataURL(file);
+    });
+
+    const res = await api.createDocument({
+      title: item.title,
+      processId,
+      category: item.category,
+      status: 'aguardando_validacao',
+      origin: 'upload',
+      notes: `Checklist: ${item.title} — upload por ${user.email}`,
+      mimeType: (file.type as DocumentItem['mimeType']) || 'application/octet-stream',
+      metadata: {
+        fileName: file.name,
+        documentType: item.id,
+        proceduralType: 'checklist',
+        tags: ['checklist', item.id],
+      },
+      file: {
+        fileName: file.name,
+        contentBase64,
+        mimeType: file.type || 'application/octet-stream',
+        sizeInBytes: file.size,
+      },
+    });
+
+    if (res.status !== 201 || !res.data) {
+      setError(res.error || 'Não foi possível fazer upload do documento de checklist.');
+      setPendingChecklistUpload(null);
+      return;
+    }
+
+    setDocuments((prev) => [res.data!, ...prev]);
+    setChecklistStateByProcess((prev) => {
+      const procIdStr = String(processId);
+      const currentList = prev[procIdStr] ?? [];
+      const updatedItem: ChecklistItem = {
+        ...item,
+        status: 'aguardando_validacao',
+        linkedDocumentId: res.data!.id,
+      };
+      const idx = currentList.findIndex((i) => i.id === item.id);
+      if (idx >= 0) {
+        const newList = [...currentList];
+        newList[idx] = updatedItem;
+        return { ...prev, [procIdStr]: newList };
+      }
+      return { ...prev, [procIdStr]: [...currentList, updatedItem] };
+    });
+    setSuccess(`"${item.title}" enviado para validação.`);
+    setPendingChecklistUpload(null);
+    trackEvent('checklist_item_uploaded', { processId, itemId: item.id });
   }
 
   const clients = useMemo(() => Array.from(new Set(documents.map((doc) => doc.client))), [documents]);
   const processes = useMemo(() => {
-    const map = new Map<string, string>();
-    documents.forEach((doc) => map.set(String(doc.processId), `${doc.processLabel} · ${doc.processTitle}`));
-    return Array.from(map.entries()).map(([id, label]) => ({ id, label }));
+    const map = new Map<string, { label: string; area: string }>();
+    const areaMap: Record<string, string> = {
+      TRB: 'Trabalhista',
+      CIV: 'Civel',
+      TRI: 'Tributario',
+      EMP: 'Empresarial',
+      PRV: 'Previdenciario',
+    };
+    documents.forEach((doc) => {
+      if (!map.has(String(doc.processId))) {
+        const prefix = doc.processLabel.split('-')[0]?.toUpperCase() ?? '';
+        map.set(String(doc.processId), {
+          label: `${doc.processLabel} · ${doc.processTitle}`,
+          area: areaMap[prefix] ?? '_default',
+        });
+      }
+    });
+    return Array.from(map.entries()).map(([id, { label, area }]) => ({ id, label, area }));
   }, [documents]);
 
   const filteredDocuments = useMemo(() => {
@@ -399,8 +549,23 @@ export function Documents({ user }: DocumentsProps) {
     return sortDirection === 'asc' ? sorted : sorted.reverse();
   }, [filteredDocuments, sortBy, sortDirection]);
 
-  const pageCount = Math.max(1, Math.ceil(sortedDocuments.length / itemsPerPage));
-  const pagedDocuments = sortedDocuments.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+  const groupedProcesses = useMemo(() => {
+    const map = new Map<number, { process: ApiProcess | undefined; docs: DocumentItem[] }>();
+    processesList.forEach((p) => map.set(p.id, { process: p, docs: [] }));
+    sortedDocuments.forEach((doc) => {
+      if (!map.has(doc.processId)) map.set(doc.processId, { process: undefined, docs: [] });
+      map.get(doc.processId)!.docs.push(doc);
+    });
+    return Array.from(map.values()).filter((g) => {
+      if (g.docs.length > 0) return true;
+      if (filters.process && String(g.process?.id) === filters.process) return true;
+      if (!filters.query && !filters.process && !filters.status && !filters.pendingOnly && !filters.requiredOnly) return true;
+      return false;
+    });
+  }, [processesList, sortedDocuments, filters]);
+
+  const pageCount = Math.max(1, Math.ceil(groupedProcesses.length / itemsPerPage));
+  const pagedGroups = groupedProcesses.slice((page - 1) * itemsPerPage, page * itemsPerPage);
 
   const activeChecklistProcess = useMemo(
     () => (filters.process ? processes.find((process) => process.id === filters.process) ?? null : null),
@@ -410,14 +575,31 @@ export function Documents({ user }: DocumentsProps) {
     () => (filters.process ? documents.filter((doc) => String(doc.processId) === filters.process) : []),
     [documents, filters.process],
   );
-  const scopedChecklist = useMemo(
-    () =>
-      checklist.map((item) => ({
-        ...item,
-        received: item.received || scopedChecklistDocuments.some((doc) => doc.requiredChecklist && doc.status === 'validado'),
-      })),
-    [checklist, scopedChecklistDocuments],
-  );
+  const activeChecklist = useMemo((): ChecklistItem[] => {
+    if (!activeChecklistProcess) return [];
+    const area = activeChecklistProcess.area ?? '_default';
+    const template = CHECKLIST_TEMPLATES[area as keyof typeof CHECKLIST_TEMPLATES] ?? CHECKLIST_TEMPLATES._default;
+    const saved = checklistStateByProcess[activeChecklistProcess.id];
+    if (saved) return saved;
+    // Derive initial state from template + auto-match against validated docs in scope
+    return template.map((tpl) => {
+      const linkedDoc = scopedChecklistDocuments.find(
+        (d) =>
+          d.requiredChecklist &&
+          d.status === 'validado' &&
+          tpl.title
+            .toLowerCase()
+            .split(' ')
+            .slice(0, 3)
+            .some((word) => word.length > 4 && d.name.toLowerCase().includes(word)),
+      );
+      return {
+        ...tpl,
+        status: linkedDoc ? ('validado' as const) : ('faltante' as const),
+        linkedDocumentId: linkedDoc?.id ?? null,
+      };
+    });
+  }, [activeChecklistProcess, checklistStateByProcess, scopedChecklistDocuments]);
   const kpis = useMemo(() => {
     const now = new Date();
 
@@ -429,9 +611,9 @@ export function Documents({ user }: DocumentsProps) {
         const delta = Math.ceil((now.getTime() - new Date(`${doc.uploadedAt}T00:00:00`).getTime()) / (1000 * 60 * 60 * 24));
         return delta <= 3;
       }).length,
-      missingChecklist: activeChecklistProcess ? scopedChecklist.filter((item) => item.required && !item.received).length : 0,
+      missingChecklist: activeChecklistProcess ? activeChecklist.filter((item) => item.required && item.status === 'faltante').length : 0,
     };
-  }, [activeChecklistProcess, documents, scopedChecklist]);
+  }, [activeChecklistProcess, documents, activeChecklist]);
 
   const hasActiveFilter = useMemo(
     () => JSON.stringify(filters) !== JSON.stringify(EMPTY_FILTERS),
@@ -454,11 +636,6 @@ export function Documents({ user }: DocumentsProps) {
 
   const emptyWithoutData = !loading && !error && documents.length === 0;
   const emptyWithFilter = !loading && !error && documents.length > 0 && sortedDocuments.length === 0;
-  const visiblePendingCount = sortedDocuments.filter((doc) => doc.status === 'pendente').length;
-  const visibleValidationCount = sortedDocuments.filter((doc) => doc.status === 'aguardando_validacao').length;
-  const visibleChecklistGapCount = activeChecklistProcess
-    ? scopedChecklist.filter((item) => item.required && !item.received).length
-    : 0;
   const focusDocument = sortedDocuments.find((doc) => doc.status === 'pendente')
     ?? sortedDocuments.find((doc) => doc.status === 'aguardando_validacao')
     ?? sortedDocuments[0]
@@ -468,12 +645,6 @@ export function Documents({ user }: DocumentsProps) {
     : focusDocument?.status === 'aguardando_validacao'
       ? 'info'
       : 'neutral';
-  const headerSummaryItems = [
-    { label: 'Em exibição', value: sortedDocuments.length, tone: 'neutral' },
-    { label: 'Pendentes', value: visiblePendingCount, tone: visiblePendingCount > 0 ? 'warning' : 'neutral' },
-    { label: 'Em validação', value: visibleValidationCount, tone: visibleValidationCount > 0 ? 'info' : 'neutral' },
-    { label: 'Checklist aberto', value: visibleChecklistGapCount, tone: visibleChecklistGapCount > 0 ? 'danger' : 'neutral' },
-  ] as const;
 
   function statusBadge(status: DocumentStatus) {
     const labels: Record<DocumentStatus, string> = {
@@ -523,53 +694,117 @@ export function Documents({ user }: DocumentsProps) {
         onChange={handleUploadFile}
         aria-hidden="true"
       />
+      <input
+        ref={checklistUploadRef}
+        type="file"
+        hidden
+        onChange={handleChecklistItemUpload}
+        aria-hidden="true"
+      />
+      {/* ── HERO ── */}
       <header className="documents-header-card">
         <div className="documents-header-main">
-          <p className="documents-eyebrow">Gestao documental</p>
+          <p className="documents-eyebrow">Gestão Documental</p>
           <h2>Documentos</h2>
           <p className="documents-subtitle">
             Organize, valide e versione os documentos da sua carteira com rastreabilidade e foco operacional.
           </p>
-          <div className="documents-header-summary" aria-label="Pulso documental">
-            {headerSummaryItems.map((item) => (
-              <div key={item.label} className="documents-header-summary-card" data-tone={item.tone}>
-                <span>{item.label}</span>
-                <strong>{item.value}</strong>
-              </div>
-            ))}
-          </div>
         </div>
-        <div className="documents-header-side">
-          <div className="documents-header-actions">
-            <button className="btn-primary" onClick={uploadDocumentMock} aria-label="Upload de documento">
-              <Upload size={16} aria-hidden="true" />
-              Upload de Documento
-            </button>
-            <button className="btn-secondary" onClick={requestDocumentMock} aria-label="Solicitar documento">
-              <FileUp size={16} aria-hidden="true" />
-              Solicitar Documento
-            </button>
-            <button className="btn-secondary" onClick={() => exportCsv(sortedDocuments)} aria-label="Exportar documentos">
-              <Download size={16} aria-hidden="true" />
-              Exportar
-            </button>
-          </div>
-          <aside className="documents-focus-card" data-tone={focusTone} aria-label="Foco documental">
-            <span className="documents-focus-card-eyebrow">Próxima melhor ação</span>
-            <strong>{focusDocument ? focusDocument.name : 'Nenhum documento focal'}</strong>
-            <p>{focusDocument ? `${focusDocument.processTitle} · ${focusDocument.client}` : 'Use os filtros para abrir o documento mais urgente do recorte.'}</p>
-            <small>{focusDocument ? `v${focusDocument.version} · ${formatDate(focusDocument.uploadedAt)} · ${focusDocument.origin}` : 'Sem item focal no momento.'}</small>
-          </aside>
+        <div className="documents-header-actions">
+          <button className="btn-primary" onClick={uploadDocumentMock} aria-label="Upload de documento">
+            <Upload size={15} aria-hidden="true" />
+            Upload
+          </button>
+          <button className="btn-secondary" onClick={requestDocumentMock} aria-label="Solicitar documento">
+            <FileUp size={15} aria-hidden="true" />
+            Solicitar
+          </button>
+          <button className="btn-secondary" onClick={() => exportCsv(sortedDocuments)} aria-label="Exportar documentos">
+            <Download size={15} aria-hidden="true" />
+            Exportar
+          </button>
         </div>
       </header>
 
+      {/* ── KPI STRIP ── */}
       <section className="documents-kpis" aria-label="Indicadores documentais">
-        <article className="document-kpi-card"><p>Total de documentos</p><strong>{kpis.total}</strong></article>
-        <article className="document-kpi-card warning"><p>Pendentes</p><strong>{kpis.pending}</strong></article>
-        <article className="document-kpi-card info"><p>Aguardando validacao</p><strong>{kpis.waitingValidation}</strong></article>
-        <article className="document-kpi-card success"><p>Enviados recentemente</p><strong>{kpis.recentSent}</strong></article>
-        <article className="document-kpi-card danger"><p>Checklist no contexto</p><strong>{activeChecklistProcess ? kpis.missingChecklist : '—'}</strong></article>
+        <button
+          type="button"
+          className="metric-card"
+          data-kpi-color="primary"
+          onClick={() => updateFilter('status', '')}
+          aria-label={`Total de documentos: ${kpis.total}`}
+        >
+          <div className="metric-top-row">
+            <p className="metric-value">{loading ? '—' : kpis.total}</p>
+            <div className="metric-icon" aria-hidden="true"><FolderOpen size={16} /></div>
+          </div>
+          <p className="metric-label">Total</p>
+          <p className="metric-microtext">Documentos na carteira</p>
+        </button>
+
+        <button
+          type="button"
+          className="metric-card"
+          data-kpi-color="warning"
+          onClick={() => updateFilter('status', 'pendente')}
+          aria-label={`Pendentes: ${kpis.pending}`}
+        >
+          <div className="metric-top-row">
+            <p className="metric-value">{loading ? '—' : kpis.pending}</p>
+            <div className="metric-icon" aria-hidden="true"><AlertTriangle size={16} /></div>
+          </div>
+          <p className="metric-label">Pendentes</p>
+          <p className="metric-microtext">Aguardam ação</p>
+        </button>
+
+        <button
+          type="button"
+          className="metric-card"
+          data-kpi-color="info"
+          onClick={() => updateFilter('status', 'aguardando_validacao')}
+          aria-label={`Aguardando validação: ${kpis.waitingValidation}`}
+        >
+          <div className="metric-top-row">
+            <p className="metric-value">{loading ? '—' : kpis.waitingValidation}</p>
+            <div className="metric-icon" aria-hidden="true"><Eye size={16} /></div>
+          </div>
+          <p className="metric-label">Aguardando validação</p>
+          <p className="metric-microtext">Na fila de revisão</p>
+        </button>
+
+        <button
+          type="button"
+          className="metric-card"
+          data-kpi-color={kpis.missingChecklist > 0 ? 'error' : 'success'}
+          onClick={() => updateFilter('requiredOnly', !filters.requiredOnly)}
+          aria-label={`Checklist no contexto: ${activeChecklistProcess ? kpis.missingChecklist : '—'}`}
+        >
+          <div className="metric-top-row">
+            <p className="metric-value">{loading ? '—' : activeChecklistProcess ? kpis.missingChecklist : '—'}</p>
+            <div className="metric-icon" aria-hidden="true"><CheckCircle2 size={16} /></div>
+          </div>
+          <p className="metric-label">Checklist no contexto</p>
+          <p className="metric-microtext">{activeChecklistProcess ? 'Itens faltando no processo' : 'Filtre um processo'}</p>
+        </button>
       </section>
+
+      {/* ── PRÓXIMA MELHOR AÇÃO (contextual strip) ── */}
+      {focusDocument && (
+        <div className="documents-focus-strip" data-tone={focusTone} aria-label="Próxima melhor ação">
+          <div className="documents-focus-strip-icon">
+            <Zap size={14} aria-hidden="true" />
+          </div>
+          <div className="documents-focus-strip-body">
+            <span className="documents-focus-strip-eyebrow">Próxima melhor ação</span>
+            <strong>{focusDocument.name}</strong>
+            <p>{focusDocument.processTitle} · {focusDocument.client} · v{focusDocument.version} · {formatDate(focusDocument.uploadedAt)}</p>
+          </div>
+          <button className="btn-secondary documents-focus-strip-cta" onClick={() => setSelectedDocument(focusDocument)}>
+            Ver documento
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="documents-alert error" role="alert">
@@ -587,98 +822,82 @@ export function Documents({ user }: DocumentsProps) {
       )}
 
       <section className="documents-filters" aria-label="Busca e filtros de documentos">
-        <div className="documents-quick-status">
-          <button className={`status-shortcut ${filters.status === '' ? 'is-active' : ''}`} onClick={() => updateFilter('status', '')}>
-            Todos
-          </button>
-          <button className={`status-shortcut ${filters.status === 'pendente' ? 'is-active' : ''}`} onClick={() => updateFilter('status', 'pendente')}>
-            Pendentes
-          </button>
-          <button className={`status-shortcut ${filters.status === 'aguardando_validacao' ? 'is-active' : ''}`} onClick={() => updateFilter('status', 'aguardando_validacao')}>
-            Aguardando validação
-          </button>
-          <button className={`status-shortcut ${filters.status === 'validado' ? 'is-active' : ''}`} onClick={() => updateFilter('status', 'validado')}>
-            Validados
-          </button>
-        </div>
 
-        <div className="documents-priority-strip" aria-label="Leitura do recorte documental">
-          <div className="documents-priority-card" data-tone={visiblePendingCount > 0 ? 'warning' : 'neutral'}>
-            <span>Pendência aberta</span>
-            <strong>{visiblePendingCount}</strong>
-            <small>{visiblePendingCount > 0 ? 'documento(s) aguardando ação' : 'sem pendência imediata'}</small>
-          </div>
-          <div className="documents-priority-card" data-tone={visibleValidationCount > 0 ? 'info' : 'neutral'}>
-            <span>Fila de validação</span>
-            <strong>{visibleValidationCount}</strong>
-            <small>{visibleValidationCount > 0 ? 'itens em revisão' : 'sem documento em validação'}</small>
-          </div>
-          <div className="documents-priority-card" data-tone={visibleChecklistGapCount > 0 ? 'danger' : 'neutral'}>
-            <span>Checklist incompleto</span>
-            <strong>{visibleChecklistGapCount}</strong>
-            <small>{activeChecklistProcess ? (visibleChecklistGapCount > 0 ? 'gaps de entrega no processo filtrado' : 'checklist coberto') : 'selecione um processo para avaliar checklist'}</small>
+        {/* ── ROW 1: busca ── */}
+        <div className="documents-search-row">
+          <div className="documents-search-wrap">
+            <Search size={15} aria-hidden="true" />
+            <input
+              type="search"
+              value={filters.query}
+              onChange={(event) => updateFilter('query', event.target.value)}
+              placeholder="Buscar por nome, cliente, processo ou observação…"
+            />
           </div>
         </div>
 
-        <div className="documents-filters-grid-top">
-          <label className="documents-field search">
-            <span>Busca principal</span>
-            <div className="input-icon-wrap">
-              <Search size={14} aria-hidden="true" />
-              <input
-                type="search"
-                value={filters.query}
-                onChange={(event) => updateFilter('query', event.target.value)}
-                placeholder="Nome do documento, cliente, processo ou observação"
-              />
-            </div>
-          </label>
-
-          <label className="documents-field">
-            <span>Cliente</span>
-            <select value={filters.client} onChange={(event) => updateFilter('client', event.target.value)}>
-              <option value="">Todos</option>
-              {clients.map((client) => <option key={client} value={client}>{client}</option>)}
-            </select>
-          </label>
-
-          <label className="documents-field">
-            <span>Processo</span>
-            <select value={filters.process} onChange={(event) => updateFilter('process', event.target.value)}>
-              <option value="">Todos</option>
-              {processes.map((process) => <option key={process.id} value={process.id}>{process.label}</option>)}
-            </select>
-          </label>
-
-          <label className="documents-field">
-            <span>Categoria</span>
-            <select value={filters.category} onChange={(event) => updateFilter('category', event.target.value)}>
-              <option value="">Todas</option>
-              {CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
-            </select>
-          </label>
-
-          <label className="documents-field">
-            <span>Status</span>
-            <select value={filters.status} onChange={(event) => updateFilter('status', event.target.value)}>
-              <option value="">Todos</option>
-              <option value="pendente">Pendente</option>
-              <option value="aguardando_validacao">Aguardando validacao</option>
-              <option value="validado">Validado</option>
-              <option value="rejeitado">Rejeitado</option>
-            </select>
-          </label>
-          <div className="documents-filter-actions">
-            <button className="btn-ghost" onClick={() => setShowAdvancedFilters((prev) => !prev)}>
-              <Filter size={14} aria-hidden="true" />
-              Filtros avançados
-              {showAdvancedFilters ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
+        {/* ── ROW 2: chips de status + dropdowns + ações ── */}
+        <div className="documents-filter-row">
+          <div className="documents-status-chips">
+            <button
+              className={`doc-status-chip ${filters.status === '' ? 'is-active' : ''}`}
+              onClick={() => updateFilter('status', '')}
+            >
+              Todos
+              <span className="doc-status-chip-badge">{kpis.total}</span>
             </button>
-            <button className="btn-ghost" onClick={clearFilters}><Filter size={14} aria-hidden="true" />Limpar</button>
-            <button className="btn-ghost" onClick={saveFilters}><Save size={14} aria-hidden="true" />Salvar filtro</button>
+            <button
+              className={`doc-status-chip doc-status-chip--warning ${filters.status === 'pendente' ? 'is-active' : ''}`}
+              onClick={() => updateFilter('status', 'pendente')}
+            >
+              Pendentes
+              {kpis.pending > 0 && <span className="doc-status-chip-badge">{kpis.pending}</span>}
+            </button>
+            <button
+              className={`doc-status-chip doc-status-chip--info ${filters.status === 'aguardando_validacao' ? 'is-active' : ''}`}
+              onClick={() => updateFilter('status', 'aguardando_validacao')}
+            >
+              Em validação
+              {kpis.waitingValidation > 0 && <span className="doc-status-chip-badge">{kpis.waitingValidation}</span>}
+            </button>
+            <button
+              className={`doc-status-chip doc-status-chip--success ${filters.status === 'validado' ? 'is-active' : ''}`}
+              onClick={() => updateFilter('status', 'validado')}
+            >
+              Validados
+            </button>
+          </div>
+
+          <div className="documents-filter-dropdowns">
+            <select value={filters.client} onChange={(event) => updateFilter('client', event.target.value)}>
+              <option value="">Cliente</option>
+              {clients.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <select value={filters.process} onChange={(event) => updateFilter('process', event.target.value)}>
+              <option value="">Processo</option>
+              {processes.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+            </select>
+            <select value={filters.category} onChange={(event) => updateFilter('category', event.target.value)}>
+              <option value="">Categoria</option>
+              {CATEGORIES.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+            </select>
+          </div>
+
+          <div className="documents-filter-tools">
+            <button className="btn-ghost" onClick={() => setShowAdvancedFilters((prev) => !prev)}>
+              <Filter size={13} aria-hidden="true" />
+              {showAdvancedFilters ? 'Menos' : 'Avançado'}
+              {showAdvancedFilters ? <ChevronUp size={13} aria-hidden="true" /> : <ChevronDown size={13} aria-hidden="true" />}
+            </button>
+            {hasActiveFilter && (
+              <button className="btn-ghost" onClick={clearFilters}>
+                <X size={13} aria-hidden="true" />
+                Limpar
+              </button>
+            )}
+            <button className="btn-ghost" onClick={saveFilters}><Save size={13} aria-hidden="true" /></button>
             <button className="btn-ghost" onClick={() => setViewMode((prev) => (prev === 'lista' ? 'grade' : 'lista'))}>
-              {viewMode === 'lista' ? <Grid3X3 size={14} aria-hidden="true" /> : <List size={14} aria-hidden="true" />}
-              {viewMode === 'lista' ? 'Visualizar em grade' : 'Visualizar em lista'}
+              {viewMode === 'lista' ? <Grid3X3 size={13} aria-hidden="true" /> : <List size={13} aria-hidden="true" />}
             </button>
           </div>
         </div>
@@ -767,54 +986,6 @@ export function Documents({ user }: DocumentsProps) {
         </div>
       </section>
 
-      <section className="documents-checklist-shell" aria-label="Checklist documental">
-        <header>
-          <h3>Checklist documental / documentos faltantes</h3>
-          <span>{activeChecklistProcess ? `${scopedChecklist.filter((item) => item.required && !item.received).length} faltante(s)` : 'aguardando contexto'}</span>
-        </header>
-        {!activeChecklistProcess ? (
-          <div className="documents-checklist-empty" role="status">
-            <strong>Selecione um processo para abrir o checklist documental.</strong>
-            <p>O checklist só deve aparecer quando a tela estiver em contexto processual. Sem processo filtrado, a carteira mostra apenas os documentos.</p>
-          </div>
-        ) : (
-          <div className="documents-checklist-grid">
-            {scopedChecklist.map((item) => (
-              <article key={item.id} className={`checklist-item ${item.required ? 'required' : ''}`}>
-                <div className="checklist-head">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={item.received}
-                      onChange={() => toggleChecklistReceived(item.id)}
-                    />
-                    {item.title}
-                  </label>
-                  <span className={`checklist-state ${item.received ? 'ok' : 'pending'}`}>
-                    {item.received ? 'Recebido' : 'Faltante'}
-                  </span>
-                </div>
-                <label className="checklist-link">
-                  Vincular documento
-                  <select
-                    value={item.linkedDocumentId || ''}
-                    onChange={(event) => linkChecklistDocument(item.id, event.target.value)}
-                  >
-                    <option value="">Nao vinculado</option>
-                    {scopedChecklistDocuments.map((doc) => (
-                      <option key={String(doc.id)} value={String(doc.id)}>{doc.name} ({doc.processLabel})</option>
-                    ))}
-                  </select>
-                </label>
-              </article>
-            ))}
-          </div>
-        )}
-        {activeChecklistProcess ? (
-          <p className="documents-checklist-context">Checklist aplicado ao processo {activeChecklistProcess.label}.</p>
-        ) : null}
-      </section>
-
       {emptyWithoutData && (
         <div className="documents-empty" role="status">
           <h3>Nenhum documento na carteira</h3>
@@ -841,138 +1012,145 @@ export function Documents({ user }: DocumentsProps) {
                 <th scope="col">Processo</th>
                 <th scope="col">Categoria</th>
                 <th scope="col">Status</th>
-                <th scope="col">Versao</th>
-                <th scope="col">Origem</th>
                 <th scope="col">Data</th>
-                <th scope="col">Acoes</th>
+                <th scope="col" className="col-actions">Ações</th>
               </tr>
             </thead>
             <tbody>
-              {pagedDocuments.map((doc) => (
-                <tr
-                  key={String(doc.id)}
-                  tabIndex={0}
-                  role="button"
-                  aria-label={`Abrir detalhe rapido do documento ${doc.name}`}
-                  onClick={() => {
-                    setSelectedDocument(doc);
-                    setOpenMenuId(null);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      setSelectedDocument(doc);
-                      setOpenMenuId(null);
-                    }
-                  }}
-                >
-                  <td>
-                    <div className="doc-primary">
-                      <strong>{doc.name}</strong>
-                      <small>{doc.requiredChecklist ? 'Obrigatorio no checklist' : 'Opcional'}</small>
-                    </div>
-                  </td>
-                  <td>{doc.client}</td>
-                  <td>{doc.processLabel}</td>
-                  <td>{doc.category}</td>
-                  <td>{statusBadge(doc.status)}</td>
-                  <td>
-                    <span className={`doc-badge version ${doc.isLatestVersion ? 'latest' : 'history'}`}>
-                      v{doc.version} {doc.isLatestVersion ? 'Atual' : 'Hist.'}
-                    </span>
-                  </td>
-                  <td>{doc.origin}</td>
-                  <td>{formatDate(doc.uploadedAt)}</td>
-                  <td>
-                    <div className="doc-row-actions" onClick={(event) => event.stopPropagation()}>
-                      <button
-                        className="icon-action"
-                        aria-label={`Abrir menu de acoes do documento ${doc.name}`}
-                        onClick={() => setOpenMenuId((prev) => (prev === doc.id ? null : doc.id))}
-                      >
-                        <MoreHorizontal size={16} aria-hidden="true" />
-                      </button>
-                      {openMenuId === doc.id && (
-                        <div className="doc-row-menu" role="menu" aria-label="Menu de acoes">
-                          <button onClick={() => setSelectedDocument(doc)}>Detalhe rapido</button>
-                          <button onClick={() => void validateDocument(doc.id)}>Validar</button>
-                          <button onClick={() => void rejectDocument(doc.id)}>Rejeitar</button>
-                          <button onClick={() => void createNewVersion(doc.id)}>Versionar</button>
+              {pagedGroups.map(({ process, docs }) => (
+                <React.Fragment key={process?.id || docs[0]?.processId || Math.random()}>
+                  {process && (
+                    <tr
+                      className="documents-process-row"
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Abrir dossiê do processo ${process.title}`}
+                      onClick={() => setSelectedProcessForModal(process)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          setSelectedProcessForModal(process);
+                        }
+                      }}
+                    >
+                      <td colSpan={7}>
+                        <div className="doc-process-header">
+                          <FolderOpen size={16} aria-hidden="true" />
+                          <strong>{process.processNumber || `PRC-${process.id}`} · {process.title}</strong>
+                          <span className="doc-badge phase-badge">Fase: {process.phase}</span>
+                          <span className="doc-badge count-badge">{docs.length} docs</span>
                         </div>
-                      )}
-                    </div>
-                  </td>
-                </tr>
+                      </td>
+                    </tr>
+                  )}
+                  {docs.map((doc) => (
+                    <tr
+                      key={String(doc.id)}
+                      className="documents-child-row"
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`Abrir detalhe rapido do documento ${doc.name}`}
+                      onClick={() => {
+                        setSelectedDocument(doc);
+                        setOpenMenuId(null);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          setSelectedDocument(doc);
+                          setOpenMenuId(null);
+                        }
+                      }}
+                    >
+                      <td>
+                        <div className="doc-primary">
+                          <div className="doc-child-connector" aria-hidden="true" />
+                          <strong>{doc.name}</strong>
+                          <div className="doc-primary-meta">
+                            <span className={`doc-badge version ${doc.isLatestVersion ? 'latest' : 'history'}`}>
+                              v{doc.version}{doc.isLatestVersion ? ' · atual' : ''}
+                            </span>
+                            <span className="doc-origin-tag">{doc.origin}</span>
+                            {doc.requiredChecklist && <span className="doc-required-tag">Obrigatório</span>}
+                          </div>
+                        </div>
+                      </td>
+                      <td>{doc.client}</td>
+                      <td>{doc.processLabel}</td>
+                      <td>{doc.category}</td>
+                      <td>{statusBadge(doc.status)}</td>
+                      <td>{formatDate(doc.uploadedAt)}</td>
+                      <td>
+                        <div className="doc-row-actions" onClick={(event) => event.stopPropagation()}>
+                          <button
+                            className="icon-action"
+                            aria-label={`Abrir menu de acoes do documento ${doc.name}`}
+                            onClick={() => setOpenMenuId((prev) => (prev === doc.id ? null : doc.id))}
+                          >
+                            <MoreHorizontal size={16} aria-hidden="true" />
+                          </button>
+                          {openMenuId === doc.id && (
+                            <div className="doc-row-menu" role="menu" aria-label="Menu de acoes">
+                              <button onClick={() => setSelectedDocument(doc)}>Detalhe rapido</button>
+                              <button onClick={() => void validateDocument(doc.id)}>Validar</button>
+                              <button onClick={() => void rejectDocument(doc.id)}>Rejeitar</button>
+                              <button onClick={() => void createNewVersion(doc.id)}>Versionar</button>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </React.Fragment>
               ))}
             </tbody>
           </table>
 
           <div className="documents-mobile-list" aria-label="Lista mobile de documentos">
-            {pagedDocuments.map((doc) => (
-              <article key={`mobile-${doc.id}`} className="document-mobile-card">
-                <button
-                  type="button"
-                  className="document-mobile-main"
-                  onClick={() => {
-                    setSelectedDocument(doc);
-                    setOpenMenuId(null);
-                  }}
-                  aria-label={`Abrir detalhe do documento ${doc.name}`}
-                >
-                  <span className="document-mobile-kicker">{doc.processLabel}</span>
-                  <strong>{doc.name}</strong>
-                  <span>{doc.processTitle} · {doc.client}</span>
-                </button>
-
-                <div className="document-mobile-badges">
-                  {statusBadge(doc.status)}
-                  <span className={`doc-badge version ${doc.isLatestVersion ? 'latest' : 'history'}`}>
-                    {doc.isLatestVersion ? 'Versão atual' : `v${doc.version}`}
-                  </span>
-                </div>
-
-                <dl className="document-mobile-grid">
-                  <div>
-                    <dt>Categoria</dt>
-                    <dd>
-                      <strong>{doc.category}</strong>
-                      <span>{doc.origin}</span>
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Data</dt>
-                    <dd>
-                      <strong>{formatDate(doc.uploadedAt)}</strong>
-                      <span>{doc.requiredChecklist ? 'vinculado a checklist' : 'fora de checklist'}</span>
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Versão</dt>
-                    <dd>
-                      <strong>v{doc.version}</strong>
-                      <span>{doc.isLatestVersion ? 'mais recente' : 'histórica'}</span>
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Status</dt>
-                    <dd>
-                      <strong>{doc.status.replaceAll('_', ' ')}</strong>
-                      <span>{doc.notes ? 'com observação' : 'sem observação'}</span>
-                    </dd>
-                  </div>
-                </dl>
-
-                <div className="document-mobile-actions">
-                  <button className="btn-primary" onClick={() => setSelectedDocument(doc)}>
-                    <Eye size={14} aria-hidden="true" />
-                    Detalhe
-                  </button>
-                  <button className="btn-secondary" onClick={() => navigate(`/processos/${doc.processId}`)}>
-                    <FolderOpen size={14} aria-hidden="true" />
-                    Processo
-                  </button>
-                </div>
-              </article>
+            {pagedGroups.map(({ process, docs }) => (
+              <React.Fragment key={process?.id || docs[0]?.processId || Math.random()}>
+                {process && (
+                  <article className="document-mobile-card process-group-card" onClick={() => setSelectedProcessForModal(process)}>
+                    <div className="process-group-header">
+                      <FolderOpen size={16} aria-hidden="true" />
+                      <strong>{process.processNumber || `PRC-${process.id}`}</strong>
+                      <span>{process.title}</span>
+                    </div>
+                    <div className="process-group-meta">
+                      <span className="doc-badge phase-badge">{process.phase}</span>
+                      <span className="doc-badge count-badge">{docs.length} docs</span>
+                    </div>
+                  </article>
+                )}
+                {docs.map((doc) => (
+                  <article key={`mobile-${doc.id}`} className="document-mobile-card document-child-card">
+                    <button
+                      type="button"
+                      className="document-mobile-main"
+                      onClick={() => {
+                        setSelectedDocument(doc);
+                        setOpenMenuId(null);
+                      }}
+                      aria-label={`Abrir detalhe do documento ${doc.name}`}
+                    >
+                      <div className="doc-child-connector-mobile" aria-hidden="true" />
+                      <strong>{doc.name}</strong>
+                      <span>{doc.client}</span>
+                    </button>
+                    <div className="document-mobile-badges">
+                      {statusBadge(doc.status)}
+                      <span className={`doc-badge version ${doc.isLatestVersion ? 'latest' : 'history'}`}>
+                        {doc.isLatestVersion ? 'Versão atual' : `v${doc.version}`}
+                      </span>
+                    </div>
+                    <div className="document-mobile-actions">
+                      <button className="btn-primary" onClick={() => setSelectedDocument(doc)}>
+                        <Eye size={14} aria-hidden="true" /> Detalhe
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </React.Fragment>
             ))}
           </div>
 
@@ -1060,6 +1238,47 @@ export function Documents({ user }: DocumentsProps) {
           </aside>
         </>
       )}
+
+      {selectedProcessForModal && (() => {
+        // Derive area from the documents belonging to this process (fallback to processNumber prefix)
+        const modalDocs = documents.filter((d) => d.processId === selectedProcessForModal.id);
+        const modalArea = modalDocs.length > 0
+          ? deriveArea(modalDocs[0].processLabel)
+          : deriveArea(selectedProcessForModal.processNumber ?? `PRC-${selectedProcessForModal.id}`);
+
+        return (
+          <ProcessDocumentModal
+            processId={selectedProcessForModal.id}
+            processLabel={selectedProcessForModal.processNumber ?? `PRC-${selectedProcessForModal.id}`}
+            processTitle={selectedProcessForModal.title}
+            client={selectedProcessForModal.client}
+            area={modalArea}
+            currentPhase={selectedProcessForModal.phase}
+            documents={modalDocs}
+            checklistStateByProcess={checklistStateByProcess}
+            onClose={() => setSelectedProcessForModal(null)}
+            onSaveChecklistItem={(procId, item) => {
+              setChecklistStateByProcess((prev) => {
+                const currentList = prev[procId] ?? [];
+                const idx = currentList.findIndex((i) => i.id === item.id);
+                if (idx >= 0) {
+                  const newList = [...currentList];
+                  newList[idx] = item;
+                  return { ...prev, [procId]: newList };
+                }
+                return { ...prev, [procId]: [...currentList, item] };
+              });
+            }}
+            onValidateDocument={validateDocument}
+            onRejectDocument={rejectDocument}
+            onRequestUploadForItem={(procId, item) => {
+              // Store the full item so handleChecklistItemUpload doesn't need to re-derive it
+              setPendingChecklistUpload({ processId: Number(procId), item });
+              checklistUploadRef.current?.click();
+            }}
+          />
+        );
+      })()}
     </section>
   );
 }

@@ -1,0 +1,48 @@
+{
+  "phase": "Fase 3 - Rollout e Enforcement Global",
+  "version": "2026-05-27",
+  "focus": [
+    "backfill assistido de companyId em legado",
+    "indices e constraints finais por companyId com zero-downtime",
+    "e2e cross-tenant com auditoria ponta-a-ponta",
+    "console administrativo de plataforma"
+  ],
+  "commands": {
+    "backfill.companyId.plan": {
+      "in": ["batchId", "entity", "strategy", "dryRun"],
+      "out": ["batchId", "estimatedRows", "conflicts"],
+      "errors": ["ENTITY_UNSUPPORTED", "STRATEGY_INVALID"]
+    },
+    "backfill.companyId.execute": {
+      "in": ["batchId", "chunkSize", "resumeFrom"],
+      "out": ["batchId", "processedRows", "failedRows", "status"],
+      "errors": ["BATCH_NOT_FOUND", "BACKFILL_FAILED"]
+    },
+    "backfill.companyId.verify": {
+      "in": ["entity", "sampleSize"],
+      "out": ["entity", "nullCompanyIdCount", "crossTenantRiskCount"],
+      "errors": ["VERIFY_FAILED"]
+    },
+    "schema.companyId.enforce": {
+      "in": ["entity", "mode"],
+      "out": ["entity", "indexCreated", "constraintApplied"],
+      "errors": ["LOCK_TIMEOUT", "MIGRATION_BLOCKED"]
+    },
+    "auth.crossTenant.auditTrail.verify": {
+      "in": ["actorUserId", "fromCompanyId", "toCompanyId", "traceId"],
+      "out": ["traceId", "blocked", "events"],
+      "errors": ["AUDIT_NOT_FOUND", "TRACE_INCOMPLETE"]
+    },
+    "platform.console.access.evaluate": {
+      "in": ["userId", "role", "action", "targetCompanyId"],
+      "out": ["allowed", "reason", "requiresAuditReason"],
+      "errors": ["ACCESS_DENIED", "REASON_REQUIRED"]
+    }
+  },
+  "acceptance": {
+    "globalIsolation": "0 registros operacionais críticos sem companyId",
+    "crossTenant": "100% das tentativas cruzadas bloqueadas e auditadas",
+    "downtime": "migrações de índices/constraints sem indisponibilidade global",
+    "platformConsole": "ações sensíveis exigem motivo e trilha auditável"
+  }
+}
