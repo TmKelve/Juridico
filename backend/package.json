@@ -6,6 +6,7 @@
     "start": "prisma migrate deploy --schema=prisma/schema.prisma && node dist/main.js",
     "dev": "ts-node-dev --respawn --transpile-only src/main.ts",
     "build": "tsc",
+    "db:seed:finance": "ts-node --transpile-only prisma/seed-finance.ts",
     "prisma:generate": "prisma generate --schema=prisma/schema.prisma",
     "prisma:migrate:dev": "prisma migrate dev --schema=prisma/schema.prisma",
     "prisma:migrate:deploy": "prisma migrate deploy --schema=prisma/schema.prisma",
