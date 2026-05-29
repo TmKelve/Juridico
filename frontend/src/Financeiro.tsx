@@ -202,7 +202,6 @@ export function Financeiro({ user: _user }: { user: User }) {
   const [delinquencyContacts, setDelinquencyContacts] = useState<ApiFinanceDelinquencyContact[]>([])
   const [installmentPlans, setInstallmentPlans] = useState<ApiFinanceInstallmentPlan[]>([])
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null)
-  const [delinquencyCapability, setDelinquencyCapability] = useState<LoadCapability>('derived')
   const [installmentCapability, setInstallmentCapability] = useState<LoadCapability>('unavailable')
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -454,10 +453,8 @@ export function Financeiro({ user: _user }: { user: User }) {
 
       if (delinquencyRes.status === 200) {
         setDelinquencyContacts(delinquencyRes.data)
-        setDelinquencyCapability('native')
       } else {
         setDelinquencyContacts(deriveDelinquencyContacts(nextEntries, nextClients, nextProcesses, filters.to, filters))
-        setDelinquencyCapability(delinquencyRes.status === 404 ? 'derived' : 'error')
       }
 
       const plansRes = await api.getFinanceInstallmentPlans({
