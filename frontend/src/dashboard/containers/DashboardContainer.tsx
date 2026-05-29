@@ -20,7 +20,7 @@ export function DashboardContainer({ user }: DashboardContainerProps) {
   const { profile, items, loading, error } = useDashboardHomeData(user.role, user.id, user.email);
   const { agenda, movements, alerts } = useContextFeed(items);
   const { onKpiClick, onShortcutClick, onQueueOpen } = useKpiActions();
-  const { queueFilter, setQueueFilter, selectedPhase, setSelectedPhase, filteredItems } = useOperationalFilters(items);
+  const { queueFilter, setQueueFilter, selectedPhase, filteredItems } = useOperationalFilters(items);
 
   const [selectedItem, setSelectedItem] = useState<ResponsibilityItem | null>(null);
   const [liveFeedback, setLiveFeedback] = useState('');

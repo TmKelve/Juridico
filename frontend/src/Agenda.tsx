@@ -522,6 +522,21 @@ export function Agenda({ user }: AgendaProps) {
 
   const hasActiveFilter = useMemo(() => JSON.stringify(filters) !== JSON.stringify(EMPTY_FILTERS), [filters]);
 
+  const activeFilterChips = useMemo(() => {
+    const chips: string[] = [];
+    if (filters.search) chips.push(`Busca: "${filters.search}"`);
+    if (filters.type) chips.push(`Tipo: ${filters.type}`);
+    if (filters.client) chips.push(`Cliente: ${filters.client}`);
+    if (filters.process) chips.push(`Processo: ${filters.process}`);
+    if (filters.responsible) chips.push(`Responsável: ${filters.responsible}`);
+    if (filters.priority) chips.push(`Prioridade: ${filters.priority}`);
+    if (filters.audienciaOnly) chips.push('Somente audiências');
+    if (filters.retornoOnly) chips.push('Somente retornos');
+    if (filters.prazoOnly) chips.push('Somente prazos');
+    if (filters.period && filters.period !== 'semana') chips.push(`Período: ${filters.period}`);
+    return chips;
+  }, [filters]);
+
   const clients = useMemo(() => Array.from(new Set(events.map((event) => event.client))), [events]);
   const responsibles = useMemo(() => Array.from(new Set(events.map((event) => event.responsible))), [events]);
   const processes = useMemo(() => {
@@ -605,19 +620,7 @@ export function Agenda({ user }: AgendaProps) {
       };
     });
   }, [selectedDate, sorted]);
-  const visibleTodayCount = sorted.filter((event) => dayDiffFromToday(event.date, new Date()) === 0).length;
   const visibleAttentionCount = sorted.filter((event) => event.status === 'atencao' || event.requiresAttention).length;
-  const visibleDeadlineCount = sorted.filter((event) => event.isDeadline).length;
-  const focusEvent = sorted.find((event) => event.status === 'atencao' || event.requiresAttention)
-    ?? sorted.find((event) => event.priority === 'alta')
-    ?? sorted[0]
-    ?? null;
-  const focusTone = focusEvent?.status === 'atencao' || focusEvent?.requiresAttention
-    ? 'warning'
-    : focusEvent?.priority === 'alta'
-      ? 'critical'
-      : 'neutral';
-
   if (loading) {
     return (
       <section className="agenda-page" aria-label="Agenda">

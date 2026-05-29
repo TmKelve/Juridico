@@ -17,7 +17,6 @@ import {
   FolderOpen,
   KanbanSquare,
   Loader2,
-  MoreHorizontal,
   Paperclip,
   Plus,
   RefreshCw,
@@ -65,7 +64,6 @@ type SortField = 'nextDeadline' | 'priority' | 'lastMovement';
 type SortDirection = 'asc' | 'desc';
 type FilterPresetKey = 'critical_today' | 'stale_15' | 'pending_docs' | 'new_publications';
 type ProcessEntryMode = 'novo' | 'andamento';
-type DensityMode = 'comfortable' | 'compact';
 type KanbanStage =
   | 'aguardando_acao'
   | 'aguardando_documentos'
@@ -285,10 +283,9 @@ export function Processes({ user }: ProcessesProps) {
   const [sortBy, setSortBy] = useState<SortField>('nextDeadline');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [viewMode, setViewMode] = useState<ViewMode>('table');
-  const [densityMode, setDensityMode] = useState<DensityMode>('comfortable');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedProcess, setSelectedProcess] = useState<EnrichedProcess | null>(null);
-  const [menuOpenId, setMenuOpenId] = useState<number | null>(null);
+  const [, setMenuOpenId] = useState<number | null>(null);
   const attachInputRef = useRef<HTMLInputElement | null>(null);
   const [attachLoading, setAttachLoading] = useState(false);
   const [checklistOverrides, setChecklistOverrides] = useState<Record<number, Partial<Record<'doc' | 'pub' | 'prazo' | 'andamento', boolean>>>>({});
@@ -475,43 +472,6 @@ export function Processes({ user }: ProcessesProps) {
     }
   }
 
-  async function handleDelete(id: number) {
-    if (!confirm('Tem certeza que deseja excluir este processo?')) return;
-
-    try {
-      const res = await api.deleteProcess(id);
-      if (res.status === 204) {
-        setSuccess('Processo removido com sucesso.');
-        await loadProcesses();
-      } else {
-        setError(res.error || 'Erro ao excluir processo');
-      }
-    } catch (err) {
-      setError((err as Error).message);
-      captureException(err as Error, { context: 'handleDelete' });
-    }
-  }
-
-  function handleEdit(process: EnrichedProcess) {
-    if (user.role !== 'ADM' && user.role !== 'FIN' && process.ownerId !== user.id) {
-      setError('Voce nao tem permissao para editar este processo');
-      return;
-    }
-
-    setFormData({
-      title: process.title,
-      processNumber: process.processNumber ?? '',
-      client: process.client,
-      phase: process.phase,
-      status: process.status,
-    });
-    setEntryMode(process.processNumber ? 'andamento' : 'novo');
-    setLookupError('');
-    setLookupInfo(null);
-    setEditingId(process.id);
-    setShowForm(true);
-    setMenuOpenId(null);
-  }
 
   function updateFilter<K extends keyof ProcessFilters>(key: K, value: ProcessFilters[K]) {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -755,10 +715,6 @@ export function Processes({ user }: ProcessesProps) {
   const visibleCriticalCount = sortedProcesses.filter((process) => dayDiff(process.nextDeadlineAt, new Date()) <= 1).length;
   const visiblePendingDocsCount = sortedProcesses.filter((process) => process.pendingDocuments > 0).length;
   const visibleFutureHearingsCount = sortedProcesses.filter((process) => process.hasFutureHearing).length;
-  const focusProcess = sortedProcesses.find((process) => dayDiff(process.nextDeadlineAt, new Date()) <= 1)
-    ?? sortedProcesses.find((process) => process.pendingDocuments > 0)
-    ?? sortedProcesses[0]
-    ?? null;
   const portfolioHealthTone = visibleCriticalCount > 0 ? 'critical' : visiblePendingDocsCount > 0 ? 'attention' : 'stable';
   const portfolioHealthLabel = visibleCriticalCount > 0
     ? `${visibleCriticalCount} ${visibleCriticalCount === 1 ? 'prazo exige' : 'prazos exigem'} prioridade imediata.`

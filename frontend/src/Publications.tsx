@@ -11,7 +11,6 @@ import {
   Download,
   ExternalLink,
   Eye,
-  EyeOff,
   Filter,
   MoreHorizontal,
   Plus,
@@ -34,7 +33,7 @@ import { loadOriginBundle } from './components/audit/loadOriginBundle';
 import { OriginInsightPanel } from './components/audit/OriginInsightPanel';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import { ProcessCombobox } from './ProcessCombobox';
-import { Button, Input, Textarea } from './components/ui';
+import { Button, Textarea } from './components/ui';
 import './Dashboard.css';
 import './Processes.css';
 import './Publications.css';

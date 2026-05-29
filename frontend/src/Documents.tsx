@@ -636,11 +636,6 @@ export function Documents({ user }: DocumentsProps) {
 
   const emptyWithoutData = !loading && !error && documents.length === 0;
   const emptyWithFilter = !loading && !error && documents.length > 0 && sortedDocuments.length === 0;
-  const visiblePendingCount = sortedDocuments.filter((doc) => doc.status === 'pendente').length;
-  const visibleValidationCount = sortedDocuments.filter((doc) => doc.status === 'aguardando_validacao').length;
-  const visibleChecklistGapCount = activeChecklistProcess
-    ? activeChecklist.filter((item) => item.required && item.status === 'faltante').length
-    : 0;
   const focusDocument = sortedDocuments.find((doc) => doc.status === 'pendente')
     ?? sortedDocuments.find((doc) => doc.status === 'aguardando_validacao')
     ?? sortedDocuments[0]
@@ -650,12 +645,6 @@ export function Documents({ user }: DocumentsProps) {
     : focusDocument?.status === 'aguardando_validacao'
       ? 'info'
       : 'neutral';
-  const headerSummaryItems = [
-    { label: 'Em exibição', value: sortedDocuments.length, tone: 'neutral' },
-    { label: 'Pendentes', value: visiblePendingCount, tone: visiblePendingCount > 0 ? 'warning' : 'neutral' },
-    { label: 'Em validação', value: visibleValidationCount, tone: visibleValidationCount > 0 ? 'info' : 'neutral' },
-    { label: 'Checklist aberto', value: visibleChecklistGapCount, tone: visibleChecklistGapCount > 0 ? 'danger' : 'neutral' },
-  ] as const;
 
   function statusBadge(status: DocumentStatus) {
     const labels: Record<DocumentStatus, string> = {

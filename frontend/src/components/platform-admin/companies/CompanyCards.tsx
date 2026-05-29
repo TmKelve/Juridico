@@ -9,8 +9,8 @@ interface CompanyListCardProps {
 }
 
 function getActionTone(action: CompanyAdminAction['type']): string {
-  if (action.type === 'suspend') return 'border-rose-200 bg-rose-50 text-rose-700'
-  if (action.type === 'activate') return 'border-emerald-200 bg-emerald-50 text-emerald-700'
+  if (action === 'suspend') return 'border-rose-200 bg-rose-50 text-rose-700'
+  if (action === 'activate') return 'border-emerald-200 bg-emerald-50 text-emerald-700'
   return 'border-slate-200 bg-slate-100 text-slate-700'
 }
 

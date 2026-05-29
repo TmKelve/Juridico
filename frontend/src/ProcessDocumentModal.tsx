@@ -278,7 +278,7 @@ export function ProcessDocumentModal({
                       onValidate={() => handleItemValidate(item)}
                       onReject={() => handleItemReject(item)}
                       onMarkMissing={() => handleItemMarkMissing(item)}
-                      onUpload={() => onRequestUploadForItem(String(processId), item.id)}
+                      onUpload={() => onRequestUploadForItem(String(processId), item)}
                       whatsappUrl={buildWhatsAppItem(item)}
                     />
                   ))}
@@ -304,7 +304,7 @@ export function ProcessDocumentModal({
                       onValidate={() => handleItemValidate(item)}
                       onReject={() => handleItemReject(item)}
                       onMarkMissing={() => handleItemMarkMissing(item)}
-                      onUpload={() => onRequestUploadForItem(String(processId), item.id)}
+                      onUpload={() => onRequestUploadForItem(String(processId), item)}
                       whatsappUrl={buildWhatsAppItem(item)}
                     />
                   ))}
@@ -330,7 +330,7 @@ export function ProcessDocumentModal({
                       onValidate={() => handleItemValidate(item)}
                       onReject={() => handleItemReject(item)}
                       onMarkMissing={() => handleItemMarkMissing(item)}
-                      onUpload={() => onRequestUploadForItem(String(processId), item.id)}
+                      onUpload={() => onRequestUploadForItem(String(processId), item)}
                       whatsappUrl={buildWhatsAppItem(item)}
                     />
                   ))}
