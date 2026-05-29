@@ -1152,6 +1152,11 @@ export const api = {
       body: data,
     }),
 
+  deleteClient: (id: number) =>
+    apiClient<void>(`/clients/${id}`, {
+      method: 'DELETE',
+    }),
+
   getHome: () =>
     apiClient<{ profile: string; home: { menu: string[]; cards: string[] } }>('/home'),
 

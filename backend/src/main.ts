@@ -4245,6 +4245,25 @@ app.put('/clients/:id', async (req, res) => {
   res.json(buildClientPayload(updated));
 });
 
+app.delete('/clients/:id', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+  if (decoded.role !== 'ADM' && decoded.role !== 'FIN') return res.status(403).send({ message: 'Apenas administradores podem excluir clientes' });
+
+  try {
+    const client = await prisma.client.findUnique({ where: { id: Number(req.params.id) } });
+    if (!client) return res.status(404).send({ message: 'Cliente não encontrado' });
+
+    await prisma.client.delete({ where: { id: client.id } });
+    res.status(204).send();
+  } catch (error: any) {
+    if (error.code === 'P2003') {
+      return res.status(400).send({ message: 'Não é possível excluir este cliente pois existem processos ou dados vinculados a ele.' });
+    }
+    res.status(500).send({ message: 'Erro interno ao excluir cliente' });
+  }
+});
+
 app.get('/clients/:id/communications', async (req, res) => {
   const decoded = getUserFromReq(req);
   if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });

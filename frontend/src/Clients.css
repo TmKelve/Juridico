@@ -1432,3 +1432,71 @@
   .cli-table th:nth-child(7),
   .cli-table td:nth-child(7) { display: none; }
 }
+
+/* ── Bulk Actions & Checkboxes ───────────────────────────────────── */
+.cli-bulk-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--brand-50);
+  border: 1px solid var(--brand-200);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-5);
+  box-shadow: var(--shadow-sm);
+}
+
+.cli-bulk-count {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--brand-700);
+}
+
+.cli-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.cli-bulk-actions .btn-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--error-600);
+  color: #fff;
+  border: none;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+.cli-bulk-actions .btn-danger:hover { background: var(--error-700); }
+
+.cli-bulk-actions .btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px var(--space-3);
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+.cli-bulk-actions .btn-ghost:hover {
+  color: var(--text-primary);
+  background: var(--neutral-200);
+  border-radius: var(--radius-sm);
+}
+
+.cli-th-checkbox, .cli-td-checkbox {
+  width: 40px;
+  text-align: center;
+}
+.cli-th-checkbox input, .cli-td-checkbox input {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+.cli-table-row.is-selected-row td {
+  background: var(--brand-50);
+}
