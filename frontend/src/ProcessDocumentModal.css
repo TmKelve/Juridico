@@ -469,22 +469,63 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius-md);
   border: 1px solid var(--neutral-200);
-  background: var(--white);
+  background: var(--neutral-50);
   cursor: pointer;
-  color: var(--neutral-500);
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  color: var(--neutral-600);
+  transition: background 0.12s, color 0.12s, border-color 0.12s, box-shadow 0.12s;
   text-decoration: none;
+  flex-shrink: 0;
+  position: relative;
 }
-.pdm-item-btn:hover { background: var(--neutral-100); color: var(--neutral-950); }
-.pdm-item-btn--validate:hover { background: var(--success-100); color: var(--success-600); border-color: var(--success-600); }
-.pdm-item-btn--reject:hover   { background: var(--error-100);   color: var(--error-700);   border-color: var(--error-700);   }
-.pdm-item-btn--upload:hover   { background: var(--brand-50);    color: var(--brand-700);   border-color: var(--brand-600);   }
-.pdm-item-btn--whatsapp:hover { background: #dcfce7; color: #16a34a; border-color: #16a34a; }
-.pdm-item-btn--undo:hover     { background: var(--warning-100); color: var(--warning-700); border-color: var(--warning-600); }
+.pdm-item-btn:hover {
+  background: var(--neutral-100);
+  color: var(--neutral-950);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+/* Upload — blue */
+.pdm-item-btn--upload {
+  color: var(--brand-600);
+  background: var(--brand-50);
+  border-color: var(--brand-200);
+}
+.pdm-item-btn--upload:hover { background: var(--brand-100); border-color: var(--brand-400); }
+
+/* WhatsApp — green */
+.pdm-item-btn--whatsapp {
+  color: #16a34a;
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+.pdm-item-btn--whatsapp:hover { background: #dcfce7; border-color: #4ade80; }
+
+/* Validate — green */
+.pdm-item-btn--validate {
+  color: var(--success-600);
+  background: var(--success-100);
+  border-color: var(--success-300, #6ee7b7);
+}
+.pdm-item-btn--validate:hover { background: #d1fae5; border-color: var(--success-600); }
+
+/* Reject — red */
+.pdm-item-btn--reject {
+  color: var(--error-700);
+  background: var(--error-100);
+  border-color: var(--error-300, #fca5a5);
+}
+.pdm-item-btn--reject:hover { background: #fee2e2; border-color: var(--error-700); }
+
+/* Undo — amber */
+.pdm-item-btn--undo {
+  color: var(--warning-700);
+  background: var(--warning-100);
+  border-color: var(--warning-300, #fcd34d);
+}
+.pdm-item-btn--undo:hover { background: #fef3c7; border-color: var(--warning-600); }
 
 /* ── DOCUMENTS SECTION ── */
 .pdm-docs-section {
@@ -617,18 +658,36 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: none;
+  width: 26px;
+  height: 26px;
+  border: 1px solid transparent;
   background: transparent;
   border-radius: var(--radius-md);
-  color: var(--neutral-400);
+  color: var(--neutral-500);
   cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
-.pdm-doc-action:hover { background: var(--neutral-100); color: var(--neutral-700); }
-.pdm-doc-action--validate:hover { background: var(--success-100); color: var(--success-600); }
-.pdm-doc-action--reject:hover   { background: var(--error-100);   color: var(--error-700);   }
+.pdm-doc-action:hover {
+  background: var(--neutral-100);
+  border-color: var(--neutral-200);
+  color: var(--neutral-700);
+}
+.pdm-doc-action--validate {
+  color: var(--success-600);
+}
+.pdm-doc-action--validate:hover {
+  background: var(--success-100);
+  border-color: var(--success-300, #6ee7b7);
+  color: var(--success-700);
+}
+.pdm-doc-action--reject {
+  color: var(--error-600);
+}
+.pdm-doc-action--reject:hover {
+  background: var(--error-100);
+  border-color: var(--error-300, #fca5a5);
+  color: var(--error-700);
+}
 
 /* ── FOOTER ── */
 .pdm-footer {
