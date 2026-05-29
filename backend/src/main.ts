@@ -8363,6 +8363,143 @@ app.get('/', (req, res) => {
   res.send({ message: 'SaaS Jurídico API v1' });
 });
 
+// ── Admin: Finance Seed ──────────────────────────────────────────────────────
+// POST /admin/seed-finance  (admin only, idempotent)
+app.post('/admin/seed-finance', async (req, res) => {
+  const actor = getUserFromReq(req);
+  if (!actor) return res.status(401).json({ error: 'Não autenticado' });
+  if (actor.role !== 'admin') return res.status(403).json({ error: 'Apenas administradores' });
+
+  try {
+    // Guard: skip if already seeded
+    const existing = await (prisma as any).financeEntry.count();
+    if (existing > 0) {
+      return res.json({ skipped: true, message: `Seed ignorado — já existem ${existing} lançamentos.` });
+    }
+
+    // Ensure categories
+    const categories = [
+      { code: 'honorarios', label: 'Honorários', type: 'receivable', sortOrder: 10 },
+      { code: 'acordo',     label: 'Acordo',     type: 'receivable', sortOrder: 20 },
+      { code: 'mensalidade',label: 'Mensalidade',type: 'receivable', sortOrder: 30 },
+      { code: 'custas',     label: 'Custas',     type: 'payable',    sortOrder: 40 },
+      { code: 'fornecedor', label: 'Fornecedor', type: 'payable',    sortOrder: 50 },
+    ];
+    for (const cat of categories) {
+      await (prisma as any).financeCategory.upsert({
+        where: { code: cat.code }, update: {}, create: { ...cat, active: true },
+      });
+    }
+
+    const clients  = await (prisma as any).client.findMany({ take: 10, orderBy: { id: 'asc' } });
+    const processes = await (prisma as any).process.findMany({ take: 11, orderBy: { id: 'asc' } });
+    if (clients.length < 5 || processes.length < 5) {
+      return res.status(400).json({ error: 'Base insuficiente: rode o seed principal primeiro.' });
+    }
+    const c = (i: number) => clients[i - 1]?.id ?? null;
+    const p = (i: number) => processes[i - 1]?.id ?? null;
+
+    const daysAgo      = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return d; };
+    const daysFromNow  = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return d; };
+    const monthsAgo    = (n: number) => { const d = new Date(); d.setMonth(d.getMonth() - n); return d; };
+    const addMonths    = (base: Date, n: number) => { const d = new Date(base); d.setMonth(d.getMonth() + n); return d; };
+
+    function planEntries(count: number, amtCents: number, first: Date, paidCount: number, overdueIdx?: number) {
+      return Array.from({ length: count }, (_, i) => {
+        const num = i + 1;
+        const due = addMonths(first, i);
+        const isPaid = num <= paidCount;
+        const isOv   = num === overdueIdx;
+        return {
+          type: 'receivable', status: isPaid ? 'paid' : isOv ? 'overdue' : 'open',
+          amountCents: amtCents, settledAmountCents: isPaid ? amtCents : 0,
+          dueDate: due, settlementDate: isPaid ? addMonths(first, i) : null,
+          paymentMethod: isPaid ? 'pix' : null, installmentNumber: num,
+        };
+      });
+    }
+
+    // Plan 1: João da Silva 12×R$800
+    const p1first = monthsAgo(11);
+    const plan1 = await (prisma as any).financeInstallmentPlan.create({ data: {
+      description: 'Honorários – Ação Trabalhista João da Silva',
+      clientId: c(1), processId: p(1), categoryCode: 'honorarios',
+      installmentCount: 12, installmentAmountCents: 80000, totalAmountCents: 960000,
+      dueDay: 10, firstDueDate: p1first, active: true,
+      notes: '12×R$800,00', createdBy: actor.email,
+    }});
+    await (prisma as any).financeEntry.createMany({ data: planEntries(12, 80000, p1first, 10, 11).map(e => ({
+      ...e, description: `Honorários Trabalhista – Parcela ${e.installmentNumber}/12`,
+      clientId: c(1), processId: p(1), installmentPlanId: plan1.id, categoryCode: 'honorarios', createdBy: actor.email,
+    }))});
+
+    // Plan 2: Empresa ABC 6×R$3.000
+    const p2first = monthsAgo(5);
+    const plan2 = await (prisma as any).financeInstallmentPlan.create({ data: {
+      description: 'Honorários de Êxito – Ação Cobrança Empresa ABC',
+      clientId: c(3), processId: p(5), categoryCode: 'honorarios',
+      installmentCount: 6, installmentAmountCents: 300000, totalAmountCents: 1800000,
+      dueDay: 15, firstDueDate: p2first, active: true,
+      notes: '6×R$3.000,00', createdBy: actor.email,
+    }});
+    const p2entries = planEntries(6, 300000, p2first, 3, 4);
+    p2entries[3].status = 'partially_paid'; p2entries[3].settledAmountCents = 150000;
+    await (prisma as any).financeEntry.createMany({ data: p2entries.map(e => ({
+      ...e, description: `Honorários de Êxito – Parcela ${e.installmentNumber}/6`,
+      clientId: c(3), processId: p(5), installmentPlanId: plan2.id, categoryCode: 'honorarios', createdBy: actor.email,
+    }))});
+
+    // Plan 3: Tech Solutions 24×R$3.500
+    const p3first = monthsAgo(23);
+    const plan3 = await (prisma as any).financeInstallmentPlan.create({ data: {
+      description: 'Contrato de Assessoria Tributária – Tech Solutions',
+      clientId: c(5), processId: p(6), categoryCode: 'mensalidade',
+      installmentCount: 24, installmentAmountCents: 350000, totalAmountCents: 8400000,
+      dueDay: 5, firstDueDate: p3first, active: true,
+      notes: '24×R$3.500,00', createdBy: actor.email,
+    }});
+    await (prisma as any).financeEntry.createMany({ data: planEntries(24, 350000, p3first, 21, 22).map(e => ({
+      ...e, description: `Mensalidade Assessoria – Parcela ${e.installmentNumber}/24`,
+      clientId: c(5), processId: p(6), installmentPlanId: plan3.id, categoryCode: 'mensalidade', createdBy: actor.email,
+    }))});
+
+    // Avulsos receber
+    await (prisma as any).financeEntry.createMany({ data: [
+      { type: 'receivable', status: 'overdue',        description: 'Honorários – Fase Instrução (CIV-2024-003)',         amountCents: 1200000, settledAmountCents: 0,       dueDate: daysAgo(45),     clientId: c(4), processId: p(3), categoryCode: 'honorarios', notes: 'Vencido há mais de 30 dias.', createdBy: actor.email },
+      { type: 'receivable', status: 'open',           description: 'Honorários – Ação Indenizatória (CIV-2024-008)',     amountCents:  800000, settledAmountCents: 0,       dueDate: daysFromNow(10), clientId: c(4), processId: p(8), categoryCode: 'honorarios', createdBy: actor.email },
+      { type: 'receivable', status: 'overdue',        description: 'Honorários de Êxito – Sentença Trabalhista (TRB-007)',amountCents:1500000, settledAmountCents: 0,       dueDate: daysAgo(30),     clientId: c(7), processId: p(7), categoryCode: 'acordo',     notes: 'R$15.000 pós-sentença.', createdBy: actor.email },
+      { type: 'receivable', status: 'overdue',        description: 'Honorários – Benefício Previdenciário (PRV-004)',    amountCents:  500000, settledAmountCents: 0,       dueDate: daysAgo(20),     clientId: c(2), processId: p(4), categoryCode: 'honorarios', createdBy: actor.email },
+      { type: 'receivable', status: 'paid',           description: 'Honorários Iniciais – Ação Trabalhista (TRB-002)',   amountCents:  600000, settledAmountCents: 600000,   dueDate: daysAgo(40),     settlementDate: daysAgo(38), paymentMethod: 'pix', clientId: c(6), processId: p(2), categoryCode: 'honorarios', createdBy: actor.email },
+      { type: 'receivable', status: 'open',           description: 'Honorários – Preparação para AIJ (TRB-002)',         amountCents:  600000, settledAmountCents: 0,       dueDate: daysFromNow(15), clientId: c(6), processId: p(2), categoryCode: 'honorarios', createdBy: actor.email },
+      { type: 'receivable', status: 'paid',           description: 'Honorários Defesa – Danos Construtora XYZ',          amountCents: 2500000, settledAmountCents: 2500000,  dueDate: daysAgo(60),     settlementDate: daysAgo(57), paymentMethod: 'boleto', clientId: c(8), processId: null, categoryCode: 'honorarios', createdBy: actor.email },
+      { type: 'receivable', status: 'open',           description: 'Honorários – Parcelamento FGTS (TRI-2024-010)',      amountCents:  800000, settledAmountCents: 0,       dueDate: daysFromNow(20), clientId: c(10), processId: p(10), categoryCode: 'acordo',  createdBy: actor.email },
+      { type: 'receivable', status: 'open',           description: 'Honorários Iniciais – Caso Hospitalar (CIV-009)',    amountCents:  350000, settledAmountCents: 0,       dueDate: daysFromNow(30), clientId: c(9), processId: p(9), categoryCode: 'honorarios', notes: 'Aguardando assinatura.', createdBy: actor.email },
+      { type: 'receivable', status: 'partially_paid', description: 'Honorários Tributários – Recurso ICMS (TRI-006)',    amountCents: 1800000, settledAmountCents: 900000,  dueDate: daysAgo(10),     clientId: c(5), processId: p(6), categoryCode: 'honorarios', notes: '50% recebido.', createdBy: actor.email },
+    ]});
+
+    // Avulsos pagar
+    await (prisma as any).financeEntry.createMany({ data: [
+      { type: 'payable', status: 'paid',    description: 'Custas processuais – Distribuição (TRB-001)',       amountCents:  120000, settledAmountCents: 120000,  dueDate: daysAgo(90),    settlementDate: daysAgo(89), paymentMethod: 'boleto', clientId: c(1), processId: p(1), categoryCode: 'custas',    createdBy: actor.email },
+      { type: 'payable', status: 'open',    description: 'Custas perícia judicial (CIV-003)',                 amountCents:  250000, settledAmountCents: 0,       dueDate: daysFromNow(5), clientId: c(4), processId: p(3), categoryCode: 'custas',    createdBy: actor.email },
+      { type: 'payable', status: 'paid',    description: 'Preparo recursal – TJSP (TRI-006)',                 amountCents:  125000, settledAmountCents: 125000,  dueDate: daysAgo(50),    settlementDate: daysAgo(49), paymentMethod: 'boleto', clientId: c(5), processId: p(6), categoryCode: 'custas',    createdBy: actor.email },
+      { type: 'payable', status: 'overdue', description: 'Honorários perito judicial (CIV-003)',              amountCents:  600000, settledAmountCents: 0,       dueDate: daysAgo(15),    clientId: c(4), processId: p(3), categoryCode: 'fornecedor', notes: 'NF emitida em 12/04.', createdBy: actor.email },
+      { type: 'payable', status: 'paid',    description: 'Licença sistema de gestão – abr/2024',              amountCents:   89000, settledAmountCents: 89000,   dueDate: daysAgo(60),    settlementDate: daysAgo(59), paymentMethod: 'debito_automatico', clientId: null, processId: null, categoryCode: 'fornecedor', createdBy: actor.email },
+      { type: 'payable', status: 'open',    description: 'Custas recurso administrativo INSS (PRV-004)',      amountCents:   35000, settledAmountCents: 0,       dueDate: daysFromNow(12),clientId: c(2), processId: p(4), categoryCode: 'custas',    createdBy: actor.email },
+      { type: 'payable', status: 'open',    description: 'Custas impugnação de cálculos (TRB-007)',           amountCents:  180000, settledAmountCents: 0,       dueDate: daysFromNow(18),clientId: c(7), processId: p(7), categoryCode: 'custas',    createdBy: actor.email },
+      { type: 'payable', status: 'open',    description: 'Diligência – Cartório 3° Ofício SP',               amountCents:   22000, settledAmountCents: 0,       dueDate: daysFromNow(7), clientId: null, processId: null, categoryCode: 'fornecedor', createdBy: actor.email },
+      { type: 'payable', status: 'open',    description: 'Licença sistema de gestão – mai/2024',              amountCents:   89000, settledAmountCents: 0,       dueDate: daysFromNow(4), clientId: null, processId: null, categoryCode: 'fornecedor', createdBy: actor.email },
+      { type: 'payable', status: 'open',    description: 'Custas audiência de instrução (TRB-002)',           amountCents:   45000, settledAmountCents: 0,       dueDate: daysFromNow(20),clientId: c(6), processId: p(2), categoryCode: 'custas',    createdBy: actor.email },
+    ]});
+
+    const total = await (prisma as any).financeEntry.count();
+    const plans = await (prisma as any).financeInstallmentPlan.count();
+    return res.json({ ok: true, plans, entries: total });
+  } catch (err: any) {
+    console.error('[seed-finance]', err);
+    return res.status(500).json({ error: err?.message ?? 'Erro interno' });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Backend rodando em http://localhost:${port}`);
 });

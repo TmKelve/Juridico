@@ -14,5 +14,5 @@
     "skipLibCheck": true,
     "ignoreDeprecations": "6.0"
   },
-  "exclude": ["node_modules", "dist", "prisma.config.ts"]
+  "exclude": ["node_modules", "dist", "prisma.config.ts", "prisma"]
 }
