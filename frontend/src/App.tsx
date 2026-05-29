@@ -238,7 +238,7 @@ function AppShell({
   const isDashboard = location.pathname === '/'
   const isCrmJuridico = location.pathname === '/crm-juridico'
   // Rotas que gerenciam seu próprio refresh — não exibir "Atualizar dados" global
-  const isSelfManaged = ['/tarefas', '/processos', '/prazos', '/agenda', '/documentos', '/clientes', '/atendimentos', '/publicacoes-intimacoes', '/financeiro', '/triagem'].some(r => location.pathname === r || location.pathname.startsWith(r + '/'))
+  const isSelfManaged = ['/tarefas', '/processos', '/prazos', '/agenda', '/documentos', '/clientes', '/atendimentos', '/publicacoes-intimacoes', '/financeiro', '/triagem', '/modelos-pecas'].some(r => location.pathname === r || location.pathname.startsWith(r + '/'))
   const shortName = (user.email || getRoleLabel(user.role)).split('@')[0].slice(0, 12)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
