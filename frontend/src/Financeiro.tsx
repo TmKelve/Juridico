@@ -331,13 +331,19 @@ export function Financeiro({ user: _user }: { user: User }) {
     )
   }, [installmentPlans])
 
+  // Only show contacts that genuinely have outstanding overdue amounts
+  const delinquentContacts = useMemo(
+    () => delinquencyContacts.filter((c) => c.overdueAmountCents > 0 && c.overdueEntriesCount > 0),
+    [delinquencyContacts],
+  )
+
   const tabCounts = useMemo(() => ({
     receber: entries.filter((e) => e.type === 'receivable').length,
     pagar: entries.filter((e) => e.type === 'payable').length,
-    inadimplencia: delinquencyContacts.length,
+    inadimplencia: delinquentContacts.length,
     parcelamentos: installmentPlans.length,
     conciliacao: audit.length,
-  }), [entries, delinquencyContacts, installmentPlans, audit])
+  }), [entries, delinquentContacts, installmentPlans, audit])
 
   // ── Installment preview (compound interest PMT) ──────────────────────────────
   const installmentPreview = useMemo(() => {
@@ -611,6 +617,52 @@ export function Financeiro({ user: _user }: { user: User }) {
       await loadFinanceData()
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'Falha ao agendar régua')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // ── Bulk billing from delinquency card ─────────────────────────────────────
+  async function handleBulkCobrar(contact: ApiFinanceDelinquencyContact) {
+    if (!canBilling) return
+    setSubmitting(true)
+    setError('')
+    try {
+      for (const entry of contact.entries) {
+        await api.generateFinanceBilling({
+          entryId: entry.id,
+          method: 'pix',
+          expiresAt: `${toIsoDate(new Date())}T23:59:59.000Z`,
+          recipientEmail: contact.contactEmail || 'financeiro@cliente.local',
+          idempotencyKey: buildIdempotencyKey(`bulk-billing-${entry.id}`),
+        })
+      }
+      await loadFinanceData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao gerar cobranças')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleBulkSchedule(contact: ApiFinanceDelinquencyContact) {
+    if (!canBilling) return
+    setSubmitting(true)
+    setError('')
+    try {
+      for (const entry of contact.entries) {
+        await api.scheduleFinanceCollection({
+          entryId: entry.id,
+          channel: 'email',
+          cadenceDays: 3,
+          maxAttempts: 4,
+          startsAt: new Date().toISOString(),
+          idempotencyKey: buildIdempotencyKey(`bulk-collection-${entry.id}`),
+        })
+      }
+      await loadFinanceData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao agendar régua de cobrança')
     } finally {
       setSubmitting(false)
     }
@@ -962,32 +1014,31 @@ export function Financeiro({ user: _user }: { user: User }) {
         {/* ── Inadimplência ── */}
         {!loading && tab === 'inadimplencia' && (
           <div className="fin-section-stack">
-            <div className="fin-inline-note">
-              <span className={`fin-status-badge fin-status-badge--${delinquencyCapability}`}>
-                {delinquencyCapability === 'native' ? 'lista nativa' : delinquencyCapability === 'derived' ? 'lista derivada' : 'lista indisponível'}
-              </span>
-              <p>
-                {delinquencyCapability === 'native'
-                  ? 'A fila de inadimplência já vem do backend com contato e contexto de cobrança.'
-                  : delinquencyCapability === 'derived'
-                    ? 'Visão montada a partir dos lançamentos, clientes e processos existentes.'
-                    : 'O backend não retornou a fila operacional de inadimplência nesta execução.'}
-              </p>
-            </div>
+            {/* Aging summary buckets */}
             <div className="fin-aging-grid">
               {aging.buckets.map((bucket) => (
                 <div key={bucket.label} className="fin-aging-card">
                   <p>{bucket.label} dias</p>
                   <strong>{formatMoney(bucket.amountCents)}</strong>
-                  <span>{bucket.count} lançamentos</span>
+                  <span>{bucket.count} lançamento{bucket.count !== 1 ? 's' : ''}</span>
                 </div>
               ))}
             </div>
+
+            {/* Delinquency contacts — only genuinely overdue */}
             <div className="fin-delinquency-grid">
-              {delinquencyContacts.map((item) => (
-                <FinanceDelinquencyCard key={item.id} item={item} formatMoney={formatMoney} />
+              {delinquentContacts.map((item) => (
+                <FinanceDelinquencyCard
+                  key={item.id}
+                  item={item}
+                  formatMoney={formatMoney}
+                  canAct={canBilling}
+                  submitting={submitting}
+                  onCobrar={() => void handleBulkCobrar(item)}
+                  onSchedule={() => void handleBulkSchedule(item)}
+                />
               ))}
-              {!delinquencyContacts.length && (
+              {!delinquentContacts.length && (
                 <div className="fin-empty">Nenhum contato inadimplente encontrado para os filtros atuais.</div>
               )}
             </div>

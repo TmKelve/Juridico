@@ -1,43 +1,84 @@
+import { Mail, Zap } from 'lucide-react'
 import type { ApiFinanceDelinquencyContact } from '../../api'
 
 type FinanceDelinquencyCardProps = {
   item: ApiFinanceDelinquencyContact
   formatMoney: (value: number) => string
+  canAct?: boolean
+  submitting?: boolean
+  onCobrar?: () => void
+  onSchedule?: () => void
 }
 
-export function FinanceDelinquencyCard({ item, formatMoney }: FinanceDelinquencyCardProps) {
+export function FinanceDelinquencyCard({
+  item,
+  formatMoney,
+  canAct,
+  submitting,
+  onCobrar,
+  onSchedule,
+}: FinanceDelinquencyCardProps) {
   return (
-    <article className="finance-delinquency-card">
-      <div className="finance-delinquency-card__header">
+    <article className="fin-delinquency-card">
+      {/* Header: client + overdue summary */}
+      <div className="fin-delinquency-card__header">
         <div>
           <strong>{item.clientName}</strong>
-          <p>{item.contactName || 'Contato principal não informado'}</p>
+          <p>{item.contactEmail || item.contactPhone || 'Sem contato cadastrado'}</p>
         </div>
-        <span className="finance-status finance-status--overdue">{item.oldestDaysPastDue} dias</span>
+        <div className="fin-delinquency-card__kpi">
+          <span className="fin-delinquency-amount">{formatMoney(item.overdueAmountCents)}</span>
+          <span className="fin-status-badge fin-status-badge--overdue">
+            {item.oldestDaysPastDue}d atraso
+          </span>
+        </div>
       </div>
 
-      <dl className="finance-delinquency-card__meta">
-        <div>
-          <dt>Contato</dt>
-          <dd>{item.contactEmail || item.contactPhone || 'Sem canal cadastrado'}</dd>
-        </div>
+      {/* Meta grid */}
+      <dl className="fin-delinquency-card__meta">
         <div>
           <dt>Processo</dt>
-          <dd>{item.processNumber || item.processTitle || 'Sem processo vinculado'}</dd>
+          <dd>{item.processNumber || item.processTitle || '—'}</dd>
         </div>
         <div>
-          <dt>Em atraso</dt>
-          <dd>{formatMoney(item.overdueAmountCents)}</dd>
+          <dt>Títulos</dt>
+          <dd>{item.overdueEntriesCount} vencido{item.overdueEntriesCount !== 1 ? 's' : ''}</dd>
         </div>
         <div>
-          <dt>Títulos vencidos</dt>
-          <dd>{item.overdueEntriesCount}</dd>
+          <dt>Parcelas</dt>
+          <dd>{item.overdueInstallmentsCount} em atraso</dd>
+        </div>
+        <div>
+          <dt>Última ação</dt>
+          <dd>{item.lastCollectionChannel ? `Via ${item.lastCollectionChannel}` : 'Nenhuma'}</dd>
         </div>
       </dl>
 
-      <div className="finance-delinquency-card__footer">
-        <span>{item.overdueInstallmentsCount} parcelas em atraso</span>
-        <span>{item.lastCollectionChannel ? `Última régua: ${item.lastCollectionChannel}` : 'Sem tentativa registrada'}</span>
+      {/* Action bar */}
+      <div className="fin-delinquency-card__actions">
+        <button
+          className="fin-action-btn fin-action-btn--cobrar"
+          disabled={!canAct || submitting}
+          onClick={onCobrar}
+          title={`Gerar cobrança PIX para ${item.overdueEntriesCount} título(s) vencido(s)`}
+        >
+          <Zap size={11} />
+          Cobrar PIX
+        </button>
+        <button
+          className="fin-action-btn"
+          disabled={!canAct || submitting}
+          onClick={onSchedule}
+          title="Agendar régua de cobrança por e-mail"
+        >
+          <Mail size={11} />
+          Agendar Régua
+        </button>
+        {item.contactEmail && (
+          <span className="fin-delinquency-card__contact-hint">
+            → {item.contactEmail}
+          </span>
+        )}
       </div>
     </article>
   )
