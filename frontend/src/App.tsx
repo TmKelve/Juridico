@@ -6,6 +6,10 @@ import { initMonitoring, trackAuthEvent, trackPageView, trackEvent } from './mon
 import { Sidebar } from './sidebar/Sidebar'
 import { Topbar } from './topbar/Topbar'
 import { UsersWorkspace } from './UsersWorkspace'
+import { CompanyContext, type CompanyContextState } from './session/company-context'
+import type { CompanyStatus } from './platform/access'
+import { AccessStateBanner } from './components/access-state/AccessStateBanner'
+import { ReadOnlyModeSurface } from './components/read-only/ReadOnlyModeSurface'
 import './tokens.css'
 import './App.css'
 
@@ -29,10 +33,39 @@ initMonitoring()
 
 type User = { id: number; email: string; role: string }
 type HomePayload = { profile: string; home: { menu: string[]; cards: string[] } }
+type SessionContextMeta = {
+  companyId: string
+  companyName: string
+  companyStatus: CompanyStatus
+  userType: CompanyContextState['userType']
+}
+
+function asCompanyStatus(input: unknown): CompanyStatus {
+  if (input === 'past_due' || input === 'read_only' || input === 'suspended' || input === 'cancelled' || input === 'active') {
+    return input
+  }
+  return 'active'
+}
+
+function asUserType(input: unknown): CompanyContextState['userType'] {
+  return input === 'external' ? 'external' : 'internal'
+}
+
+function mapRoleToCompanyRole(role: string): CompanyContextState['role'] {
+  const normalized = role.toUpperCase()
+  if (normalized === 'ADM') return 'ADMIN'
+  if (normalized === 'ADV') return 'LAWYER'
+  if (normalized === 'ATD') return 'ASSISTANT'
+  if (normalized === 'OWNER') return 'OWNER'
+  if (normalized === 'ASSISTANT') return 'ASSISTANT'
+  if (normalized === 'LAWYER') return 'LAWYER'
+  if (normalized === 'ADMIN') return 'ADMIN'
+  return 'VIEWER'
+}
 
 function getRoleLabel(role: string) {
   const labels: Record<string, string> = {
-    ADM: 'Coordenador Jurídico',
+    ADM: 'Administrador',
     ADV: 'Advogado',
     FIN: 'Financeiro',
     ATD: 'Atendimento',
@@ -231,14 +264,15 @@ function AppShell({
   }, [location.pathname])
 
   useEffect(() => {
+    let lastWidth = window.innerWidth
     const onResize = () => {
       const width = window.innerWidth
+      if (width === lastWidth) return
+      lastWidth = width
+
       if (width < 768) {
         setSidebarOpen(false)
-        return
       }
-
-      setSidebarCollapsed(true)
     }
 
     window.addEventListener('resize', onResize)
@@ -270,8 +304,11 @@ function AppShell({
       <main className="shell-main">
         <Topbar
           userName={shortName}
+          userEmail={user.email || ''}
+          userRole={user.role || ''}
           notificationCount={3}
           onMenuClick={handleNavToggle}
+          onLogout={onLogout}
           onNotifications={() => trackEvent('notifications_opened')}
           onHelp={() => trackEvent('help_opened')}
           onShortcuts={() => trackEvent('shortcuts_opened')}
@@ -300,33 +337,36 @@ function AppShell({
           </header>
         ) : null}
 
+        <AccessStateBanner />
         {error && <p className="error">{error}</p>}
 
-        <section className="shell-content-canvas">
-          <Suspense fallback={<div className="page-content">Carregando...</div>}>
-            <Routes>
-              <Route path="/" element={<Dashboard user={user} />} />
-              <Route path="/processos" element={<Processes user={user} />} />
-              <Route path="/processos/:id" element={<ProcessDetail user={user} />} />
-              <Route path="/prazos" element={<Deadlines user={user} />} />
-              <Route path="/agenda" element={<Agenda user={user} />} />
-              <Route path="/documentos" element={<Documents user={user} />} />
-              <Route path="/modelos-pecas" element={<PieceTemplates user={user} />} />
-              <Route path="/tarefas" element={<Tasks user={user} />} />
-              <Route path="/atendimentos" element={<Atendimentos user={user} />} />
-              <Route path="/clientes" element={<Clients user={user} />} />
-              <Route path="/crm-juridico" element={<CrmJuridico user={user} />} />
-              <Route path="/financeiro" element={<Financeiro user={user} />} />
-              <Route path="/publicacoes-intimacoes" element={<Publications user={user} />} />
-              <Route path="/triagem" element={<Triagem user={user} />} />
-              <Route
-                path="/usuarios"
-                element={user.role === 'ADM' ? <UsersList users={users} permissions={permissions} onRefresh={fetchUsers} /> : <Navigate to="/" replace />}
-              />
-              <Route path="*" element={<Navigate to="/" />} />
-            </Routes>
-          </Suspense>
-        </section>
+        <ReadOnlyModeSurface>
+          <section className="shell-content-canvas">
+            <Suspense fallback={<div className="page-content">Carregando...</div>}>
+              <Routes>
+                <Route path="/" element={<Dashboard user={user} />} />
+                <Route path="/processos" element={<Processes user={user} />} />
+                <Route path="/processos/:id" element={<ProcessDetail user={user} />} />
+                <Route path="/prazos" element={<Deadlines user={user} />} />
+                <Route path="/agenda" element={<Agenda user={user} />} />
+                <Route path="/documentos" element={<Documents user={user} />} />
+                <Route path="/modelos-pecas" element={<PieceTemplates user={user} />} />
+                <Route path="/tarefas" element={<Tasks user={user} />} />
+                <Route path="/atendimentos" element={<Atendimentos user={user} />} />
+                <Route path="/clientes" element={<Clients user={user} />} />
+                <Route path="/crm-juridico" element={<CrmJuridico user={user} />} />
+                <Route path="/financeiro" element={<Financeiro user={user} />} />
+                <Route path="/publicacoes-intimacoes" element={<Publications user={user} />} />
+                <Route path="/triagem" element={<Triagem user={user} />} />
+                <Route
+                  path="/usuarios"
+                  element={user.role === 'ADM' ? <UsersList users={users} permissions={permissions} onRefresh={fetchUsers} /> : <Navigate to="/" replace />}
+                />
+                <Route path="*" element={<Navigate to="/" />} />
+              </Routes>
+            </Suspense>
+          </section>
+        </ReadOnlyModeSurface>
       </main>
     </div>
   )
@@ -339,6 +379,12 @@ function App() {
   const [home, setHome] = useState<HomePayload | null>(null)
   const [users, setUsers] = useState<User[]>([])
   const [permissions, setPermissions] = useState<string[]>([])
+  const [sessionContextMeta, setSessionContextMeta] = useState<SessionContextMeta>({
+    companyId: 'unknown',
+    companyName: 'Unknown Company',
+    companyStatus: 'active',
+    userType: 'internal',
+  })
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const hasRestoredSessionRef = useRef(false)
@@ -397,6 +443,20 @@ function App() {
 
       if (homeRes.status === 200) {
         const meUser = meRes.data.user || {}
+        const meUserRecord = meUser as Record<string, unknown>
+        const companyRaw = (meRes.data as { company?: Record<string, unknown> }).company ?? {}
+        const companyStatus = asCompanyStatus(companyRaw.status ?? meUserRecord.companyStatus ?? meUserRecord.status)
+        const userType = asUserType(meUserRecord.userType)
+        const companyId = String(companyRaw.id ?? meUserRecord.companyId ?? 'unknown')
+        const companyName = String(companyRaw.name ?? meUserRecord.companyName ?? 'Unknown Company')
+
+        setSessionContextMeta({
+          companyId,
+          companyName,
+          companyStatus,
+          userType,
+        })
+
         const restoredUser: User = {
           id: Number(meUser.id ?? meUser.sub ?? 0),
           email: String(meUser.email || ''),
@@ -469,6 +529,14 @@ function App() {
     try {
       const res = await api.login(email, password)
       if (res.status === 200) {
+        const loginUser = res.data.user as Record<string, unknown>
+        setSessionContextMeta((current) => ({
+          ...current,
+          companyStatus: asCompanyStatus(loginUser.companyStatus ?? loginUser.status),
+          userType: asUserType(loginUser.userType),
+          companyId: String(loginUser.companyId ?? current.companyId),
+          companyName: String(loginUser.companyName ?? current.companyName),
+        }))
         setUser(res.data.user)
         trackAuthEvent('success', { role: res.data.user.role, email })
         await fetchHome(res.data.user)
@@ -574,23 +642,39 @@ function App() {
 
   return (
     <Router>
-      <AppShell
-        user={user}
-        users={users}
-        permissions={permissions}
-        error={error}
-        fetchHome={fetchHome}
-        fetchUsers={fetchUsers}
-        fetchPermissions={fetchPermissions}
-        onLogout={async () => {
-          trackEvent('logout', { role: user.role })
-          await api.logout()
-          setUser(null)
-          setHome(null)
-          setUsers([])
-          setPermissions([])
+      <CompanyContext.Provider
+        value={{
+          companyId: sessionContextMeta.companyId,
+          companyName: sessionContextMeta.companyName,
+          status: sessionContextMeta.companyStatus,
+          userType: sessionContextMeta.userType,
+          role: mapRoleToCompanyRole(user.role),
         }}
-      />
+      >
+        <AppShell
+          user={user}
+          users={users}
+          permissions={permissions}
+          error={error}
+          fetchHome={fetchHome}
+          fetchUsers={fetchUsers}
+          fetchPermissions={fetchPermissions}
+          onLogout={async () => {
+            trackEvent('logout', { role: user.role })
+            await api.logout()
+            setUser(null)
+            setHome(null)
+            setUsers([])
+            setPermissions([])
+            setSessionContextMeta({
+              companyId: 'unknown',
+              companyName: 'Unknown Company',
+              companyStatus: 'active',
+              userType: 'internal',
+            })
+          }}
+        />
+      </CompanyContext.Provider>
     </Router>
   )
 }

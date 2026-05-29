@@ -1,4 +1,4 @@
-﻿import express from 'express';
+import express from 'express';
 import cors from 'cors';
 import bcrypt from 'bcrypt';
 import { createHash, randomUUID } from 'crypto';
@@ -88,6 +88,9 @@ import { BiExportService } from './bi/exports/bi-export.service';
 import { InMemoryTimeEntryRepository } from './timesheet/core/time-entry.repository';
 import { registerTimesheetRoutes } from './timesheet/http/register-timesheet-routes';
 import { registerMobileRoutes } from './mobile/http/register-mobile-routes';
+import { registerPlatformActionsRoutes } from './platform-actions/register-platform-actions-routes';
+import { registerPlatformBillingRoutes } from './platform-billing/register-platform-billing-routes';
+import { registerPlatformConsoleRoutes } from './platform/register-platform-console-routes';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -135,6 +138,60 @@ const devMockDeadlines = [
   { id: 105, processId: 6, title: 'Concluir minuta de petição', dueOffsetDays: 1, status: 'critico', priority: 'alta', origin: 'interno', notes: 'Aguardar revisão do responsável.' },
   { id: 106, processId: 7, title: 'Atualizar cliente sobre andamento', dueOffsetDays: 9, status: 'concluido', priority: 'media', origin: 'cliente', notes: 'Contato realizado com sucesso.' },
 ] as const;
+
+// === Profile & Notifications (Topbar evolution) ===
+const devMockNotifications = [
+  {
+    id: 1,
+    recipientUserId: 1,
+    type: 'prazo_vencendo',
+    title: 'Prazo crítico em 2 dias',
+    body: 'Contestação — Proc. 0001234-56.2024.8.26.0100 vence em 13/06.',
+    href: '/prazos',
+    read: false,
+    createdAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+  },
+  {
+    id: 2,
+    recipientUserId: 1,
+    type: 'publicacao_nova',
+    title: 'Nova publicação TJ-SP',
+    body: 'Despacho publicado em Ação Civil Pública — lote de hoje.',
+    href: '/publicacoes-intimacoes',
+    read: false,
+    createdAt: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
+  },
+  {
+    id: 3,
+    recipientUserId: 1,
+    type: 'tarefa_pendente',
+    title: 'Tarefa sem movimentação',
+    body: 'Juntar petição inicial — aguardando há 3 dias.',
+    href: '/tarefas',
+    read: false,
+    createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: 4,
+    recipientUserId: 1,
+    type: 'atendimento_retorno',
+    title: 'Retorno agendado para hoje',
+    body: 'Cliente Atlas LTDA — retorno marcado para 14h.',
+    href: '/atendimentos',
+    read: true,
+    createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: 5,
+    recipientUserId: 1,
+    type: 'sistema',
+    title: 'Bem-vindo ao Lexora',
+    body: 'Configure seu perfil para uma experiência personalizada.',
+    href: '/',
+    read: true,
+    createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+  },
+];
 
 const devMockAgendaEvents = [
   { id: 201, processId: 1, title: 'Audiência de instrução', type: 'audiencia', status: 'confirmado', priority: 'alta', dayOffset: 0, startTime: '10:00', endTime: '11:00', locationOrChannel: 'Fórum Trabalhista', origin: 'processo', notes: 'Levar documentos complementares.' },
@@ -1297,6 +1354,7 @@ async function ingestCnjPublications(triggeredBy: string) {
             pipelineStatus: 'capturado',
             consolidationStatus: 'aguardando_consolidacao',
             status: 'atualizado',
+            metadataJson: { ...(capture.metadataJson ?? {}), triggeredBy, source: 'cnj', sourceUrl: capturePayload.sourceUrl ?? null },
             sourceJobId: sourceJob.id,
           },
         });
@@ -1313,7 +1371,7 @@ async function ingestCnjPublications(triggeredBy: string) {
             processNumber: capturePayload.processNumber,
             cpf: capturePayload.cpf ?? null,
             personName: capturePayload.personName ?? null,
-            metadataJson: { triggeredBy, source: 'cnj' },
+            metadataJson: { triggeredBy, source: 'cnj', sourceUrl: capturePayload.sourceUrl ?? null },
             fingerprint,
             correlationId,
             originStage: 'capturado',
@@ -1609,6 +1667,7 @@ async function ingestCpfPublications(triggeredBy: string) {
             pipelineStatus: 'capturado',
             consolidationStatus: 'aguardando_consolidacao',
             status: 'atualizado',
+            metadataJson: { ...(capture.metadataJson ?? {}), triggeredBy, source: 'cpf', sourceUrl: capturePayload.sourceUrl ?? null },
             sourceJobId: sourceJob.id,
           },
         });
@@ -1624,7 +1683,7 @@ async function ingestCpfPublications(triggeredBy: string) {
             tribunal: capturePayload.tribunal,
             cpf: capturePayload.cpf,
             personName: capturePayload.personName,
-            metadataJson: { triggeredBy, source: 'cpf' },
+            metadataJson: { triggeredBy, source: 'cpf', sourceUrl: capturePayload.sourceUrl ?? null },
             fingerprint,
             correlationId,
             originStage: 'capturado',
@@ -1903,6 +1962,7 @@ async function ingestDiarioPublications(triggeredBy: string) {
             pipelineStatus: 'capturado',
             consolidationStatus: 'aguardando_consolidacao',
             status: 'atualizado',
+            metadataJson: { ...(capture.metadataJson ?? {}), triggeredBy, source: 'diario_oficial', sourceUrl: capturePayload.sourceUrl ?? null },
             sourceJobId: sourceJob.id,
           },
         });
@@ -1919,7 +1979,7 @@ async function ingestDiarioPublications(triggeredBy: string) {
             processNumber: capturePayload.processNumber,
             cpf: capturePayload.cpf ?? null,
             personName: capturePayload.personName ?? null,
-            metadataJson: { triggeredBy, source: 'diario_oficial' },
+            metadataJson: { triggeredBy, source: 'diario_oficial', sourceUrl: capturePayload.sourceUrl ?? null },
             fingerprint,
             correlationId,
             originStage: 'capturado',
@@ -2176,6 +2236,7 @@ async function ingestOabPublications(triggeredBy: string) {
             pipelineStatus: 'capturado',
             consolidationStatus: 'aguardando_consolidacao',
             status: 'atualizado',
+            metadataJson: { ...(capture.metadataJson ?? {}), triggeredBy, source: 'oab', sourceUrl: capturePayload.sourceUrl ?? null },
             sourceJobId: sourceJob.id,
           },
         });
@@ -2193,7 +2254,7 @@ async function ingestOabPublications(triggeredBy: string) {
             oabNumber: capturePayload.oabNumber,
             personName: capturePayload.personName ?? null,
             lawyerName: capturePayload.lawyerName ?? null,
-            metadataJson: { triggeredBy, source: 'oab' },
+            metadataJson: { triggeredBy, source: 'oab', sourceUrl: capturePayload.sourceUrl ?? null },
             fingerprint,
             correlationId,
             originStage: 'capturado',
@@ -3833,6 +3894,125 @@ app.get('/me', (req, res) => {
   if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
   res.json({ user: { id: decoded.sub, email: decoded.email, role: decoded.role } });
 });
+
+// === Profile & Notifications (Topbar evolution) ===
+
+app.put('/me/avatar', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const { avatarUrl } = req.body;
+  if (!avatarUrl || typeof avatarUrl !== 'string') {
+    return res.status(400).json({ message: 'avatarUrl é obrigatório' });
+  }
+
+  try {
+    await prisma.user.update({ where: { id: decoded.sub }, data: { avatarUrl } });
+    return res.json({ success: true, avatarUrl });
+  } catch (error) {
+    if (!devMockEnabled || !isPrismaConnectionError(error)) {
+      return res.status(500).json({ message: error instanceof Error ? error.message : 'Erro ao atualizar avatar' });
+    }
+    // Dev mock: retorna sucesso sem persistir
+    return res.json({ success: true, avatarUrl });
+  }
+});
+
+app.put('/me/profile', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const { phone } = req.body;
+  const data: Record<string, unknown> = {};
+  if (typeof phone === 'string') data.phone = phone;
+
+  try {
+    await prisma.user.update({ where: { id: decoded.sub }, data });
+    return res.json({ success: true });
+  } catch (error) {
+    if (!devMockEnabled || !isPrismaConnectionError(error)) {
+      return res.status(500).json({ message: error instanceof Error ? error.message : 'Erro ao atualizar perfil' });
+    }
+    // Dev mock: retorna sucesso sem persistir
+    return res.json({ success: true });
+  }
+});
+
+app.post('/me/change-password', async (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ message: 'currentPassword e newPassword são obrigatórios' });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({ where: { id: decoded.sub } });
+    if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
+
+    const passwordMatches = await bcrypt.compare(currentPassword, user.password);
+    if (!passwordMatches) return res.status(400).json({ error: 'Senha atual incorreta' });
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({ where: { id: decoded.sub }, data: { password: hashedPassword } });
+    return res.json({ success: true });
+  } catch (error) {
+    if (!devMockEnabled || !isPrismaConnectionError(error)) {
+      return res.status(500).json({ message: error instanceof Error ? error.message : 'Erro ao alterar senha' });
+    }
+    // Dev mock: verifica senha hardcoded
+    if (currentPassword !== '123456') {
+      return res.status(400).json({ error: 'Senha atual incorreta' });
+    }
+    return res.json({ success: true });
+  }
+});
+
+app.get('/notifications', (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  try {
+    const userNotifications = devMockNotifications
+      .filter((n) => n.recipientUserId === decoded.sub)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 20);
+    return res.json({ notifications: userNotifications });
+  } catch (error) {
+    return res.status(500).json({ message: error instanceof Error ? error.message : 'Erro ao carregar notificações' });
+  }
+});
+
+app.post('/notifications/:id/read', (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const notifId = Number(req.params.id);
+  const notif = devMockNotifications.find((n) => n.id === notifId && n.recipientUserId === decoded.sub);
+  if (notif) notif.read = true;
+  return res.json({ success: true });
+});
+
+app.post('/notifications/read-all', (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  devMockNotifications
+    .filter((n) => n.recipientUserId === decoded.sub)
+    .forEach((n) => { n.read = true; });
+  return res.json({ success: true });
+});
+
+app.get('/notifications/count', (req, res) => {
+  const decoded = getUserFromReq(req);
+  if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
+
+  const count = devMockNotifications.filter((n) => n.recipientUserId === decoded.sub && !n.read).length;
+  return res.json({ count });
+});
+
+// === Fim Profile & Notifications ===
 
 app.get('/users', async (req, res) => {
   const decoded = getUserFromReq(req);
@@ -8103,6 +8283,24 @@ registerFinanceRoutes({
   prisma,
   getUserFromReq,
   devMockEnabled,
+});
+
+registerPlatformBillingRoutes({
+  app,
+  prisma,
+  getUserFromReq,
+});
+
+registerPlatformActionsRoutes({
+  app,
+  prisma,
+  getUserFromReq,
+});
+
+registerPlatformConsoleRoutes({
+  app,
+  prisma,
+  getUserFromReq,
 });
 
 registerEpicIjRoutes({

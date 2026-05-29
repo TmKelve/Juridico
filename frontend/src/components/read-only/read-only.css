@@ -1,0 +1,18 @@
+.read-only-surface.is-read-only {
+  position: relative;
+}
+
+.read-only-surface.is-read-only::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 16px;
+  border: 1px dashed rgba(203, 213, 225, 0.8);
+}
+
+.read-only-surface__hint {
+  margin: 0 0 10px;
+  font-size: 0.82rem;
+  color: #475569;
+}

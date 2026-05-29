@@ -1,0 +1,33 @@
+{
+  "phase": "fase-2-commercial-governance",
+  "operations": {
+    "plan.create": {"in": ["code", "name", "priceCents"], "out": ["id", "code", "name"], "errors": ["PLAN_ALREADY_EXISTS"]},
+    "plan.update": {"in": ["planId"], "out": ["id"], "errors": ["PLAN_NOT_FOUND"]},
+    "subscription.create": {"in": ["companyId", "planId"], "out": ["id", "status"], "errors": ["SUBSCRIPTION_CREATE_FAILED"]},
+    "subscription.activate": {"in": ["subscriptionId"], "out": ["subscription", "companyStatus"], "errors": ["SUBSCRIPTION_INVALID_TRANSITION"]},
+    "subscription.transitionStatus": {
+      "in": ["subscriptionId", "toStatus"],
+      "out": ["subscription", "transition", "companyStatus", "idempotentReplay"],
+      "errors": ["SUBSCRIPTION_NOT_FOUND", "SUBSCRIPTION_INVALID_TRANSITION"],
+      "idempotency": "idempotencyKey unique per subscriptionId"
+    },
+    "billing.invoice.issue": {"in": ["companyId", "subscriptionId", "amountCents", "currency"], "out": ["id"], "errors": ["INVOICE_ISSUE_FAILED"]},
+    "billing.paymentAttempt.record": {"in": ["invoiceId"], "out": ["id", "status"], "errors": ["PAYMENT_ATTEMPT_FAILED"]},
+    "company.access.evaluateBySubscription": {"in": ["accessContext", "companyStatus", "permissionKey"], "out": ["allowed", "reason"], "errors": ["COMPANY_STATUS_BLOCKED"]},
+    "company.setReadOnly": {"in": ["companyId", "reason"], "out": ["companyId", "status"], "errors": ["REASON_REQUIRED"]},
+    "company.suspend": {"in": ["companyId", "reason"], "out": ["companyId", "status"], "errors": ["REASON_REQUIRED"]},
+    "company.reactivate": {"in": ["companyId", "reason"], "out": ["companyId", "status"], "errors": ["REASON_REQUIRED"]},
+    "audit.event": {"in": ["companyId", "action", "reason"], "out": ["eventId"], "errors": ["AUDIT_WRITE_FAILED"]}
+  },
+  "subscriptionTransitionRules": {
+    "draft": ["checkout_pending", "cancelled"],
+    "checkout_pending": ["active", "cancelled"],
+    "active": ["past_due", "grace_period", "read_only", "suspended", "cancelled"],
+    "past_due": ["grace_period", "active", "read_only", "suspended", "cancelled"],
+    "grace_period": ["active", "read_only", "suspended", "cancelled"],
+    "read_only": ["active", "suspended", "cancelled"],
+    "suspended": ["active", "cancelled"],
+    "cancelled": []
+  }
+}
+

@@ -83,6 +83,46 @@
   color: #0f172a;
 }
 
+.origin-panel__decision {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.origin-panel__decision > div {
+  padding: 0.9rem;
+  border-radius: 0.85rem;
+  border: 1px solid #dbe3ef;
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+}
+
+.origin-panel__decision span {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+}
+
+.origin-panel__decision strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: #0f172a;
+  font-size: 0.96rem;
+}
+
+.origin-panel__decision p {
+  margin: 0;
+  color: #475569;
+}
+
+.origin-panel__cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
 .origin-panel__loading,
 .origin-muted {
   color: #64748b;

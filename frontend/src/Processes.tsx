@@ -1,4 +1,4 @@
-import React, { useEffect, useEffectEvent, useMemo, useState } from 'react';
+import React, { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -30,7 +30,7 @@ import {
   UsersRound,
   X,
 } from 'lucide-react';
-import { api } from './api';
+import { api, type ApiClient } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import './Processes.css';
 import './Dashboard.css';
@@ -289,8 +289,12 @@ export function Processes({ user }: ProcessesProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedProcess, setSelectedProcess] = useState<EnrichedProcess | null>(null);
   const [menuOpenId, setMenuOpenId] = useState<number | null>(null);
+  const attachInputRef = useRef<HTMLInputElement | null>(null);
+  const [attachLoading, setAttachLoading] = useState(false);
+  const [checklistOverrides, setChecklistOverrides] = useState<Record<number, Partial<Record<'doc' | 'pub' | 'prazo' | 'andamento', boolean>>>>({});
   const [clientSuggestionIndex, setClientSuggestionIndex] = useState(-1);
   const [isFiltersCompact, setIsFiltersCompact] = useState(true);
+  const [clients, setClients] = useState<ApiClient[]>([]);
 
   const isAdvogado = user.role === 'ADV';
   const itemsPerPage = 10;
@@ -300,6 +304,15 @@ export function Processes({ user }: ProcessesProps) {
     trackPageView('processes', { role: user.role, view: 'meus_processos' });
     loadProcessesOnMount();
   }, [user.role]);
+
+  useEffect(() => {
+    if (!showForm) return;
+    api.getClients().then((res) => {
+      if (res.status === 200 && Array.isArray(res.data) && res.data.length > 0) {
+        setClients(res.data);
+      }
+    });
+  }, [showForm]);
 
   useEffect(() => {
     const storedFilters = parseStoredFilters(localStorage.getItem(SAVED_FILTERS_KEY))
@@ -577,32 +590,25 @@ export function Processes({ user }: ProcessesProps) {
     return processes.filter((process) => process.ownerId === user.id);
   }, [isAdvogado, processes, user.id]);
 
-  const knownClients = useMemo(() => {
+  const clientNamePool = useMemo(() => {
+    if (clients.length > 0) return clients.map((c) => c.name);
     return Array.from(
-      new Set(
-        processes
-          .map((process) => process.client.trim())
-          .filter((client) => client.length > 0)
-      )
+      new Set(processes.map((p) => p.client.trim()).filter(Boolean))
     ).sort((a, b) => a.localeCompare(b, 'pt-BR'));
-  }, [processes]);
+  }, [clients, processes]);
 
   const clientExists = useMemo(() => {
-    const normalizedClient = formData.client.trim().toLowerCase();
-    if (!normalizedClient) return false;
-    return knownClients.some((client) => client.toLowerCase() === normalizedClient);
-  }, [formData.client, knownClients]);
+    const q = formData.client.trim().toLowerCase();
+    if (!q) return false;
+    return clientNamePool.some((name) => name.toLowerCase() === q);
+  }, [formData.client, clientNamePool]);
 
   const clientSuggestions = useMemo(() => {
-    const query = formData.client.trim().toLowerCase();
-    if (!query) return [];
+    const q = formData.client.trim().toLowerCase();
+    if (!q) return [];
+    return clientNamePool.filter((name) => name.toLowerCase().includes(q)).slice(0, 8);
+  }, [formData.client, clientNamePool]);
 
-    return knownClients
-      .filter((client) => client.toLowerCase().includes(query))
-      .slice(0, 6);
-  }, [formData.client, knownClients]);
-
-  const showClientShortcut = formData.client.trim().length >= 3 && !clientExists;
   const isClientSuggestionOpen = showForm && clientSuggestions.length > 0 && !clientExists;
   const processLookupReady = entryMode === 'novo' || editingId !== null || (!!formData.title && !!formData.client && !lookupInfo?.alreadyRegistered);
 
@@ -772,15 +778,128 @@ export function Processes({ user }: ProcessesProps) {
     navigate(`/processos/${processId}`);
   }
 
+  async function handleSolicitarDocumento(process: EnrichedProcess) {
+    setAttachLoading(true);
+    try {
+      // 1. Find client phone
+      const clientsRes = await api.getClients();
+      const clientData = clientsRes.data?.find(
+        (c) => c.name.trim().toLowerCase() === process.client.trim().toLowerCase()
+      );
+      const phone = clientData?.phone?.replace(/\D/g, '');
+
+      // 2. Fetch pending documents for this process
+      const docsRes = await api.getDocuments();
+      const pendingDocs = (docsRes.data ?? []).filter(
+        (d) => d.processId === process.id && (d.status === 'pendente' || d.status === 'aguardando_validacao')
+      );
+
+      // 3. Compose message
+      const docList = pendingDocs.length > 0
+        ? pendingDocs.map((d) => `• ${d.name}`).join('\n')
+        : '• Documentos conforme combinado';
+
+      const message = [
+        `Olá, ${process.client}! 👋`,
+        '',
+        `Entramos em contato sobre o seu processo:`,
+        `📁 *${process.title}*${process.processNumber ? ` (Nº ${process.processNumber})` : ''}`,
+        `⚖️ Área: ${process.area}  |  Fase: ${process.phase}`,
+        '',
+        `Para darmos continuidade, precisamos dos seguintes documentos:`,
+        docList,
+        '',
+        `Por favor, envie assim que possível para evitar atrasos no andamento do processo.`,
+        '',
+        `Qualquer dúvida, estamos à disposição. Obrigado! 🙏`,
+      ].join('\n');
+
+      if (!phone) {
+        // No phone — copy message to clipboard and warn
+        await navigator.clipboard.writeText(message).catch(() => {});
+        setError(`Telefone não cadastrado para "${process.client}". Mensagem copiada para a área de transferência.`);
+        return;
+      }
+
+      const url = `https://wa.me/55${phone}?text=${encodeURIComponent(message)}`;
+      window.open(url, '_blank', 'noopener');
+      setSuccess(`WhatsApp aberto para ${process.client}.`);
+      trackEvent('whatsapp_document_request', { processId: process.id });
+    } catch (err) {
+      setError('Erro ao preparar a solicitação. Tente novamente.');
+      captureException(err);
+    } finally {
+      setAttachLoading(false);
+    }
+  }
+
   function handleQuickDrawerPrimary(process: EnrichedProcess) {
     const action = getPrimaryDrawerAction(process).label;
     if (action === 'Abrir detalhe completo' || action === 'Ver prazo') {
       openProcessDetail(process.id);
       return;
     }
+    if (action === 'Solicitar documento') {
+      handleSolicitarDocumento(process);
+      return;
+    }
 
     setSuccess(`${action} registrado como proximo passo.`);
     setSelectedProcess(null);
+  }
+
+  async function handleAttachFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !selectedProcess) return;
+
+    setAttachLoading(true);
+    try {
+      const contentBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = typeof reader.result === 'string' ? reader.result : '';
+          resolve(result.includes(',') ? result.split(',')[1] ?? '' : result);
+        };
+        reader.onerror = () => reject(reader.error ?? new Error('Falha ao ler arquivo.'));
+        reader.readAsDataURL(file);
+      });
+
+      const res = await api.createDocument({
+        title: file.name,
+        processId: selectedProcess.id,
+        category: 'Checklist',
+        status: 'pendente',
+        origin: 'upload',
+        notes: `Anexado via detalhe rápido em ${new Date().toLocaleString('pt-BR')}.`,
+        mimeType: (file.type as any) || 'application/octet-stream',
+        metadata: {
+          fileName: file.name,
+          documentType: 'procuracao',
+          proceduralType: 'default',
+          tags: ['upload-rapido'],
+        },
+        file: {
+          fileName: file.name,
+          contentBase64,
+          mimeType: file.type || 'application/octet-stream',
+          sizeInBytes: file.size,
+        },
+      });
+
+      if (res.status !== 201 || !res.data) {
+        setError(res.error || 'Não foi possível concluir o upload.');
+        return;
+      }
+
+      setSuccess(`Documento "${file.name}" anexado ao processo #${selectedProcess.id}.`);
+      trackEvent('documents_uploaded', { processId: selectedProcess.id, source: 'quick_drawer' });
+    } catch (err) {
+      setError('Erro ao enviar o documento. Tente novamente.');
+      captureException(err);
+    } finally {
+      setAttachLoading(false);
+    }
   }
 
   function renderStatusBadge(status: KanbanStage) {
@@ -923,7 +1042,6 @@ export function Processes({ user }: ProcessesProps) {
                 <div>
                   <p className="process-form-eyebrow">Cadastro operacional</p>
                   <h3 id="process-form-title">{editingId ? 'Editar processo' : 'Novo processo'}</h3>
-                  <p>{editingId ? 'Atualize o cadastro e o contexto operacional do processo.' : 'Escolha entre processo novo ou processo ja em andamento antes de concluir o cadastro.'}</p>
                 </div>
               </div>
               <button type="button" className="icon-action" onClick={() => { setShowForm(false); resetFormState('novo'); }} aria-label="Fechar cadastro de processo">
@@ -947,38 +1065,24 @@ export function Processes({ user }: ProcessesProps) {
                     aria-pressed={entryMode === 'andamento'}
                   >
                     <Search size={14} aria-hidden="true" />
-                    Ja em andamento
+                    Já em andamento
                   </button>
                 </div>
               )}
             </div>
             <form onSubmit={handleSubmit} className="process-form-layout">
-              <section className="process-form-context" aria-label="Resumo do modo de cadastro">
-                <div className="process-form-context-item">
-                  <span>{editingId ? 'Modo' : 'Entrada'}</span>
-                  <strong>{editingId ? 'Edicao de cadastro' : entryMode === 'novo' ? 'Processo novo' : 'Processo em andamento'}</strong>
-                </div>
-                <div className="process-form-context-item">
-                  <span>Cliente</span>
-                  <strong>{formData.client || 'Definir no cadastro'}</strong>
-                </div>
-                <div className="process-form-context-item">
-                  <span>Status inicial</span>
-                  <strong>{formData.status || 'Ativo'}</strong>
-                </div>
-              </section>
 
               {entryMode === 'andamento' && !editingId && (
-                <section className="process-form-section process-lookup-panel" aria-label="Busca por numero do processo">
-                  <div className="process-form-section-head">
+                <section className="process-lookup-panel" aria-label="Busca por número do processo">
+                  <div className="process-lookup-panel-head">
                     <div>
                       <p className="process-form-section-eyebrow">Consulta inicial</p>
-                      <h4>Buscar processo existente</h4>
+                      <h4>Processo já em andamento</h4>
                     </div>
                     <span className="process-form-section-badge">Preenchimento assistido</span>
                   </div>
                   <label htmlFor="process-number">
-                    Numero do processo
+                    Número do processo
                     <div className="filter-input-wrap">
                       {lookupLoading ? <Loader2 size={15} className="spin" aria-hidden="true" /> : <Search size={15} aria-hidden="true" />}
                       <input
@@ -986,15 +1090,15 @@ export function Processes({ user }: ProcessesProps) {
                         type="text"
                         value={formData.processNumber}
                         onChange={(event) => setFormData((prev) => ({ ...prev, processNumber: event.target.value }))}
-                        placeholder="Digite o numero do processo"
+                        placeholder="Digite o número do processo"
                       />
                     </div>
                   </label>
-                  <p className="lookup-helper">Ao digitar o numero, a tela consulta os dados disponiveis para pre-preencher o processo.</p>
+                  <p className="lookup-helper">Ao digitar o número, os dados disponíveis são pré-preenchidos automaticamente.</p>
                   {lookupError && <p className="lookup-feedback lookup-feedback-error">{lookupError}</p>}
                   {lookupInfo?.alreadyRegistered && (
                     <div className="lookup-feedback lookup-feedback-warning">
-                      <span>Esse processo ja esta cadastrado na carteira.</span>
+                      <span>Esse processo já está cadastrado na carteira.</span>
                       {lookupInfo.existingId ? (
                         <button type="button" className="btn-ghost" onClick={() => openProcessDetail(lookupInfo.existingId!)}>Abrir processo existente</button>
                       ) : null}
@@ -1006,33 +1110,21 @@ export function Processes({ user }: ProcessesProps) {
                 </section>
               )}
 
-              <section className="process-form-section" aria-label="Dados do processo">
-                <div className="process-form-section-head">
-                  <div>
-                    <p className="process-form-section-eyebrow">Cadastro principal</p>
-                    <h4>Dados do processo</h4>
-                  </div>
-                  {!processLookupReady && entryMode === 'andamento' && !editingId ? (
-                    <span className="process-form-section-badge is-muted">Preencha o numero para liberar os campos</span>
-                  ) : (
-                    <span className="process-form-section-badge">Campos prontos para edicao</span>
-                  )}
-                </div>
-                <div className="form-grid">
+              {(entryMode !== 'andamento' || editingId || processLookupReady) && (
+                <div className="process-form-fields">
                   <label htmlFor="process-title">
-                    Titulo
+                    Título
                     <input
                       id="process-title"
                       type="text"
                       value={formData.title}
                       onChange={(event) => setFormData((prev) => ({ ...prev, title: event.target.value }))}
                       placeholder="Ex: Revisional de contrato"
-                      disabled={entryMode === 'andamento' && !editingId && !processLookupReady}
                     />
                   </label>
                   {editingId && (
                     <label htmlFor="process-number-edit">
-                      Numero do processo
+                      Número do processo
                       <input
                         id="process-number-edit"
                         type="text"
@@ -1044,126 +1136,120 @@ export function Processes({ user }: ProcessesProps) {
                   )}
                   <label htmlFor="process-client">
                     Cliente
-                    <div className="client-search-field">
-                      <input
-                        id="process-client"
-                        type="search"
-                        value={formData.client}
-                        onChange={(event) => setFormData((prev) => ({ ...prev, client: event.target.value }))}
-                        onKeyDown={(event) => {
-                          if (!isClientSuggestionOpen) return;
-
-                          if (event.key === 'ArrowDown') {
-                            event.preventDefault();
-                            setClientSuggestionIndex((prev) => (
-                              prev < clientSuggestions.length - 1 ? prev + 1 : 0
-                            ));
-                            return;
-                          }
-
-                          if (event.key === 'ArrowUp') {
-                            event.preventDefault();
-                            setClientSuggestionIndex((prev) => (
-                              prev > 0 ? prev - 1 : clientSuggestions.length - 1
-                            ));
-                            return;
-                          }
-
-                          if (event.key === 'Enter' && clientSuggestionIndex >= 0) {
-                            event.preventDefault();
-                            const selectedClient = clientSuggestions[clientSuggestionIndex];
-                            if (!selectedClient) return;
-                            setFormData((prev) => ({ ...prev, client: selectedClient }));
-                            setClientSuggestionIndex(-1);
-                            return;
-                          }
-
-                          if (event.key === 'Escape') {
-                            setClientSuggestionIndex(-1);
-                          }
-                        }}
-                        placeholder="Busque cliente por nome"
-                        aria-expanded={isClientSuggestionOpen}
-                        aria-controls="process-client-suggestions"
-                        disabled={entryMode === 'andamento' && !editingId && !processLookupReady}
-                      />
-                      {isClientSuggestionOpen && (
-                        <div
-                          id="process-client-suggestions"
-                          className="client-suggestion-list"
-                          role="listbox"
-                          aria-label="Sugestoes de clientes"
-                        >
-                          {clientSuggestions.map((client, index) => (
-                            <button
-                              key={client}
-                              type="button"
-                              role="option"
-                              aria-selected={clientSuggestionIndex === index}
-                              className={`client-suggestion-item${clientSuggestionIndex === index ? ' is-active' : ''}`}
-                              onMouseDown={(event) => event.preventDefault()}
-                              onClick={() => {
-                                setFormData((prev) => ({ ...prev, client }));
-                                setClientSuggestionIndex(-1);
-                              }}
-                            >
-                              {client}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <small className="client-field-helper">
-                      Vincule o processo a um cliente ja conhecido ou siga para Clientes se precisar cadastrar um novo.
-                    </small>
-                    {showClientShortcut && (
+                    <div className="client-field-row">
+                      <div className="client-search-field">
+                        <input
+                          id="process-client"
+                          type="search"
+                          value={formData.client}
+                          onChange={(event) => setFormData((prev) => ({ ...prev, client: event.target.value }))}
+                          onKeyDown={(event) => {
+                            if (!isClientSuggestionOpen) return;
+                            if (event.key === 'ArrowDown') {
+                              event.preventDefault();
+                              setClientSuggestionIndex((prev) => (prev < clientSuggestions.length - 1 ? prev + 1 : 0));
+                              return;
+                            }
+                            if (event.key === 'ArrowUp') {
+                              event.preventDefault();
+                              setClientSuggestionIndex((prev) => (prev > 0 ? prev - 1 : clientSuggestions.length - 1));
+                              return;
+                            }
+                            if (event.key === 'Enter' && clientSuggestionIndex >= 0) {
+                              event.preventDefault();
+                              const selectedClient = clientSuggestions[clientSuggestionIndex];
+                              if (!selectedClient) return;
+                              setFormData((prev) => ({ ...prev, client: selectedClient }));
+                              setClientSuggestionIndex(-1);
+                              return;
+                            }
+                            if (event.key === 'Escape') {
+                              setClientSuggestionIndex(-1);
+                            }
+                          }}
+                          placeholder="Busque cliente por nome"
+                          aria-expanded={isClientSuggestionOpen}
+                          aria-controls="process-client-suggestions"
+                        />
+                        {isClientSuggestionOpen && (
+                          <div
+                            id="process-client-suggestions"
+                            className="client-suggestion-list"
+                            role="listbox"
+                            aria-label="Sugestões de clientes"
+                          >
+                            {clientSuggestions.map((client, index) => (
+                              <button
+                                key={client}
+                                type="button"
+                                role="option"
+                                aria-selected={clientSuggestionIndex === index}
+                                className={`client-suggestion-item${clientSuggestionIndex === index ? ' is-active' : ''}`}
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => {
+                                  setFormData((prev) => ({ ...prev, client }));
+                                  setClientSuggestionIndex(-1);
+                                }}
+                              >
+                                {client}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                       <button
                         type="button"
-                        className="btn-ghost client-shortcut-btn"
+                        className="btn-new-client"
                         onClick={() => {
                           trackEvent('meus_processos_go_to_client_register');
                           navigate('/clientes');
                         }}
+                        title="Ir para cadastro de clientes"
                       >
-                        Cliente nao encontrado. Cadastrar em Clientes
+                        <UserRound size={14} aria-hidden="true" />
+                        Novo cliente
                       </button>
-                    )}
+                    </div>
+                    <small className="client-field-helper">
+                      Vincule a um cliente já cadastrado ou clique em <strong>Novo cliente</strong> para criar um.
+                    </small>
                   </label>
-                  <label htmlFor="process-phase">
-                    Fase
-                    <select
-                      id="process-phase"
-                      value={formData.phase}
-                      onChange={(event) => setFormData((prev) => ({ ...prev, phase: event.target.value }))}
-                      disabled={entryMode === 'andamento' && !editingId && !processLookupReady}
-                    >
-                      {PHASES.map((phase) => (
-                        <option key={phase} value={phase}>{phase}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label htmlFor="process-status">
-                    Status
-                    <select
-                      id="process-status"
-                      value={formData.status}
-                      onChange={(event) => setFormData((prev) => ({ ...prev, status: event.target.value }))}
-                      disabled={entryMode === 'andamento' && !editingId && !processLookupReady}
-                    >
-                      <option value="ativo">Ativo</option>
-                      <option value="pausado">Pausado</option>
-                      <option value="concluido">Concluido</option>
-                    </select>
-                  </label>
+                  <div className="form-row-2">
+                    <label htmlFor="process-phase">
+                      Fase
+                      <select
+                        id="process-phase"
+                        value={formData.phase}
+                        onChange={(event) => setFormData((prev) => ({ ...prev, phase: event.target.value }))}
+                      >
+                        {PHASES.map((phase) => (
+                          <option key={phase} value={phase}>{phase}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label htmlFor="process-status">
+                      Status
+                      <select
+                        id="process-status"
+                        value={formData.status}
+                        onChange={(event) => setFormData((prev) => ({ ...prev, status: event.target.value }))}
+                      >
+                        <option value="ativo">Ativo</option>
+                        <option value="pausado">Pausado</option>
+                        <option value="concluido">Concluído</option>
+                      </select>
+                    </label>
+                  </div>
                 </div>
-              </section>
+              )}
 
               <div className="form-actions">
-                <p className="form-actions-note">O processo entra na carteira com os dados salvos e fica disponivel para detalhe, prazos e andamentos.</p>
-                <button type="submit" className="btn-primary">
-                  <FilePlus2 size={16} aria-hidden="true" />
-                  {editingId ? 'Atualizar processo' : 'Criar processo'}
-                </button>
+                {(entryMode !== 'andamento' || editingId || processLookupReady) && (
+                  <button type="submit" className="btn-primary">
+                    <FilePlus2 size={16} aria-hidden="true" />
+                    {editingId ? 'Atualizar processo' : 'Criar processo'}
+                  </button>
+                )}
                 <button type="button" className="btn-secondary" onClick={() => { setShowForm(false); resetFormState('novo'); }}>
                   Cancelar
                 </button>
@@ -1628,21 +1714,81 @@ export function Processes({ user }: ProcessesProps) {
                 <p>{selectedProcess.nextStep}</p>
               </div>
 
-              <div className="drawer-checklist">
-                <h4><ClipboardCheck size={16} aria-hidden="true" />Checklist operacional</h4>
-                <label><span className="checklist-handle" aria-hidden="true">::</span><input type="checkbox" readOnly checked={selectedProcess.pendingDocuments === 0} /> Solicitar documento</label>
-                <label><span className="checklist-handle" aria-hidden="true">::</span><input type="checkbox" readOnly checked={!selectedProcess.hasNewPublication} /> Revisar publicações</label>
-                <label><span className="checklist-handle" aria-hidden="true">::</span><input type="checkbox" readOnly checked={dayDiff(selectedProcess.nextDeadlineAt, new Date()) > 1} /> Conferir prazo crítico</label>
-                <label><span className="checklist-handle" aria-hidden="true">::</span><input type="checkbox" readOnly checked={Math.abs(dayDiff(selectedProcess.lastMovementAt, new Date())) < 15} /> Registrar andamento</label>
-              </div>
+              {(() => {
+                const pid = selectedProcess.id;
+                const ov = checklistOverrides[pid] ?? {};
+                const checks = {
+                  doc:       ov.doc       ?? selectedProcess.pendingDocuments === 0,
+                  pub:       ov.pub       ?? !selectedProcess.hasNewPublication,
+                  prazo:     ov.prazo     ?? dayDiff(selectedProcess.nextDeadlineAt, new Date()) > 1,
+                  andamento: ov.andamento ?? Math.abs(dayDiff(selectedProcess.lastMovementAt, new Date())) < 15,
+                };
+                const toggle = (key: 'doc' | 'pub' | 'prazo' | 'andamento') =>
+                  setChecklistOverrides(prev => ({
+                    ...prev,
+                    [pid]: { ...(prev[pid] ?? {}), [key]: !checks[key] },
+                  }));
+                const done = Object.values(checks).filter(Boolean).length;
+                return (
+                  <div className="drawer-checklist">
+                    <h4>
+                      <ClipboardCheck size={16} aria-hidden="true" />
+                      Checklist operacional
+                      <span className="drawer-checklist-count">{done}/4</span>
+                    </h4>
+                    <label className={checks.doc ? 'drawer-checklist-done' : ''}>
+                      <span className="checklist-handle" aria-hidden="true">::</span>
+                      <input type="checkbox" checked={checks.doc} onChange={() => toggle('doc')} />
+                      Solicitar documento
+                    </label>
+                    <label className={checks.pub ? 'drawer-checklist-done' : ''}>
+                      <span className="checklist-handle" aria-hidden="true">::</span>
+                      <input type="checkbox" checked={checks.pub} onChange={() => toggle('pub')} />
+                      Revisar publicações
+                    </label>
+                    <label className={checks.prazo ? 'drawer-checklist-done' : ''}>
+                      <span className="checklist-handle" aria-hidden="true">::</span>
+                      <input type="checkbox" checked={checks.prazo} onChange={() => toggle('prazo')} />
+                      Conferir prazo crítico
+                    </label>
+                    <label className={checks.andamento ? 'drawer-checklist-done' : ''}>
+                      <span className="checklist-handle" aria-hidden="true">::</span>
+                      <input type="checkbox" checked={checks.andamento} onChange={() => toggle('andamento')} />
+                      Registrar andamento
+                    </label>
+                  </div>
+                );
+              })()}
 
               <div className="drawer-actions">
-                <button type="button" className="btn-primary drawer-action-primary" onClick={() => handleQuickDrawerPrimary(selectedProcess)}>
-                  <Send size={16} aria-hidden="true" />
-                  {selectedProcessPrimaryAction?.label ?? 'Solicitar documento'}
+                <button
+                  type="button"
+                  className="btn-primary drawer-action-primary"
+                  disabled={attachLoading}
+                  onClick={() => handleQuickDrawerPrimary(selectedProcess)}
+                >
+                  {attachLoading
+                    ? <Loader2 size={16} className="spin" aria-hidden="true" />
+                    : <Send size={16} aria-hidden="true" />}
+                  {attachLoading ? 'Aguarde…' : (selectedProcessPrimaryAction?.label ?? 'Solicitar documento')}
                 </button>
                 <div className="drawer-action-grid">
-                  <button type="button" className="btn-secondary"><Paperclip size={15} aria-hidden="true" />Anexar documento</button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    disabled={attachLoading}
+                    onClick={() => attachInputRef.current?.click()}
+                  >
+                    {attachLoading ? <Loader2 size={15} className="spin" aria-hidden="true" /> : <Paperclip size={15} aria-hidden="true" />}
+                    {attachLoading ? 'Enviando…' : 'Anexar documento'}
+                  </button>
+                  <input
+                    ref={attachInputRef}
+                    type="file"
+                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xls,.xlsx"
+                    style={{ display: 'none' }}
+                    onChange={handleAttachFile}
+                  />
                   <button type="button" className="btn-secondary"><UsersRound size={15} aria-hidden="true" />Registrar atendimento</button>
                 </div>
                 <button type="button" className="btn-secondary drawer-action-full" onClick={() => openProcessDetail(selectedProcess.id)}>

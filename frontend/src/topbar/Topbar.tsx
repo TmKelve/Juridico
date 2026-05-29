@@ -2,12 +2,16 @@ import { Menu } from 'lucide-react'
 import { TopbarSearch } from './TopbarSearch'
 import { TopbarActions } from './TopbarActions'
 import { TopbarUserMenu } from './TopbarUserMenu'
+import './topbar.css'
 
 interface TopbarProps {
   userName: string
+  userEmail: string
+  userRole: string
   avatarUrl?: string
   notificationCount?: number
   onMenuClick: () => void
+  onLogout?: () => void
   onNotifications?: () => void
   onHelp?: () => void
   onShortcuts?: () => void
@@ -15,9 +19,12 @@ interface TopbarProps {
 
 export function Topbar({
   userName,
+  userEmail,
+  userRole,
   avatarUrl,
   notificationCount = 0,
   onMenuClick,
+  onLogout,
   onNotifications,
   onHelp,
   onShortcuts,
@@ -47,7 +54,13 @@ export function Topbar({
 
         <span className="hidden h-6 w-px bg-slate-200/80 md:block" aria-hidden="true" />
 
-        <TopbarUserMenu name={userName} avatarUrl={avatarUrl} />
+        <TopbarUserMenu
+          name={userName}
+          email={userEmail}
+          role={userRole}
+          avatarUrl={avatarUrl}
+          onLogout={onLogout}
+        />
       </div>
     </header>
   )

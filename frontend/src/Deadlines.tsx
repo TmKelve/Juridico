@@ -1,6 +1,7 @@
 import { useEffect, useEffectEvent, useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  BookOpen,
   CalendarDays,
   CheckCircle2,
   ChevronLeft,
@@ -45,6 +46,9 @@ import type {
   DeadlineViewMode,
 } from './components/deadlines/types';
 import { captureException, trackEvent, trackPageView } from './monitoring';
+import './Dashboard.css';
+import './Processes.css';
+import './Publications.css';
 import './Deadlines.css';
 
 interface DeadlinesProps {
@@ -585,89 +589,110 @@ export function Deadlines({ user }: DeadlinesProps) {
 
   return (
     <section className="deadlines-page" aria-label="Prazos">
-      <header className="deadlines-header-card">
-        <div className="deadlines-header-main">
-          <p className="deadlines-eyebrow">Controle operacional</p>
-          <h3>Priorize por risco e vencimento, conclua com auditoria e leve o prazo certo para a agenda.</h3>
-          <p className="deadlines-subtitle">
-            A tela organiza fila imediata, ações em massa auditáveis e contexto de publicação com suporte persistido no backend.
-          </p>
-          <div className="deadlines-header-summary" aria-label="Pulso dos prazos">
-            <div className="deadlines-header-summary-card" data-tone="neutral">
-              <span>Em exibicao</span>
-              <strong>{sortedDeadlines.length}</strong>
-            </div>
-            <div className="deadlines-header-summary-card" data-tone={visibleCriticalCount > 0 ? 'warning' : 'neutral'}>
-              <span>Janela critica</span>
-              <strong>{visibleCriticalCount}</strong>
-            </div>
-            <div className="deadlines-header-summary-card" data-tone={visibleOverdueCount > 0 ? 'danger' : 'neutral'}>
-              <span>Atrasados</span>
-              <strong>{visibleOverdueCount}</strong>
-            </div>
-            <div className="deadlines-header-summary-card" data-tone="info">
-              <span>Agenda criada</span>
-              <strong>{kpis.agendaSynced}</strong>
+      <header className="dl-hero" aria-label="Cabeçalho de prazos">
+        <div className="dl-hero-copy">
+          <p className="dl-hero-eyebrow">Controle Operacional</p>
+          <h1 className="dl-hero-title">Prazos</h1>
+          <p className="dl-hero-subtitle">Priorize por risco e vencimento, conclua com auditoria e leve o prazo certo para a agenda.</p>
+          <div className="dl-hero-chips" aria-label="Pulso dos prazos">
+            {kpis.overdue > 0 && (
+              <div className="dl-hero-chip" data-tone="critical">
+                <strong>{kpis.overdue}</strong><span>Atrasados</span>
+              </div>
+            )}
+            {kpis.critical > 0 && (
+              <div className="dl-hero-chip" data-tone="warning">
+                <strong>{kpis.critical}</strong><span>Críticos</span>
+              </div>
+            )}
+            {kpis.today > 0 && (
+              <div className="dl-hero-chip" data-tone="brand">
+                <strong>{kpis.today}</strong><span>Hoje</span>
+              </div>
+            )}
+            {(kpis.overdue > 0 || kpis.critical > 0 || kpis.today > 0) && (
+              <span className="dl-hero-chips-sep" aria-hidden="true" />
+            )}
+            <div
+              className="dl-hero-pulse"
+              data-tone={kpis.overdue > 0 ? 'critical' : kpis.critical > 0 ? 'warning' : 'ok'}
+            >
+              <span className="dl-hero-pulse-dot" aria-hidden="true" />
+              <span>{kpis.overdue > 0 ? 'Ação imediata' : kpis.critical > 0 ? 'Atenção crítica' : 'Em dia'}</span>
             </div>
           </div>
         </div>
-
-        <div className="deadlines-header-side">
-          <div className="deadlines-header-actions">
-            <button className="btn-primary" aria-label="Novo prazo">
-              <Plus size={16} aria-hidden="true" />
-              Novo Prazo
-            </button>
-            <button className="btn-secondary" aria-label="Ir para agenda" onClick={() => navigate('/agenda')}>
-              <CalendarDays size={16} aria-hidden="true" />
-              Abrir Agenda
-            </button>
-            <button className="btn-secondary" aria-label="Exportar prazos" onClick={() => exportCsv(sortedDeadlines)}>
-              <Download size={16} aria-hidden="true" />
-              Exportar
-            </button>
-          </div>
-
-          <aside className="deadlines-focus-card" data-tone={focusDeadline?.riskTone ?? 'info'} aria-label="Foco do prazo">
-            <span className="deadlines-focus-card-eyebrow">Proxima melhor acao</span>
-            <strong>{focusDeadline?.title ?? 'Nenhum prazo priorizado'}</strong>
-            <p>{focusDeadline ? `${focusDeadline.processTitle} · ${focusDeadline.client}` : 'Use filtros e atalhos para recuperar o recorte operacional.'}</p>
-            <small>{focusDeadline ? `${focusDeadline.relativeDueLabel} · ${focusDeadline.owner}` : 'Sem item focal no recorte atual.'}</small>
-            {focusDeadline && (
-              <div className="deadlines-focus-card-meta">
-                {statusBadge(focusDeadline.status)}
-                {priorityBadge(focusDeadline.priority)}
-              </div>
-            )}
-          </aside>
+        <div className="dl-hero-actions">
+          <button type="button" className="btn-primary" aria-label="Novo prazo">
+            <Plus size={15} aria-hidden="true" /> Novo Prazo
+          </button>
+          <button type="button" className="btn-secondary" aria-label="Ir para agenda" onClick={() => navigate('/agenda')}>
+            <CalendarDays size={15} aria-hidden="true" /> Abrir Agenda
+          </button>
+          <button type="button" className="btn-secondary" aria-label="Exportar prazos" onClick={() => exportCsv(sortedDeadlines)}>
+            <Download size={15} aria-hidden="true" /> Exportar
+          </button>
+          <button type="button" className="btn-secondary" aria-label="Atualizar prazos" onClick={loadDeadlines}>
+            <RefreshCw size={15} aria-hidden="true" /> Atualizar
+          </button>
         </div>
       </header>
 
-      <section className="deadlines-kpis" aria-label="Indicadores de prazos">
-        <button type="button" className="deadline-kpi-card" onClick={() => applyQuickView('hoje')}>
-          <p>Prazos hoje</p>
-          <strong>{kpis.today}</strong>
-          <span>Foco diario imediato</span>
+      <section className="dl-kpis" aria-label="Indicadores de prazos">
+        <button type="button" className="metric-card" data-kpi-color="primary"
+          onClick={() => applyQuickView('hoje')}
+          aria-label={`Prazos hoje: ${kpis.today}`}
+        >
+          <div className="metric-top-row">
+            <p className="metric-value">{kpis.today}</p>
+            <div className="metric-icon" aria-hidden="true"><CalendarDays size={16} /></div>
+          </div>
+          <p className="metric-label">Prazos hoje</p>
+          <p className="metric-microtext">Foco diário imediato</p>
         </button>
-        <button type="button" className="deadline-kpi-card" onClick={() => setFilters({ ...EMPTY_FILTERS, period: 'semana' })}>
-          <p>Proximos 7 dias</p>
-          <strong>{kpis.week}</strong>
-          <span>Cadencia semanal</span>
+        <button type="button" className="metric-card" data-kpi-color="info"
+          onClick={() => setFilters({ ...EMPTY_FILTERS, period: 'semana' })}
+          aria-label={`Próximos 7 dias: ${kpis.week}`}
+        >
+          <div className="metric-top-row">
+            <p className="metric-value">{kpis.week}</p>
+            <div className="metric-icon" aria-hidden="true"><CalendarDays size={16} /></div>
+          </div>
+          <p className="metric-label">Próximos 7 dias</p>
+          <p className="metric-microtext">Cadência semanal</p>
         </button>
-        <button type="button" className="deadline-kpi-card warning" onClick={() => applyQuickView('criticos')}>
-          <p>Criticos</p>
-          <strong>{kpis.critical}</strong>
-          <span>48h ou menos</span>
+        <button type="button" className="metric-card" data-kpi-color="warning"
+          onClick={() => applyQuickView('criticos')}
+          aria-label={`Críticos: ${kpis.critical}`}
+        >
+          <div className="metric-top-row">
+            <p className="metric-value">{kpis.critical}</p>
+            <div className="metric-icon" aria-hidden="true"><ShieldAlert size={16} /></div>
+          </div>
+          <p className="metric-label">Críticos</p>
+          <p className="metric-microtext">48h ou menos</p>
         </button>
-        <button type="button" className="deadline-kpi-card danger" onClick={() => applyQuickView('atrasados')}>
-          <p>Atrasados</p>
-          <strong>{kpis.overdue}</strong>
-          <span>Acao imediata</span>
+        <button type="button" className="metric-card" data-kpi-color="error"
+          onClick={() => applyQuickView('atrasados')}
+          aria-label={`Atrasados: ${kpis.overdue}`}
+        >
+          <div className="metric-top-row">
+            <p className="metric-value">{kpis.overdue}</p>
+            <div className="metric-icon" aria-hidden="true"><AlertTriangle size={16} /></div>
+          </div>
+          <p className="metric-label">Atrasados</p>
+          <p className="metric-microtext">Ação imediata</p>
         </button>
-        <button type="button" className="deadline-kpi-card success" onClick={() => setFilters({ ...EMPTY_FILTERS, status: 'concluido' })}>
-          <p>Auditaveis</p>
-          <strong>{kpis.audited}</strong>
-          <span>Concluidos com trilha</span>
+        <button type="button" className="metric-card" data-kpi-color="success"
+          onClick={() => setFilters({ ...EMPTY_FILTERS, status: 'concluido' })}
+          aria-label={`Auditáveis: ${kpis.audited}`}
+        >
+          <div className="metric-top-row">
+            <p className="metric-value">{kpis.audited}</p>
+            <div className="metric-icon" aria-hidden="true"><CheckCircle2 size={16} /></div>
+          </div>
+          <p className="metric-label">Auditáveis</p>
+          <p className="metric-microtext">Concluídos com trilha</p>
         </button>
       </section>
 
@@ -686,25 +711,48 @@ export function Deadlines({ user }: DeadlinesProps) {
         </div>
       )}
 
-      <section className="deadlines-ops-grid" aria-label="Operacao de prazos">
+      <section className="deadlines-ops-grid" aria-label="Fila e ações em massa">
+        {/* Fila prioritária */}
         <div className="deadlines-queue-card">
-          <div className="deadlines-section-heading">
+          <div className="dl-ops-head">
             <div>
-              <p>Fila prioritaria</p>
-              <h4>Risco, publicacao e vencimento no mesmo plano</h4>
+              <p className="dl-ops-eyebrow">Fila prioritária</p>
+              <h3 className="dl-ops-title">Próximas ações por risco</h3>
             </div>
-            <button className="btn-ghost" onClick={() => setSortBy('risco')}>
-              <ShieldAlert size={14} aria-hidden="true" />
-              Priorizar risco
-            </button>
+            <label className="dl-sort-label" aria-label="Ordenar lista por">
+              <select
+                className="dl-sort-inline"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as DeadlineSortField)}
+              >
+                <option value="risco">Por risco</option>
+                <option value="vencimento">Por vencimento</option>
+                <option value="prioridade">Por prioridade</option>
+                <option value="status">Por status</option>
+              </select>
+            </label>
           </div>
 
           <div className="deadline-priority-strip">
-            {topQueue.length === 0 && <p className="deadline-muted-text">Sem fila priorizada no recorte atual.</p>}
+            {topQueue.length === 0 && (
+              <p className="deadline-muted-text">Sem fila priorizada no recorte atual.</p>
+            )}
             {topQueue.map((item, index) => (
-              <article key={item.id} className="deadline-priority-card" data-tone={item.riskTone}>
-                <span>{index === 0 ? 'Agora' : index === 1 ? 'Em seguida' : 'Na sequencia'}</span>
-                <strong>{item.title}</strong>
+              <article
+                key={item.id}
+                className="deadline-priority-card"
+                data-tone={item.riskTone}
+                onClick={() => setSelectedDeadlineId(item.id)}
+                tabIndex={0}
+                role="button"
+                aria-label={`Abrir detalhe: ${item.title}`}
+                onKeyDown={(e) => e.key === 'Enter' && setSelectedDeadlineId(item.id)}
+              >
+                <span className="dl-priority-label">
+                  {index === 0 ? 'Agora' : index === 1 ? 'Em seguida' : 'Na sequência'}
+                </span>
+                <strong className="dl-priority-title">{item.title}</strong>
+                <p className="dl-priority-context">{item.client}</p>
                 <small>{item.relativeDueLabel} · {item.riskLabel}</small>
                 <div className="deadline-inline-meta">
                   {statusBadge(item.status)}
@@ -715,222 +763,255 @@ export function Deadlines({ user }: DeadlinesProps) {
           </div>
         </div>
 
+        {/* Ações em massa — progressive disclosure */}
         <aside className="deadlines-bulk-card">
-          <div className="deadlines-section-heading">
+          <div className="dl-ops-head">
             <div>
-              <p>Acoes em massa seguras</p>
-              <h4>Selecao com auditoria e agenda</h4>
+              <p className="dl-ops-eyebrow">Ações em massa</p>
+              <h3 className="dl-ops-title">
+                {selectedIds.length > 0
+                  ? `${selectedIds.length} prazo${selectedIds.length !== 1 ? 's' : ''} selecionado${selectedIds.length !== 1 ? 's' : ''}`
+                  : 'Selecione prazos na lista'}
+              </h3>
             </div>
-            <button className="btn-ghost" onClick={selectFilteredEligible}>
-              <CheckCircle2 size={14} aria-hidden="true" />
-              Selecionar recorte
-            </button>
+            {selectedIds.length === 0 ? (
+              <button type="button" className="btn-ghost" onClick={selectFilteredEligible}>
+                <CheckCircle2 size={14} aria-hidden="true" />
+                Selecionar elegíveis
+              </button>
+            ) : (
+              <button type="button" className="btn-ghost" onClick={clearSelection}>
+                <X size={14} aria-hidden="true" />
+                Limpar
+              </button>
+            )}
           </div>
 
-          <div className="deadline-bulk-stats">
-            <div>
-              <span>Selecionados</span>
-              <strong>{selectedIds.length}</strong>
+          {/* Estado vazio: nada selecionado */}
+          {selectedIds.length === 0 && (
+            <div className="dl-bulk-empty">
+              <div className="dl-bulk-stats-row">
+                <div className="dl-bulk-stat">
+                  <span>Elegíveis</span>
+                  <strong>{sortedDeadlines.filter((i) => i.massActionEligible).length}</strong>
+                </div>
+                <div className="dl-bulk-stat">
+                  <span>Publicações</span>
+                  <strong>{visiblePublicationCount}</strong>
+                </div>
+                <div className="dl-bulk-stat">
+                  <span>Auditados</span>
+                  <strong>{kpis.audited}</strong>
+                </div>
+              </div>
+              <p className="dl-bulk-hint">
+                Marque os checkboxes na lista para habilitar conclusão auditada ou envio para agenda em massa.
+              </p>
+              <button type="button" className="btn-secondary dl-bulk-cta" onClick={selectFilteredEligible}>
+                <CheckCircle2 size={13} aria-hidden="true" />
+                Selecionar todos elegíveis
+              </button>
             </div>
-            <div>
-              <span>Elegiveis</span>
-              <strong>{selectedActionableCount}</strong>
-            </div>
-            <div>
-              <span>Publicacoes</span>
-              <strong>{visiblePublicationCount}</strong>
-            </div>
-          </div>
+          )}
 
-          <label className="deadline-field">
-            <span>Motivo da conclusao</span>
-            <select value={bulkReason} onChange={(event) => setBulkReason(event.target.value)}>
-              {BULK_REASON_OPTIONS.map((reason) => (
-                <option key={reason} value={reason}>{reason}</option>
-              ))}
-            </select>
-          </label>
+          {/* Estado ativo: itens selecionados */}
+          {selectedIds.length > 0 && (
+            <>
+              <div className="deadline-bulk-stats">
+                <div>
+                  <span>Selecionados</span>
+                  <strong>{selectedIds.length}</strong>
+                </div>
+                <div>
+                  <span>Elegíveis</span>
+                  <strong>{selectedActionableCount}</strong>
+                </div>
+                <div>
+                  <span>Publicações</span>
+                  <strong>{visiblePublicationCount}</strong>
+                </div>
+              </div>
 
-          <label className="deadline-field">
-            <span>Observacao de auditoria</span>
-            <textarea
-              className="deadline-bulk-notes"
-              value={bulkNotes}
-              onChange={(event) => setBulkNotes(event.target.value)}
-              placeholder="Explique o criterio usado na acao em massa."
-            />
-          </label>
+              <label className="deadline-field">
+                <span>Motivo da conclusão</span>
+                <select value={bulkReason} onChange={(e) => setBulkReason(e.target.value)}>
+                  {BULK_REASON_OPTIONS.map((reason) => (
+                    <option key={reason} value={reason}>{reason}</option>
+                  ))}
+                </select>
+              </label>
 
-          <div className="deadline-bulk-actions">
-            <button className="btn-primary" onClick={() => void runBulkAction('complete')} disabled={selectedActionableCount === 0}>
-              <CheckCircle2 size={14} aria-hidden="true" />
-              Concluir selecionados
-            </button>
-            <button className="btn-secondary" onClick={() => void runBulkAction('schedule')} disabled={selectedActionableCount === 0}>
-              <CalendarDays size={14} aria-hidden="true" />
-              Enviar para agenda
-            </button>
-            <button className="btn-ghost" onClick={clearSelection} disabled={selectedIds.length === 0}>
-              Limpar selecao
-            </button>
-          </div>
+              <label className="deadline-field">
+                <span>Observação de auditoria</span>
+                <textarea
+                  className="deadline-bulk-notes"
+                  value={bulkNotes}
+                  onChange={(e) => setBulkNotes(e.target.value)}
+                  placeholder="Explique o critério usado na ação em massa."
+                />
+              </label>
 
-          <div className="deadline-contract-note">
-            <strong>Contrato esperado</strong>
-            <p>A conclusão em massa já usa `deadlines.bulkAction`. A sincronização de agenda ainda depende de `createAgendaEvent` até consolidarmos o vinculo prazo ↔ agenda no contrato principal.</p>
-          </div>
+              <div className="deadline-bulk-actions">
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => void runBulkAction('complete')}
+                  disabled={selectedActionableCount === 0}
+                >
+                  <CheckCircle2 size={14} aria-hidden="true" />
+                  Concluir {selectedActionableCount} prazo{selectedActionableCount !== 1 ? 's' : ''}
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => void runBulkAction('schedule')}
+                  disabled={selectedActionableCount === 0}
+                >
+                  <CalendarDays size={14} aria-hidden="true" />
+                  Enviar para agenda
+                </button>
+              </div>
+            </>
+          )}
         </aside>
       </section>
 
-      <section className="deadlines-filters" aria-label="Busca e filtros de prazos">
-        <div className="deadline-quick-views">
-          <button type="button" className={`quick-view-chip${activeQuickView === 'todos' ? ' is-active' : ''}`} onClick={() => applyQuickView('todos')}>Todos</button>
-          <button type="button" className={`quick-view-chip${activeQuickView === 'hoje' ? ' is-active' : ''}`} onClick={() => applyQuickView('hoje')}>Hoje</button>
-          <button type="button" className={`quick-view-chip${activeQuickView === 'atrasados' ? ' is-active' : ''}`} onClick={() => applyQuickView('atrasados')}>Atrasados</button>
-          <button type="button" className={`quick-view-chip${activeQuickView === 'criticos' ? ' is-active' : ''}`} onClick={() => applyQuickView('criticos')}>Criticos</button>
-          <button type="button" className={`quick-view-chip${activeQuickView === 'publicacao' ? ' is-active' : ''}`} onClick={() => applyQuickView('publicacao')}>Publicacao</button>
-          <button type="button" className={`quick-view-chip${activeQuickView === 'meus' ? ' is-active' : ''}`} onClick={() => applyQuickView('meus')}>Meus prazos</button>
-        </div>
-
-        <div className="filters-grid-top">
-          <label className="deadline-field search">
-            <span>Busca principal</span>
-            <div className="input-icon-wrap">
-              <Search size={14} aria-hidden="true" />
-              <input
-                type="search"
-                value={filters.query}
-                onChange={(event) => updateFilter('query', event.target.value)}
-                placeholder="Processo, cliente, origem ou contexto"
-              />
+      <section
+        className={`my-processes-filters${showAdvancedFilters ? '' : ' is-compact'}`}
+        aria-label="Busca e filtros de prazos"
+      >
+        <div className="filters-head">
+          <div>
+            <p className="filters-eyebrow">Refinar prazos</p>
+            <h3>Filtros operacionais</h3>
+          </div>
+          <div className="filters-head-meta">
+            {hasActiveFilter && <span className="filters-active-pill">Filtros ativos</span>}
+            <span className="filters-total-pill">{sortedDeadlines.length} em exibição</span>
+            <div className="dl-view-toggle" role="group" aria-label="Modo de visualização">
+              <button type="button" className={`dl-view-btn${viewMode === 'lista' ? ' dl-view-btn--active' : ''}`} onClick={() => setViewMode('lista')} aria-pressed={viewMode === 'lista'}>Lista</button>
+              <button type="button" className={`dl-view-btn${viewMode === 'calendario' ? ' dl-view-btn--active' : ''}`} onClick={() => setViewMode('calendario')} aria-pressed={viewMode === 'calendario'}>Calendário</button>
             </div>
-          </label>
-
-          <label className="deadline-field">
-            <span>Periodo</span>
-            <select value={filters.period} onChange={(event) => updateFilter('period', event.target.value as DeadlinePeriodFilter)}>
-              <option value="todos">Todos</option>
-              <option value="hoje">Hoje</option>
-              <option value="semana">Semana</option>
-              <option value="mes">Mes</option>
-              <option value="atrasados">Atrasados</option>
-            </select>
-          </label>
-
-          <label className="deadline-field">
-            <span>Status</span>
-            <select value={filters.status} onChange={(event) => updateFilter('status', event.target.value)}>
-              <option value="">Todos</option>
-              <option value="aberto">Aberto</option>
-              <option value="critico">Critico</option>
-              <option value="atrasado">Atrasado</option>
-              <option value="concluido">Concluido</option>
-            </select>
-          </label>
-
-          <label className="deadline-field">
-            <span>Prioridade</span>
-            <select value={filters.priority} onChange={(event) => updateFilter('priority', event.target.value)}>
-              <option value="">Todas</option>
-              <option value="alta">Alta</option>
-              <option value="media">Media</option>
-              <option value="baixa">Baixa</option>
-            </select>
-          </label>
-
-          <label className="deadline-field">
-            <span>Responsavel</span>
-            <select value={filters.responsible} onChange={(event) => updateFilter('responsible', event.target.value)}>
-              <option value="">Todos</option>
-              {owners.map((owner) => <option key={owner} value={owner}>{owner}</option>)}
-            </select>
-          </label>
-
-          <div className="deadline-filter-actions compact">
-            <button className="btn-ghost" onClick={() => setShowAdvancedFilters((prev) => !prev)}>
+            <button type="button" className="btn-ghost btn-filter-density" onClick={() => setShowAdvancedFilters((v) => !v)} aria-expanded={showAdvancedFilters}>
               <Filter size={14} aria-hidden="true" />
-              {showAdvancedFilters ? 'Ocultar avancados' : 'Filtros avancados'}
+              {showAdvancedFilters ? 'Menos filtros' : 'Mais filtros'}
             </button>
           </div>
         </div>
 
+        <div className="filter-presets" role="toolbar" aria-label="Presets de filtros rápidos">
+          <button type="button" className={`filter-preset-btn${activeQuickView === 'todos' ? ' is-active' : ''}`} onClick={() => applyQuickView('todos')}>Todos</button>
+          <button type="button" className={`filter-preset-btn${activeQuickView === 'hoje' ? ' is-active' : ''}`} onClick={() => applyQuickView('hoje')}>Hoje</button>
+          <button type="button" className={`filter-preset-btn${activeQuickView === 'atrasados' ? ' is-active' : ''}`} onClick={() => applyQuickView('atrasados')}>Atrasados</button>
+          <button type="button" className={`filter-preset-btn${activeQuickView === 'criticos' ? ' is-active' : ''}`} onClick={() => applyQuickView('criticos')}>Críticos</button>
+          <button type="button" className={`filter-preset-btn${activeQuickView === 'publicacao' ? ' is-active' : ''}`} onClick={() => applyQuickView('publicacao')}>Publicação</button>
+          <button type="button" className={`filter-preset-btn${activeQuickView === 'meus' ? ' is-active' : ''}`} onClick={() => applyQuickView('meus')}>Meus prazos</button>
+        </div>
+
+        <div className="filters-top-row filter-row-card">
+          <label htmlFor="dl-search" className="filter-field filter-field-search filter-cascade-item">
+            <span>Busca</span>
+            <div className="filter-input-wrap">
+              <Search size={14} aria-hidden="true" />
+              <input id="dl-search" type="search" value={filters.query} onChange={(e) => updateFilter('query', e.target.value)} placeholder="Processo, cliente, origem ou contexto" />
+            </div>
+          </label>
+          <label htmlFor="dl-period" className="filter-field filter-cascade-item">
+            <span>Período</span>
+            <select id="dl-period" value={filters.period} onChange={(e) => updateFilter('period', e.target.value as DeadlinePeriodFilter)}>
+              <option value="todos">Todos</option>
+              <option value="hoje">Hoje</option>
+              <option value="semana">Semana</option>
+              <option value="mes">Mês</option>
+              <option value="atrasados">Atrasados</option>
+            </select>
+          </label>
+          <label htmlFor="dl-status" className="filter-field filter-cascade-item">
+            <span>Status</span>
+            <select id="dl-status" value={filters.status} onChange={(e) => updateFilter('status', e.target.value)}>
+              <option value="">Todos</option>
+              <option value="aberto">Aberto</option>
+              <option value="critico">Crítico</option>
+              <option value="atrasado">Atrasado</option>
+              <option value="concluido">Concluído</option>
+            </select>
+          </label>
+          <label htmlFor="dl-priority" className="filter-field filter-cascade-item">
+            <span>Prioridade</span>
+            <select id="dl-priority" value={filters.priority} onChange={(e) => updateFilter('priority', e.target.value)}>
+              <option value="">Todas</option>
+              <option value="alta">Alta</option>
+              <option value="media">Média</option>
+              <option value="baixa">Baixa</option>
+            </select>
+          </label>
+        </div>
+
         {showAdvancedFilters && (
-          <div className="filters-grid-bottom">
-            <label className="deadline-field">
-              <span>Area juridica</span>
-              <select value={filters.area} onChange={(event) => updateFilter('area', event.target.value)}>
+          <div className="filters-bottom-row filter-row-card">
+            <label htmlFor="dl-responsible" className="filter-field filter-cascade-item">
+              <span>Responsável</span>
+              <select id="dl-responsible" value={filters.responsible} onChange={(e) => updateFilter('responsible', e.target.value)}>
+                <option value="">Todos</option>
+                {owners.map((owner) => <option key={owner} value={owner}>{owner}</option>)}
+              </select>
+            </label>
+            <label htmlFor="dl-area" className="filter-field filter-cascade-item">
+              <span>Área jurídica</span>
+              <select id="dl-area" value={filters.area} onChange={(e) => updateFilter('area', e.target.value)}>
                 <option value="">Todas</option>
                 {areas.map((area) => <option key={area} value={area}>{area}</option>)}
               </select>
             </label>
-
-            <label className="deadline-field">
+            <label htmlFor="dl-process" className="filter-field filter-cascade-item">
               <span>Processo</span>
-              <select value={filters.process} onChange={(event) => updateFilter('process', event.target.value)}>
+              <select id="dl-process" value={filters.process} onChange={(e) => updateFilter('process', e.target.value)}>
                 <option value="">Todos</option>
-                {processes.map((process) => <option key={process.id} value={process.id}>{process.label}</option>)}
+                {processes.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
               </select>
             </label>
-
-            <label className="deadline-field">
-              <span>Origem do prazo</span>
-              <select value={filters.origin} onChange={(event) => updateFilter('origin', event.target.value)}>
+            <label htmlFor="dl-origin" className="filter-field filter-cascade-item">
+              <span>Origem</span>
+              <select id="dl-origin" value={filters.origin} onChange={(e) => updateFilter('origin', e.target.value)}>
                 <option value="">Todas</option>
                 {ORIGINS.map((origin) => <option key={origin} value={origin}>{getOriginLabel(origin)}</option>)}
               </select>
             </label>
-
-            <label className="deadline-checkline">
-              <input
-                type="checkbox"
-                checked={filters.dueTodayOnly}
-                onChange={(event) => updateFilter('dueTodayOnly', event.target.checked)}
-              />
-              Vencendo hoje
-            </label>
-
-            <label className="deadline-field">
-              <span>Vencendo em ate</span>
-              <select value={filters.dueInDays} onChange={(event) => updateFilter('dueInDays', event.target.value)}>
-                <option value="">Qualquer prazo</option>
+            <label htmlFor="dl-due-days" className="filter-field filter-cascade-item">
+              <span>Vencendo em até</span>
+              <select id="dl-due-days" value={filters.dueInDays} onChange={(e) => updateFilter('dueInDays', e.target.value)}>
+                <option value="">Qualquer</option>
                 <option value="1">1 dia</option>
                 <option value="3">3 dias</option>
                 <option value="7">7 dias</option>
                 <option value="15">15 dias</option>
               </select>
             </label>
-
-            <label className="deadline-field">
-              <span>Ordenacao</span>
-              <select value={sortBy} onChange={(event) => setSortBy(event.target.value as DeadlineSortField)}>
+            <label htmlFor="dl-sort" className="filter-field filter-cascade-item">
+              <span>Ordenação</span>
+              <select id="dl-sort" value={sortBy} onChange={(e) => setSortBy(e.target.value as DeadlineSortField)}>
                 <option value="risco">Risco</option>
                 <option value="vencimento">Vencimento</option>
                 <option value="prioridade">Prioridade</option>
                 <option value="status">Status</option>
               </select>
             </label>
-
-            <div className="deadline-filter-actions">
-              <button className="btn-ghost" onClick={clearFilters}>
-                <Filter size={14} aria-hidden="true" />
-                Limpar filtros
+            <div className="filter-toggle-group filter-cascade-item" role="group" style={{ gridColumn: 'span 2' }}>
+              <label className="filter-toggle-chip">
+                <input type="checkbox" checked={filters.dueTodayOnly} onChange={(e) => updateFilter('dueTodayOnly', e.target.checked)} />
+                <span>Vencendo hoje</span>
+              </label>
+            </div>
+            <div className="filter-actions filter-cascade-item" style={{ gridColumn: 'span 4' }}>
+              <button type="button" className="btn-ghost btn-filter-clear" onClick={clearFilters}>
+                <Filter size={14} aria-hidden="true" /> Limpar filtros
               </button>
-              <button className="btn-ghost" onClick={saveFilter}>
-                <Save size={14} aria-hidden="true" />
-                Salvar filtro
-              </button>
-              <button className="btn-ghost" onClick={() => setViewMode((prev) => (prev === 'lista' ? 'calendario' : 'lista'))}>
-                <CalendarDays size={14} aria-hidden="true" />
-                {viewMode === 'lista' ? 'Lista / Calendario' : 'Calendario / Lista'}
+              <button type="button" className="btn-ghost" onClick={saveFilter}>
+                <Save size={14} aria-hidden="true" /> Salvar filtro
               </button>
             </div>
           </div>
         )}
-
-        <div className="deadline-filter-summary">
-          <strong>{sortedDeadlines.length}</strong> prazo(s) na visao atual.
-          {hasActiveFilter && <span className="active-filter-chip">Filtro ativo</span>}
-        </div>
       </section>
 
       {viewItems.length === 0 && !error && (
@@ -956,122 +1037,137 @@ export function Deadlines({ user }: DeadlinesProps) {
 
       {sortedDeadlines.length > 0 && viewMode === 'lista' && (
         <section className="deadlines-table-shell" aria-label="Lista de prazos">
-          <div className="deadlines-table-toolbar">
-            <div>
-              <strong>{sortedDeadlines.length}</strong>
-              <span> prazo(s) priorizados por risco, vencimento e contexto operacional</span>
+          <div className="dl-list-toolbar">
+            <div className="dl-list-toolbar-left">
+              <span className="pub-count-badge">
+                {sortedDeadlines.length} prazo{sortedDeadlines.length !== 1 ? 's' : ''}
+              </span>
+              <span className="dl-list-toolbar-sub">priorizados por risco, vencimento e contexto</span>
             </div>
-            <div className="deadline-table-toolbar-meta">
-              <span>{recentAudits.length} auditoria(s) recente(s)</span>
-              <button className="btn-ghost" onClick={selectFilteredEligible}>
-                Selecionar elegiveis
+            <div className="dl-list-toolbar-right">
+              <span className="dl-list-toolbar-audit">{recentAudits.length} auditoria(s) recente(s)</span>
+              <button type="button" className="btn-ghost" onClick={selectFilteredEligible}>
+                <CheckCircle2 size={13} aria-hidden="true" /> Selecionar elegíveis
               </button>
             </div>
           </div>
 
-          <table className="deadlines-table">
-            <thead>
-              <tr>
-                <th scope="col" aria-label="Selecionar coluna">Sel.</th>
-                <th scope="col">Prazo</th>
-                <th scope="col">Risco e vencimento</th>
-                <th scope="col">Automacao e agenda</th>
-                <th scope="col">Status</th>
-                <th scope="col">Responsavel</th>
-                <th scope="col">Acoes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pagedDeadlines.map((item) => {
-                const isProcessing = processingIds.includes(item.id);
-                const isSelected = selectedIds.includes(item.id);
+          {/* Cabeçalho da rich-list */}
+          <div className="dl-list-header" aria-hidden="true">
+            <span /> {/* checkbox */}
+            <span className="dl-list-col-label">Prazo / Processo</span>
+            <span className="dl-list-col-label">Risco · Vencimento</span>
+            <span className="dl-list-col-label">Status · Prioridade</span>
+            <span />
+          </div>
 
-                return (
-                  <tr
-                    key={item.id}
-                    tabIndex={0}
-                    role="button"
-                    aria-label={`Abrir detalhe do prazo ${item.title}`}
-                    onClick={() => {
-                      setSelectedDeadlineId(item.id);
-                      setOpenMenuId(null);
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault();
-                        setSelectedDeadlineId(item.id);
-                        setOpenMenuId(null);
-                      }
-                    }}
-                  >
-                    <td onClick={(event) => event.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        disabled={!item.massActionEligible || isProcessing}
-                        onChange={() => toggleSelection(item.id)}
-                        aria-label={`Selecionar prazo ${item.title}`}
-                      />
-                    </td>
-                    <td>
-                      <div className="deadline-primary">
-                        <strong>{item.title}</strong>
-                        <small>{item.processTitle} · {item.client}</small>
-                        <span className="deadline-origin-line">{item.area} · {getOriginLabel(item.origin)}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <div className={`deadline-risk-cell tone-${item.riskTone}`}>
-                        <strong>{item.relativeDueLabel}</strong>
-                        <small>{formatDate(item.dueDate)} · {item.riskLabel}</small>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="deadline-context-cell">
-                        <strong>{item.automationContext.label}</strong>
-                        <small>{item.agendaSyncState.message}</small>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="deadline-status-stack">
-                        {statusBadge(item.status)}
-                        {priorityBadge(item.priority)}
-                      </div>
-                    </td>
-                    <td>
-                      <div className="deadline-owner-cell">
-                        <span>{item.owner}</span>
-                        <small>{item.ownerLabel}</small>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="deadline-row-actions" onClick={(event) => event.stopPropagation()}>
-                        <button
-                          className="icon-action"
-                          aria-label={`Abrir menu de acoes do prazo ${item.title}`}
-                          onClick={() => setOpenMenuId((prev) => (prev === item.id ? null : item.id))}
-                        >
-                          <MoreHorizontal size={16} aria-hidden="true" />
-                        </button>
-                        {openMenuId === item.id && (
-                          <div className="deadline-row-menu" role="menu" aria-label="Menu de acoes">
-                            <button onClick={() => setSelectedDeadlineId(item.id)}>Detalhe rapido</button>
-                            <button disabled={isProcessing || item.status === 'concluido'} onClick={() => void concludeDeadline(item, 'Conclusao individual', 'Concluido pela linha operacional.', 'single')}>
-                              Concluir prazo
+          {/* Rich-list */}
+          <div className="dl-list" role="list" aria-label="Lista de prazos">
+            {pagedDeadlines.map((item) => {
+              const isProcessing = processingIds.includes(item.id);
+              const isSelected = selectedIds.includes(item.id);
+              const isMenuOpen = openMenuId === item.id;
+
+              return (
+                <div
+                  key={item.id}
+                  role="row"
+                  className={`dl-row${isSelected ? ' dl-row--selected' : ''}${item.status === 'concluido' ? ' dl-row--done' : ''}`}
+                  data-risk={item.riskTone}
+                  onClick={() => { setSelectedDeadlineId(item.id); setOpenMenuId(null); }}
+                  tabIndex={0}
+                  aria-label={`Prazo ${item.title} — ${item.processLabel} — vence ${item.relativeDueLabel}`}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedDeadlineId(item.id); setOpenMenuId(null); } }}
+                >
+                  {/* Checkbox */}
+                  <div className="dl-row-check" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      disabled={!item.massActionEligible || isProcessing}
+                      onChange={() => toggleSelection(item.id)}
+                      aria-label={`Selecionar prazo ${item.title}`}
+                    />
+                  </div>
+
+                  {/* O QUÊ — título + processo + cliente */}
+                  <div className="dl-row-left">
+                    <span className="dl-row-title">{item.title}</span>
+                    <span className="dl-row-proc">{item.processLabel} · {item.processTitle}</span>
+                    <span className="dl-row-client">{item.client}</span>
+                    {item.area && <span className="dl-row-area-tag">{item.area}</span>}
+                  </div>
+
+                  {/* RISCO — data + label colorido */}
+                  <div className="dl-row-risk">
+                    <span className={`dl-row-due-label tone-${item.riskTone}`}>{item.relativeDueLabel}</span>
+                    <span className="dl-row-date">{formatDate(item.dueDate)}</span>
+                    <span className="dl-row-risk-label">{item.riskLabel}</span>
+                  </div>
+
+                  {/* STATUS + PRIORIDADE + ORIGIN */}
+                  <div className="dl-row-right">
+                    <div className="dl-row-badges">
+                      {statusBadge(item.status)}
+                      {priorityBadge(item.priority)}
+                    </div>
+                    <div className="dl-row-meta-bottom">
+                      <span className="dl-row-origin-tag">{getOriginLabel(item.origin)}</span>
+                      {item.agendaSyncState.status === 'synced' && (
+                        <span className="dl-row-synced" title="Sincronizado com agenda">
+                          <CalendarDays size={10} aria-hidden="true" /> Agenda
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* AÇÕES */}
+                  <div className="dl-row-actions" onClick={(e) => e.stopPropagation()}>
+                    <div className="pub-menu-wrap">
+                      <button
+                        className="pub-menu-trigger"
+                        aria-label={`Ações para prazo ${item.title}`}
+                        aria-expanded={isMenuOpen}
+                        aria-haspopup="true"
+                        onClick={() => setOpenMenuId(isMenuOpen ? null : item.id)}
+                      >
+                        <MoreHorizontal size={15} />
+                      </button>
+                      {isMenuOpen && (
+                        <ul className="pub-ctx-menu" role="menu">
+                          <li role="none">
+                            <button role="menuitem" onClick={() => { setSelectedDeadlineId(item.id); setOpenMenuId(null); }}>
+                              <BookOpen size={13} /> Ver detalhe
                             </button>
-                            <button disabled={isProcessing} onClick={() => void syncToAgenda(item)}>Enviar para agenda</button>
-                            <button onClick={() => navigate(item.automationContext.linkedPath)}>{item.automationContext.actionLabel}</button>
-                            <button onClick={() => navigate(`/processos/${item.processId}`)}>Abrir processo</button>
-                            <button onClick={() => navigate('/tarefas')}>Criar tarefa</button>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                          </li>
+                          <li role="none">
+                            <button role="menuitem" disabled={isProcessing || item.status === 'concluido'} onClick={() => void concludeDeadline(item, 'Conclusão individual', 'Concluído pela linha operacional.', 'single')}>
+                              <CheckCircle2 size={13} /> Concluir prazo
+                            </button>
+                          </li>
+                          <li role="none">
+                            <button role="menuitem" disabled={isProcessing} onClick={() => void syncToAgenda(item)}>
+                              <CalendarDays size={13} /> Enviar para agenda
+                            </button>
+                          </li>
+                          <li role="none">
+                            <button role="menuitem" onClick={() => navigate(item.automationContext.linkedPath)}>
+                              <ExternalLink size={13} /> {item.automationContext.actionLabel}
+                            </button>
+                          </li>
+                          <li role="none">
+                            <button role="menuitem" onClick={() => navigate(`/processos/${item.processId}`)}>
+                              <ExternalLink size={13} /> Abrir processo
+                            </button>
+                          </li>
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
 
           <div className="deadlines-mobile-list" aria-label="Lista mobile de prazos">
             {pagedDeadlines.map((item) => (
@@ -1215,118 +1311,184 @@ export function Deadlines({ user }: DeadlinesProps) {
 
       {selectedDeadline && (
         <>
-          <button className="deadline-drawer-backdrop" onClick={() => setSelectedDeadlineId(null)} aria-label="Fechar detalhe rapido" />
-          <aside className="deadline-drawer" role="dialog" aria-modal="true" aria-labelledby="deadline-drawer-title">
-            <header>
-              <div>
-                <small>Detalhe do prazo</small>
-                <h3 id="deadline-drawer-title">{selectedDeadline.title}</h3>
-                <p className="deadline-drawer-context">{selectedDeadline.processTitle} · {selectedDeadline.client}</p>
+          <button className="deadline-drawer-backdrop" onClick={() => setSelectedDeadlineId(null)} aria-label="Fechar detalhe" />
+          <aside
+            className="deadline-drawer"
+            data-risk={selectedDeadline.riskTone}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="dl-drawer-title"
+          >
+            {/* ── Hero ── */}
+            <div className="dl-drawer-hero">
+              <div className="dl-drawer-hero-content">
+                <div className="dl-drawer-hero-tags">
+                  {statusBadge(selectedDeadline.status)}
+                  {priorityBadge(selectedDeadline.priority)}
+                  <div className={`deadline-drawer-risk tone-${selectedDeadline.riskTone}`}>
+                    <TimerReset size={12} aria-hidden="true" />
+                    <span>{selectedDeadline.relativeDueLabel}</span>
+                  </div>
+                </div>
+                <h3 id="dl-drawer-title" className="dl-drawer-hero-title">{selectedDeadline.title}</h3>
+                <p className="dl-drawer-hero-meta">
+                  <span>{selectedDeadline.processLabel}</span>
+                  <span className="dl-drawer-hero-dot" aria-hidden="true" />
+                  <span>{selectedDeadline.processTitle}</span>
+                  <span className="dl-drawer-hero-dot" aria-hidden="true" />
+                  <span>{selectedDeadline.client}</span>
+                </p>
+                <p className="dl-drawer-hero-due">
+                  Vence em <strong>{formatDate(selectedDeadline.dueDate)}</strong>
+                  {selectedDeadline.owner && <> · <span>{selectedDeadline.owner}</span></>}
+                </p>
               </div>
-              <button className="icon-action" onClick={() => setSelectedDeadlineId(null)} aria-label="Fechar drawer">
-                <X size={15} aria-hidden="true" />
+              <button className="dl-close-btn" onClick={() => setSelectedDeadlineId(null)} aria-label="Fechar drawer">
+                <X size={16} />
               </button>
-            </header>
+            </div>
 
-            <div className="deadline-drawer-body">
-              <section className="deadline-drawer-top-metrics">
-                <div>{statusBadge(selectedDeadline.status)}</div>
-                <div>{priorityBadge(selectedDeadline.priority)}</div>
-                <div className={`deadline-drawer-risk tone-${selectedDeadline.riskTone}`}>
-                  <TimerReset size={14} aria-hidden="true" />
-                  <span>{selectedDeadline.relativeDueLabel}</span>
+            {/* ── Quick actions ── */}
+            <div className="dl-drawer-quickbar">
+              <button
+                type="button"
+                className={`pub-qbtn pub-qbtn--primary${selectedDeadline.status === 'concluido' ? ' pub-qbtn--done' : ''}`}
+                onClick={() => void concludeDeadline(selectedDeadline, 'Conclusão via drawer', 'Concluído a partir do detalhe rápido.', 'single')}
+                disabled={selectedDeadline.status === 'concluido'}
+              >
+                <CheckCircle2 size={14} /> <span>Concluir prazo</span>
+              </button>
+              <button
+                type="button"
+                className="pub-qbtn"
+                onClick={() => void syncToAgenda(selectedDeadline)}
+              >
+                <CalendarDays size={14} /> <span>Enviar agenda</span>
+              </button>
+              <div className="pub-qbtn-spacer" aria-hidden="true" />
+              <button
+                type="button"
+                className="pub-qbtn pub-qbtn--ghost"
+                onClick={() => navigate(selectedDeadline.automationContext.linkedPath)}
+                title={selectedDeadline.automationContext.actionLabel}
+              >
+                <ExternalLink size={14} /> <span>{selectedDeadline.automationContext.actionLabel}</span>
+              </button>
+              <button
+                type="button"
+                className="pub-qbtn pub-qbtn--ghost"
+                onClick={() => navigate(`/processos/${selectedDeadline.processId}`)}
+              >
+                <ExternalLink size={14} /> <span>Processo</span>
+              </button>
+            </div>
+
+            {/* ── Body ── */}
+            <div className="dl-drawer-body">
+
+              {/* Metadata */}
+              <div className="pub-drawer-meta-grid">
+                <div className="pub-drawer-meta-item">
+                  <span className="pub-drawer-meta-label">Vencimento</span>
+                  <span className={`pub-drawer-meta-val${selectedDeadline.riskTone === 'danger' ? ' pub-drawer-meta-val--alert' : ''}`}>
+                    {formatDate(selectedDeadline.dueDate)}
+                  </span>
                 </div>
-              </section>
-
-              <dl className="deadline-detail-grid">
-                <div><dt>Vencimento</dt><dd>{formatDate(selectedDeadline.dueDate)}</dd></div>
-                <div><dt>Processo</dt><dd>{selectedDeadline.processLabel}</dd></div>
-                <div><dt>Cliente</dt><dd>{selectedDeadline.client}</dd></div>
-                <div><dt>Responsavel</dt><dd>{selectedDeadline.owner}</dd></div>
-                <div><dt>Origem</dt><dd>{getOriginLabel(selectedDeadline.origin)}</dd></div>
-                <div><dt>Area</dt><dd>{selectedDeadline.area}</dd></div>
-              </dl>
-
-              <section className="deadline-history-card">
-                <h4>Contexto de automacao e publicacao</h4>
-                <p>{selectedDeadline.automationContext.summary}</p>
-                <div className="deadline-drawer-links">
-                  <button className="btn-linklike" onClick={() => navigate(selectedDeadline.automationContext.linkedPath)}>
-                    <ExternalLink size={14} aria-hidden="true" />
-                    {selectedDeadline.automationContext.actionLabel}
-                  </button>
-                  {selectedDeadline.origin === 'publicacao' && (
-                    <button className="btn-linklike" onClick={() => navigate(`/triagem?processId=${selectedDeadline.processId}`)}>
-                      <ExternalLink size={14} aria-hidden="true" />
-                      Abrir triagem
-                    </button>
-                  )}
+                <div className="pub-drawer-meta-item">
+                  <span className="pub-drawer-meta-label">Responsável</span>
+                  <span className="pub-drawer-meta-val">{selectedDeadline.owner}</span>
                 </div>
-              </section>
-
-              <section className="deadline-history-card">
-                <h4>Agenda operacional</h4>
-                <p>{selectedDeadline.agendaSyncState.message}</p>
-                <p>Janela sugerida: {selectedDeadline.agendaDraft.startTime} - {selectedDeadline.agendaDraft.endTime} em {formatDate(selectedDeadline.agendaDraft.date)}.</p>
-                <ul className="deadline-contract-list">
-                  {selectedDeadline.agendaSyncState.expectedContract.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              </section>
-
-              <section className="deadline-checklist-card">
-                <header>
-                  <h4>Checklist operacional</h4>
-                </header>
-                <label><input type="checkbox" /> Validar anexos obrigatorios</label>
-                <label><input type="checkbox" /> Registrar protocolo</label>
-                <label><input type="checkbox" /> Atualizar andamento do processo</label>
-              </section>
-
-              <section className="deadline-history-card">
-                <h4>Auditoria de conclusao</h4>
-                {selectedDeadline.completionAudit ? (
-                  <>
-                    <p>Motivo: {selectedDeadline.completionAudit.reason}</p>
-                    <p>Responsavel: {selectedDeadline.completionAudit.completedBy}</p>
-                    <p>Quando: {formatDateTime(selectedDeadline.completionAudit.completedAt)}</p>
-                    {selectedDeadline.completionAudit.notes && <p>Notas: {selectedDeadline.completionAudit.notes}</p>}
-                    {!selectedDeadline.completionAudit.persisted && <p>Contrato esperado: persistir `completedBy`, `reason`, `notes` e `completionMode` no backend.</p>}
-                  </>
-                ) : (
-                  <p>Nenhuma trilha de conclusao disponivel para este prazo.</p>
-                )}
-              </section>
-
-              <section className="deadline-notes-card">
-                <h4>Observacoes</h4>
-                <p>{selectedDeadline.notes || 'Sem observacoes registradas.'}</p>
-              </section>
-
-              <div className="deadline-drawer-links">
-                <button className="btn-linklike" onClick={() => navigate(`/processos/${selectedDeadline.processId}`)}>
-                  <ExternalLink size={14} aria-hidden="true" />
-                  Abrir processo
-                </button>
-                <button className="btn-linklike" onClick={() => navigate('/tarefas')}>
-                  <FileText size={14} aria-hidden="true" />
-                  Criar tarefa
-                </button>
+                <div className="pub-drawer-meta-item">
+                  <span className="pub-drawer-meta-label">Cliente</span>
+                  <span className="pub-drawer-meta-val">{selectedDeadline.client}</span>
+                </div>
+                <div className="pub-drawer-meta-item">
+                  <span className="pub-drawer-meta-label">Área</span>
+                  <span className="pub-drawer-meta-val">{selectedDeadline.area || '—'}</span>
+                </div>
+                <div className="pub-drawer-meta-item">
+                  <span className="pub-drawer-meta-label">Origem</span>
+                  <span className="pub-drawer-meta-val">{getOriginLabel(selectedDeadline.origin)}</span>
+                </div>
+                <div className="pub-drawer-meta-item">
+                  <span className="pub-drawer-meta-label">Agenda</span>
+                  <span className={`pub-drawer-meta-val${selectedDeadline.agendaSyncState.status === 'synced' ? '' : ''}`}>
+                    {selectedDeadline.agendaSyncState.status === 'synced' ? '✓ Sincronizado' : 'Pendente'}
+                  </span>
+                </div>
               </div>
 
-              <div className="deadline-drawer-actions sticky">
-                <button className="btn-primary" onClick={() => void concludeDeadline(selectedDeadline, 'Conclusao via drawer', 'Concluido a partir do detalhe rapido.', 'single')} disabled={selectedDeadline.status === 'concluido'}>
-                  <CheckCircle2 size={15} aria-hidden="true" />
-                  Concluir prazo
-                </button>
-                <button className="btn-secondary" onClick={() => void syncToAgenda(selectedDeadline)}>
-                  <CalendarDays size={15} aria-hidden="true" />
-                  Enviar para agenda
-                </button>
-                <button className="btn-secondary" onClick={() => navigate(selectedDeadline.automationContext.linkedPath)}>
-                  <ExternalLink size={15} aria-hidden="true" />
-                  Abrir contexto
+              {/* Contexto de automação */}
+              <div className="pub-drawer-section">
+                <span className="pub-drawer-section-eyebrow">Contexto de automação</span>
+                <p className="pub-drawer-resumo-text">{selectedDeadline.automationContext.summary}</p>
+                {selectedDeadline.origin === 'publicacao' && (
+                  <button className="btn-linklike" onClick={() => navigate(`/triagem?processId=${selectedDeadline.processId}`)}>
+                    <ExternalLink size={13} aria-hidden="true" /> Abrir triagem
+                  </button>
+                )}
+              </div>
+
+              {/* Agenda operacional */}
+              <div className="pub-drawer-section">
+                <span className="pub-drawer-section-eyebrow">Agenda operacional</span>
+                <p className="pub-drawer-resumo-text">{selectedDeadline.agendaSyncState.message}</p>
+                <p className="dl-drawer-agenda-window">
+                  Janela sugerida: {selectedDeadline.agendaDraft.startTime} – {selectedDeadline.agendaDraft.endTime} em {formatDate(selectedDeadline.agendaDraft.date)}
+                </p>
+              </div>
+
+              {/* Checklist */}
+              <div className="pub-drawer-section">
+                <span className="pub-drawer-section-eyebrow">Checklist operacional</span>
+                <div className="dl-checklist">
+                  <label className="dl-check-item"><input type="checkbox" /> <span>Validar anexos obrigatórios</span></label>
+                  <label className="dl-check-item"><input type="checkbox" /> <span>Registrar protocolo</span></label>
+                  <label className="dl-check-item"><input type="checkbox" /> <span>Atualizar andamento do processo</span></label>
+                </div>
+              </div>
+
+              {/* Auditoria */}
+              <div className="pub-drawer-section">
+                <span className="pub-drawer-section-eyebrow">Auditoria de conclusão</span>
+                {selectedDeadline.completionAudit ? (
+                  <div className="pub-drawer-meta-grid">
+                    <div className="pub-drawer-meta-item">
+                      <span className="pub-drawer-meta-label">Motivo</span>
+                      <span className="pub-drawer-meta-val">{selectedDeadline.completionAudit.reason}</span>
+                    </div>
+                    <div className="pub-drawer-meta-item">
+                      <span className="pub-drawer-meta-label">Responsável</span>
+                      <span className="pub-drawer-meta-val">{selectedDeadline.completionAudit.completedBy}</span>
+                    </div>
+                    <div className="pub-drawer-meta-item pub-drawer-meta-item--full">
+                      <span className="pub-drawer-meta-label">Quando</span>
+                      <span className="pub-drawer-meta-val">{formatDateTime(selectedDeadline.completionAudit.completedAt)}</span>
+                    </div>
+                    {selectedDeadline.completionAudit.notes && (
+                      <div className="pub-drawer-meta-item pub-drawer-meta-item--full">
+                        <span className="pub-drawer-meta-label">Notas</span>
+                        <span className="pub-drawer-meta-val">{selectedDeadline.completionAudit.notes}</span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="dl-drawer-empty-text">Nenhuma trilha de conclusão disponível para este prazo.</p>
+                )}
+              </div>
+
+              {/* Observações */}
+              {selectedDeadline.notes && (
+                <div className="pub-drawer-section">
+                  <span className="pub-drawer-section-eyebrow">Observações</span>
+                  <p className="pub-drawer-resumo-text">{selectedDeadline.notes}</p>
+                </div>
+              )}
+
+              {/* Link criar tarefa */}
+              <div className="dl-drawer-link-row">
+                <button className="btn-linklike" onClick={() => navigate('/tarefas')}>
+                  <FileText size={13} aria-hidden="true" /> Criar tarefa vinculada
                 </button>
               </div>
             </div>

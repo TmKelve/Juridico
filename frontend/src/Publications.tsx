@@ -31,10 +31,12 @@ import {
 import { OriginBadgeRow } from './components/audit/OriginBadgeRow';
 import { buildFallbackOriginReference } from './components/audit/origin-model';
 import { loadOriginBundle } from './components/audit/loadOriginBundle';
-import { PublicationSignalSplitPanel } from './components/publications/PublicationSignalSplitPanel';
+import { OriginInsightPanel } from './components/audit/OriginInsightPanel';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import { ProcessCombobox } from './ProcessCombobox';
 import { Button, Input, Textarea } from './components/ui';
+import './Dashboard.css';
+import './Processes.css';
 import './Publications.css';
 
 interface PublicationsProps {
@@ -121,6 +123,26 @@ function isWithinDays(iso: string, days: number) {
   return diff >= 0 && diff <= days;
 }
 
+function readCaptureSourceUrl(capture: ApiPublicationCapture | null) {
+  if (!capture?.metadata || typeof capture.metadata !== 'object') return null;
+
+  const metadata = capture.metadata as Record<string, unknown>;
+  const candidates = [
+    metadata.sourceUrl,
+    metadata.publicationUrl,
+    metadata.url,
+    metadata.link,
+  ];
+
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
 // ─── sub-components ────────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: PubStatus }) {
@@ -161,11 +183,13 @@ export function Publications({ user }: PublicationsProps) {
   const [success, setSuccess]           = useState('');
 
   const [filters, setFilters]           = useState<PubFilters>(EMPTY_FILTERS);
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
   const [viewMode, setViewMode]         = useState<ViewMode>('lista');
   const [sortBy, setSortBy]             = useState<SortField>('data');
   const [sortDesc, setSortDesc]         = useState(true);
   const [page, setPage]                 = useState(1);
   const [selected, setSelected]         = useState<PublicationItem | null>(null);
+  const [drawerOpen, setDrawerOpen]     = useState(false);
   const [openMenuId, setOpenMenuId]     = useState<number | null>(null);
   const [obsInput, setObsInput]         = useState('');
   const [originLoading, setOriginLoading] = useState(false);
@@ -272,6 +296,17 @@ export function Publications({ user }: PublicationsProps) {
 
   function clearFilters() { setFilters(EMPTY_FILTERS); setSuccess('Filtros limpos.'); }
   function saveFilters()  { localStorage.setItem('lexora_pub_filter', JSON.stringify(filters)); setSuccess('Filtro salvo.'); }
+
+  function applyQuickPreset(key: 'nova' | 'critico' | 'exigeAcao' | 'naoLida' | 'semTrat') {
+    setFilters(() => {
+      if (key === 'nova')      return { ...EMPTY_FILTERS, status: 'nova' };
+      if (key === 'critico')   return { ...EMPTY_FILTERS, impacto: 'critico' };
+      if (key === 'exigeAcao') return { ...EMPTY_FILTERS, exigeAcao: true };
+      if (key === 'naoLida')   return { ...EMPTY_FILTERS, naoLida: true };
+      if (key === 'semTrat')   return { ...EMPTY_FILTERS, status: 'nova' }; // sem tratamento ≈ nova
+      return EMPTY_FILTERS;
+    });
+  }
 
   async function refreshSelected(id: number) {
     const latest = await api.getPublication(id);
@@ -439,6 +474,7 @@ export function Publications({ user }: PublicationsProps) {
     if (!focused) return;
     setSelected(focused);
     setObsInput(focused.observacoes);
+    setDrawerOpen(false);
   }, [location.search, publications]);
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / PER_PAGE));
@@ -459,6 +495,7 @@ export function Publications({ user }: PublicationsProps) {
         })
       : null
   ), [selected]);
+  const selectedCaptureSourceUrl = useMemo(() => readCaptureSourceUrl(originCapture), [originCapture]);
 
   // timeline grouping by date
   const byDate = useMemo(() => {
@@ -475,54 +512,51 @@ export function Publications({ user }: PublicationsProps) {
   function renderRow(item: PublicationItem) {
     const isOpen = openMenuId === item.id;
     return (
-      <tr
+      <div
         key={item.id}
-        className={`pub-table-row${!item.lida ? ' pub-table-row--unread' : ''}${item.impacto === 'critico' ? ' pub-table-row--critico' : ''}`}
-        onClick={() => { setSelected(item); setObsInput(item.observacoes); }}
+        role="row"
+        className={`pub-row${!item.lida ? ' pub-row--unread' : ''}${item.impacto === 'critico' ? ' pub-row--critico' : ''}${selected?.id === item.id ? ' pub-row--selected' : ''}`}
+        data-tipo={item.tipo}
+        onClick={() => { setSelected(item); setObsInput(item.observacoes); setDrawerOpen(true); }}
         tabIndex={0}
         aria-label={`Publicação ${TIPO_LABEL[item.tipo]} — ${item.processLabel} — ${item.client}`}
-        onKeyDown={(e) => e.key === 'Enter' && setSelected(item)}
+        onKeyDown={(e) => e.key === 'Enter' && (setSelected(item), setObsInput(item.observacoes), setDrawerOpen(true))}
       >
-        <td className="pub-td-pub">
-          <TipoChip tipo={item.tipo} />
-          <span className="pub-resumo-preview">{item.resumo}</span>
-          <OriginBadgeRow
-            originReference={buildFallbackOriginReference({
-              source: item.origem,
-              originReference: item.originReference ?? null,
-              correlationId: item.correlationId ?? null,
-              captureId: item.captureId ?? null,
-              publicationId: item.id,
-              eventId: item.eventId ?? null,
-              originStage: item.originStage ?? null,
-              pipelineStatus: item.pipelineStatus ?? null,
-              consolidationStatus: item.consolidationStatus ?? null,
-            })}
-            originStage={item.originStage}
-            pipelineStatus={item.pipelineStatus}
-            consolidationStatus={item.consolidationStatus}
-            compact
-          />
-          {!item.lida && <span className="pub-unread-dot" aria-label="Não lida" />}
-        </td>
-        <td className="pub-td-process">
-          <span className="pub-proc-label">{item.processLabel}</span>
-          <span className="pub-proc-title">{item.processTitle}</span>
-        </td>
-        <td className="pub-td-client">{item.client}</td>
-        <td className="pub-td-tribunal">
-          <span className="pub-tribunal-chip">{item.tribunal}</span>
-        </td>
-        <td className="pub-td-data">{formatDate(item.dataPublicacao)}</td>
-        <td><StatusBadge status={item.status} /></td>
-        <td><ImpactoBadge impacto={item.impacto} /></td>
-        <td className="pub-td-prazo">
-          {item.prazoDerivedoLabel
-            ? <span className="pub-prazo-chip"><Clock size={11} aria-hidden="true" />{item.prazoDerivedoLabel}</span>
-            : <span className="pub-none">—</span>
-          }
-        </td>
-        <td className="pub-td-actions" onClick={(e) => e.stopPropagation()}>
+        {/* O QUÊ — tipo + resumo */}
+        <div className="pub-row-left">
+          <div className="pub-row-left-top">
+            <TipoChip tipo={item.tipo} />
+            {!item.lida && <span className="pub-unread-dot" aria-label="Não lida" />}
+          </div>
+          <p className="pub-row-resumo">{item.resumo}</p>
+        </div>
+
+        {/* ONDE — processo + cliente */}
+        <div className="pub-row-mid">
+          <span className="pub-row-proc-label">{item.processLabel}</span>
+          <span className="pub-row-proc-title">{item.processTitle}</span>
+          <span className="pub-row-client">{item.client}</span>
+        </div>
+
+        {/* METADADOS — tribunal · data · status · impacto · prazo */}
+        <div className="pub-row-right">
+          <div className="pub-row-meta-top">
+            <span className="pub-tribunal-chip">{item.tribunal}</span>
+            <span className="pub-row-date">{formatDate(item.dataPublicacao)}</span>
+          </div>
+          <div className="pub-row-meta-bottom">
+            <StatusBadge status={item.status} />
+            <ImpactoBadge impacto={item.impacto} />
+            {item.prazoDerivedoLabel && (
+              <span className="pub-prazo-chip">
+                <Clock size={10} aria-hidden="true" />{item.prazoDerivedoLabel}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* AÇÕES */}
+        <div className="pub-row-actions" onClick={(e) => e.stopPropagation()}>
           <div className="pub-menu-wrap">
             <button
               className="pub-menu-trigger"
@@ -536,8 +570,8 @@ export function Publications({ user }: PublicationsProps) {
             {isOpen && (
               <ul className="pub-ctx-menu" role="menu">
                 <li role="none">
-                  <button role="menuitem" onClick={() => { setSelected(item); setObsInput(item.observacoes); setOpenMenuId(null); }}>
-                    <BookOpen size={13} /> Ver detalhe
+                  <button role="menuitem" onClick={() => { setSelected(item); setObsInput(item.observacoes); setDrawerOpen(true); setOpenMenuId(null); }}>
+                    <BookOpen size={13} /> Ver detalhe completo
                   </button>
                 </li>
                 <li role="none">
@@ -568,8 +602,8 @@ export function Publications({ user }: PublicationsProps) {
               </ul>
             )}
           </div>
-        </td>
-      </tr>
+        </div>
+      </div>
     );
   }
 
@@ -578,34 +612,54 @@ export function Publications({ user }: PublicationsProps) {
   return (
     <div className="publications-page" onClick={() => { if (openMenuId) setOpenMenuId(null); }}>
 
-      {/* ── Header ──────────────────────────────────────────────── */}
-      <div className="pub-header-card">
-        <div>
-          <p className="pub-eyebrow">Monitoramento Judicial</p>
-          <h2>Publicações e Intimações</h2>
-          <p className="pub-subtitle">
-            Monitore novas publicações, identifique impacto e transforme cada intimação em ação jurídica com rastreabilidade.
-          </p>
+      {/* ── Hero header ─────────────────────────────────────────── */}
+      <header className="pub-hero" aria-label="Cabeçalho de publicações">
+        <div className="pub-hero-copy">
+          <p className="pub-hero-eyebrow">Monitoramento Judicial</p>
+          <h1 className="pub-hero-title">Publicações</h1>
+          <p className="pub-hero-subtitle">Intimações e publicações judiciais consolidadas — identifique impacto e derive prazos com rastreabilidade.</p>
+          <div className="pub-hero-chips" aria-label="Pulso do monitoramento">
+            {!loading && kpis.novas > 0 && (
+              <div className="pub-hero-chip" data-tone="brand">
+                <strong>{kpis.novas}</strong><span>Novas</span>
+              </div>
+            )}
+            {!loading && kpis.exigem > 0 && (
+              <div className="pub-hero-chip" data-tone="warning">
+                <strong>{kpis.exigem}</strong><span>Exigem ação</span>
+              </div>
+            )}
+            {!loading && kpis.criticas > 0 && (
+              <div className="pub-hero-chip" data-tone="critical">
+                <strong>{kpis.criticas}</strong><span>Críticas</span>
+              </div>
+            )}
+            <div className="pub-hero-pulse" data-tone={kpis.criticas > 0 ? 'critical' : kpis.exigem > 0 ? 'warning' : 'ok'}>
+              <span className="pub-hero-pulse-dot" aria-hidden="true" />
+              <span>{kpis.criticas > 0 ? 'Atenção crítica' : kpis.exigem > 0 ? 'Requer atenção' : 'Em dia'}</span>
+            </div>
+          </div>
         </div>
-        <div className="pub-header-actions">
-          <Button onClick={loadData} aria-label="Atualizar publicações">
-            <RefreshCw size={14} /> Atualizar
-          </Button>
-          <Button variant="outline" onClick={() => navigate('/triagem')} aria-label="Abrir fila de triagem">
-            <ShieldCheck size={14} /> Abrir triagem
-          </Button>
-          <Button
-            variant="outline"
+        <div className="pub-hero-actions">
+          <button type="button" className="btn-primary" onClick={loadData} aria-label="Atualizar publicações">
+            <RefreshCw size={15} aria-hidden="true" /> Atualizar
+          </button>
+          <button type="button" className="btn-secondary" onClick={() => navigate('/triagem')} aria-label="Abrir fila de triagem">
+            <ShieldCheck size={15} aria-hidden="true" /> Triagem
+          </button>
+          <button
+            type="button"
+            className="btn-secondary"
             onClick={() => { if (selected) convertToPrazo(selected.id); else setSuccess('Selecione uma publicação primeiro.'); }}
             aria-label="Criar prazo a partir da publicação selecionada"
           >
-            <Plus size={14} /> Criar Prazo
-          </Button>
-          <Button variant="outline" onClick={() => exportCsv(sorted)} aria-label="Exportar publicações como CSV">
-            <Download size={14} /> Exportar
-          </Button>
+            <Plus size={15} aria-hidden="true" /> Criar prazo
+          </button>
+          <button type="button" className="btn-secondary" onClick={() => exportCsv(sorted)} aria-label="Exportar publicações como CSV">
+            <Download size={15} aria-hidden="true" /> Exportar
+          </button>
         </div>
-      </div>
+      </header>
 
       {/* ── Alerts ──────────────────────────────────────────────── */}
       {error && (
@@ -622,166 +676,212 @@ export function Publications({ user }: PublicationsProps) {
       )}
 
       {/* ── KPIs ────────────────────────────────────────────────── */}
-      <div className="pub-kpis" aria-label="Indicadores de publicações">
-        <div className="pub-kpi-card">
-          <p>Novas publicações</p>
-          <strong>{loading ? '—' : kpis.novas}</strong>
-        </div>
-        <div className="pub-kpi-card pub-kpi-card--warning">
-          <p>Exigem ação</p>
-          <strong>{loading ? '—' : kpis.exigem}</strong>
-        </div>
-        <div className="pub-kpi-card pub-kpi-card--danger">
-          <p>Sem tratamento</p>
-          <strong>{loading ? '—' : kpis.semTrat}</strong>
-        </div>
-        <div className="pub-kpi-card pub-kpi-card--success">
-          <p>Convertidas em prazo</p>
-          <strong>{loading ? '—' : kpis.prazo}</strong>
-        </div>
-        <div className="pub-kpi-card pub-kpi-card--critico">
-          <p>Críticas</p>
-          <strong>{loading ? '—' : kpis.criticas}</strong>
-        </div>
-      </div>
+      <section className="pub-kpis" aria-label="Indicadores de publicações">
+        <button type="button" className="metric-card" data-kpi-color="primary"
+          onClick={() => applyQuickPreset('nova')}
+          aria-label={`Novas publicações: ${kpis.novas}`}
+        >
+          <div className="metric-top-row">
+            <p className="metric-value">{loading ? '—' : kpis.novas}</p>
+            <div className="metric-icon" aria-hidden="true"><Bell size={16} /></div>
+          </div>
+          <p className="metric-label">Novas publicações</p>
+          <p className="metric-microtext">Ainda não lidas ou tratadas</p>
+        </button>
+        <button type="button" className="metric-card" data-kpi-color="warning"
+          onClick={() => applyQuickPreset('exigeAcao')}
+          aria-label={`Exigem ação: ${kpis.exigem}`}
+        >
+          <div className="metric-top-row">
+            <p className="metric-value">{loading ? '—' : kpis.exigem}</p>
+            <div className="metric-icon" aria-hidden="true"><AlertTriangle size={16} /></div>
+          </div>
+          <p className="metric-label">Exigem ação</p>
+          <p className="metric-microtext">Requerem providência imediata</p>
+        </button>
+        <button type="button" className="metric-card" data-kpi-color="error"
+          onClick={() => applyQuickPreset('semTrat')}
+          aria-label={`Sem tratamento: ${kpis.semTrat}`}
+        >
+          <div className="metric-top-row">
+            <p className="metric-value">{loading ? '—' : kpis.semTrat}</p>
+            <div className="metric-icon" aria-hidden="true"><Clock size={16} /></div>
+          </div>
+          <p className="metric-label">Sem tratamento</p>
+          <p className="metric-microtext">Novas ou lidas sem resolução</p>
+        </button>
+        <button type="button" className="metric-card" data-kpi-color="success"
+          onClick={() => setFilters((f) => ({ ...f, convertidaEmPrazo: true }))}
+          aria-label={`Convertidas em prazo: ${kpis.prazo}`}
+        >
+          <div className="metric-top-row">
+            <p className="metric-value">{loading ? '—' : kpis.prazo}</p>
+            <div className="metric-icon" aria-hidden="true"><CheckCircle2 size={16} /></div>
+          </div>
+          <p className="metric-label">Convertidas em prazo</p>
+          <p className="metric-microtext">Prazo derivado registrado</p>
+        </button>
+        <button type="button" className="metric-card" data-kpi-color="error"
+          onClick={() => applyQuickPreset('critico')}
+          aria-label={`Críticas: ${kpis.criticas}`}
+        >
+          <div className="metric-top-row">
+            <p className="metric-value">{loading ? '—' : kpis.criticas}</p>
+            <div className="metric-icon" aria-hidden="true"><ShieldCheck size={16} /></div>
+          </div>
+          <p className="metric-label">Críticas</p>
+          <p className="metric-microtext">Impacto crítico identificado</p>
+        </button>
+      </section>
 
       {/* ── Filters ─────────────────────────────────────────────── */}
-      <div className="pub-filters">
-        <div className="pub-filters-top">
-          <div className="pub-field pub-field--search">
-            <label htmlFor="pub-search" className="sr-only">Buscar publicação</label>
-            <span className="pub-input-wrap">
+      <section
+        className={`my-processes-filters${filtersExpanded ? '' : ' is-compact'}`}
+        aria-label="Busca e filtros de publicações"
+      >
+        {/* Cabeçalho do painel */}
+        <div className="filters-head">
+          <div>
+            <p className="filters-eyebrow">Refinar publicações</p>
+            <h3>Filtros operacionais</h3>
+          </div>
+          <div className="filters-head-meta">
+            {hasActiveFilters && <span className="filters-active-pill">Filtros ativos</span>}
+            <span className="filters-total-pill">{filtered.length} em exibição</span>
+            <div className="pub-view-toggle" role="group" aria-label="Modo de visualização">
+              {(['lista', 'timeline'] as ViewMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={`pub-view-btn${viewMode === mode ? ' pub-view-btn--active' : ''}`}
+                  onClick={() => setViewMode(mode)}
+                  aria-pressed={viewMode === mode}
+                >
+                  {mode === 'lista' ? 'Lista' : 'Timeline'}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="btn-ghost btn-filter-density"
+              onClick={() => setFiltersExpanded((v) => !v)}
+              aria-expanded={filtersExpanded}
+            >
+              <Filter size={14} aria-hidden="true" />
+              {filtersExpanded ? 'Menos filtros' : 'Mais filtros'}
+            </button>
+          </div>
+        </div>
+
+        {/* Preset chips */}
+        <div className="filter-presets" role="toolbar" aria-label="Presets de filtros rápidos">
+          <button type="button" className="filter-preset-btn" onClick={() => applyQuickPreset('nova')}>Novas</button>
+          <button type="button" className="filter-preset-btn" onClick={() => applyQuickPreset('critico')}>Críticas</button>
+          <button type="button" className="filter-preset-btn" onClick={() => applyQuickPreset('exigeAcao')}>Exigem ação</button>
+          <button type="button" className="filter-preset-btn" onClick={() => applyQuickPreset('naoLida')}>Não lidas</button>
+          <button type="button" className="filter-preset-btn" onClick={() => updateFilter('period', 'hoje')}>Hoje</button>
+        </div>
+
+        {/* Linha principal */}
+        <div className="filters-top-row filter-row-card">
+          <label htmlFor="pub-search" className="filter-field filter-field-search filter-cascade-item">
+            <span>Busca</span>
+            <div className="filter-input-wrap">
               <Search size={14} aria-hidden="true" />
-              <Input
+              <input
                 id="pub-search"
                 type="search"
-                placeholder="Buscar por processo, cliente, tribunal, conteúdo ou origem…"
+                placeholder="Processo, cliente, tribunal, conteúdo…"
                 value={filters.query}
                 onChange={(e) => updateFilter('query', e.target.value)}
+                aria-label="Buscar publicação"
               />
-            </span>
-          </div>
-
-          <div className="pub-field">
-            <label htmlFor="pub-period">Período</label>
-            <select id="pub-period" value={filters.period} onChange={(e) => updateFilter('period', e.target.value)}>
-              <option value="">Todos</option>
-              <option value="hoje">Hoje</option>
-              <option value="semana">Esta semana</option>
-              <option value="mes">Este mês</option>
-            </select>
-          </div>
-
-          <div className="pub-field">
-            <label htmlFor="pub-status">Status</label>
+            </div>
+          </label>
+          <label htmlFor="pub-status" className="filter-field filter-cascade-item">
+            <span>Status</span>
             <select id="pub-status" value={filters.status} onChange={(e) => updateFilter('status', e.target.value)}>
               <option value="">Todos</option>
               {(Object.entries(STATUS_CFG) as [PubStatus, { label: string }][]).map(([k, v]) =>
                 <option key={k} value={k}>{v.label}</option>
               )}
             </select>
-          </div>
-
-          <div className="pub-field">
-            <label htmlFor="pub-process">Processo</label>
-            <ProcessCombobox id="pub-process" value={filters.process} onChange={(value) => updateFilter('process', value)} options={processOptions} placeholder="Buscar processo" emptyLabel="Todos" />
-          </div>
-
-          <div className="pub-field">
-            <label htmlFor="pub-client">Cliente</label>
-            <select id="pub-client" value={filters.client} onChange={(e) => updateFilter('client', e.target.value)}>
-              <option value="">Todos</option>
-              {uniqueClients.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-
-          <div className="pub-field">
-            <label htmlFor="pub-tribunal">Tribunal</label>
-            <select id="pub-tribunal" value={filters.tribunal} onChange={(e) => updateFilter('tribunal', e.target.value)}>
-              <option value="">Todos</option>
-              {uniqueTribunais.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </div>
-
-          <div className="pub-field">
-            <label htmlFor="pub-tipo">Tipo</label>
-            <select id="pub-tipo" value={filters.tipo} onChange={(e) => updateFilter('tipo', e.target.value)}>
-              <option value="">Todos</option>
-              {(Object.entries(TIPO_LABEL) as [PubTipo, string][]).map(([k, v]) =>
-                <option key={k} value={k}>{v}</option>
-              )}
-            </select>
-          </div>
-
-          <div className="pub-field">
-            <label htmlFor="pub-impacto">Impacto</label>
+          </label>
+          <label htmlFor="pub-impacto" className="filter-field filter-cascade-item">
+            <span>Impacto</span>
             <select id="pub-impacto" value={filters.impacto} onChange={(e) => updateFilter('impacto', e.target.value)}>
               <option value="">Todos</option>
               {(Object.entries(IMPACTO_CFG) as [PubImpacto, { label: string }][]).map(([k, v]) =>
                 <option key={k} value={k}>{v.label}</option>
               )}
             </select>
-          </div>
+          </label>
+          <label htmlFor="pub-period" className="filter-field filter-cascade-item">
+            <span>Período</span>
+            <select id="pub-period" value={filters.period} onChange={(e) => updateFilter('period', e.target.value)}>
+              <option value="">Todos</option>
+              <option value="hoje">Hoje</option>
+              <option value="semana">Esta semana</option>
+              <option value="mes">Este mês</option>
+            </select>
+          </label>
         </div>
 
-        <div className="pub-filters-bottom">
-          <label className="pub-checkline">
-            <input
-              type="checkbox"
-              checked={filters.exigeAcao}
-              onChange={(e) => updateFilter('exigeAcao', e.target.checked)}
-              aria-label="Mostrar apenas publicações que exigem ação"
-            />
-            Exige ação
-          </label>
-          <label className="pub-checkline">
-            <input
-              type="checkbox"
-              checked={filters.convertidaEmPrazo}
-              onChange={(e) => updateFilter('convertidaEmPrazo', e.target.checked)}
-              aria-label="Mostrar apenas publicações convertidas em prazo"
-            />
-            Convertida em prazo
-          </label>
-          <label className="pub-checkline">
-            <input
-              type="checkbox"
-              checked={filters.naoLida}
-              onChange={(e) => updateFilter('naoLida', e.target.checked)}
-              aria-label="Mostrar apenas publicações não lidas"
-            />
-            Não lida
-          </label>
-
-          <div className="pub-filter-actions">
-            {hasActiveFilters && (
-              <span className="pub-filter-summary">
-                <Filter size={12} />
-                <strong>{filtered.length}</strong> de {publications.length}
-              </span>
-            )}
-            <Button variant="ghost" onClick={clearFilters} aria-label="Limpar todos os filtros">
-              <X size={13} /> Limpar
-            </Button>
-            <Button variant="ghost" onClick={saveFilters} aria-label="Salvar filtro atual">
-              <Save size={13} /> Salvar filtro
-            </Button>
-          </div>
-
-          <div className="pub-view-toggle" role="group" aria-label="Modo de visualização">
-            {(['lista', 'timeline'] as ViewMode[]).map((mode) => (
-              <button
-                key={mode}
-                className={`pub-view-btn${viewMode === mode ? ' pub-view-btn--active' : ''}`}
-                onClick={() => setViewMode(mode)}
-                aria-pressed={viewMode === mode}
-              >
-                {mode === 'lista' ? 'Lista' : 'Timeline'}
+        {/* Filtros avançados (expansíveis) */}
+        {filtersExpanded && (
+          <div className="filters-bottom-row filter-row-card">
+            <label htmlFor="pub-process" className="filter-field filter-cascade-item" style={{ gridColumn: 'span 4' }}>
+              <span>Processo</span>
+              <ProcessCombobox id="pub-process" value={filters.process} onChange={(value) => updateFilter('process', value)} options={processOptions} placeholder="Buscar processo" emptyLabel="Todos" />
+            </label>
+            <label htmlFor="pub-client" className="filter-field filter-cascade-item">
+              <span>Cliente</span>
+              <select id="pub-client" value={filters.client} onChange={(e) => updateFilter('client', e.target.value)}>
+                <option value="">Todos</option>
+                {uniqueClients.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </label>
+            <label htmlFor="pub-tribunal" className="filter-field filter-cascade-item">
+              <span>Tribunal</span>
+              <select id="pub-tribunal" value={filters.tribunal} onChange={(e) => updateFilter('tribunal', e.target.value)}>
+                <option value="">Todos</option>
+                {uniqueTribunais.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </label>
+            <label htmlFor="pub-tipo" className="filter-field filter-cascade-item">
+              <span>Tipo</span>
+              <select id="pub-tipo" value={filters.tipo} onChange={(e) => updateFilter('tipo', e.target.value)}>
+                <option value="">Todos</option>
+                {(Object.entries(TIPO_LABEL) as [PubTipo, string][]).map(([k, v]) =>
+                  <option key={k} value={k}>{v}</option>
+                )}
+              </select>
+            </label>
+            <div className="filter-toggle-group filter-cascade-item" role="group" aria-label="Filtros booleanos" style={{ gridColumn: 'span 4' }}>
+              <label className="filter-toggle-chip">
+                <input type="checkbox" checked={filters.exigeAcao} onChange={(e) => updateFilter('exigeAcao', e.target.checked)} />
+                <span>Exige ação</span>
+              </label>
+              <label className="filter-toggle-chip">
+                <input type="checkbox" checked={filters.convertidaEmPrazo} onChange={(e) => updateFilter('convertidaEmPrazo', e.target.checked)} />
+                <span>Convertida em prazo</span>
+              </label>
+              <label className="filter-toggle-chip">
+                <input type="checkbox" checked={filters.naoLida} onChange={(e) => updateFilter('naoLida', e.target.checked)} />
+                <span>Não lida</span>
+              </label>
+            </div>
+            <div className="filter-actions filter-cascade-item" style={{ gridColumn: 'span 4' }}>
+              <button type="button" className="btn-ghost btn-filter-clear" onClick={clearFilters}>
+                <Filter size={14} aria-hidden="true" /> Limpar filtros
               </button>
-            ))}
+              <button type="button" className="btn-ghost" onClick={saveFilters}>
+                <Save size={14} aria-hidden="true" /> Salvar filtro
+              </button>
+            </div>
           </div>
-        </div>
-      </div>
+        )}
+      </section>
 
       {/* ── Loading ──────────────────────────────────────────────── */}
       {loading && (
@@ -818,8 +918,7 @@ export function Publications({ user }: PublicationsProps) {
 
           {/* ── Lista ───────────────────────────────────────────── */}
           {filtered.length > 0 && viewMode === 'lista' && (
-            <div className="pub-split-view">
-              <div className="pub-table-card">
+            <div className="pub-table-card">
                 <div className="pub-table-header">
                   <span className="pub-count-badge">
                     {filtered.length} publicaç{filtered.length !== 1 ? 'ões' : 'ão'}
@@ -843,25 +942,17 @@ export function Publications({ user }: PublicationsProps) {
                   </div>
                 </div>
 
-                <div className="pub-table-wrap">
-                  <table className="pub-table" aria-label="Lista de publicações">
-                    <thead>
-                      <tr>
-                        <th scope="col">Publicação</th>
-                        <th scope="col">Processo</th>
-                        <th scope="col">Cliente</th>
-                        <th scope="col">Tribunal / Origem</th>
-                        <th scope="col">Data</th>
-                        <th scope="col">Status</th>
-                        <th scope="col">Impacto</th>
-                        <th scope="col">Prazo derivado</th>
-                        <th scope="col"><span className="sr-only">Ações</span></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {pageItems.map((item) => renderRow(item))}
-                    </tbody>
-                  </table>
+                {/* Cabeçalho da lista */}
+                <div className="pub-list-header" aria-hidden="true">
+                  <span className="pub-list-col-label">Publicação</span>
+                  <span className="pub-list-col-label">Processo / Cliente</span>
+                  <span className="pub-list-col-label">Tribunal · Data · Status · Impacto</span>
+                  <span />
+                </div>
+
+                {/* Lista de itens */}
+                <div className="pub-list" role="list" aria-label="Lista de publicações">
+                  {pageItems.map((item) => renderRow(item))}
                 </div>
 
                 {totalPages > 1 && (
@@ -872,28 +963,6 @@ export function Publications({ user }: PublicationsProps) {
                   </div>
                 )}
               </div>
-
-              <PublicationSignalSplitPanel
-                selected={selected}
-                originReference={selectedOriginReference}
-                capture={originCapture}
-                timeline={originTimeline.length ? originTimeline : (selected?.timeline ?? [])}
-                derivedActions={originActions.length ? originActions : (selected?.derivedActions ?? [])}
-                loading={originLoading}
-                error={originError}
-                onOpenDrawer={() => {
-                  if (selected) {
-                    setSelected(selected);
-                    setObsInput(selected.observacoes);
-                  }
-                }}
-                onRefresh={() => {
-                  if (selected) {
-                    setSelected({ ...selected });
-                  }
-                }}
-              />
-            </div>
           )}
 
           {/* ── Timeline ─────────────────────────────────────────── */}
@@ -911,11 +980,11 @@ export function Publications({ user }: PublicationsProps) {
                       <div
                         key={item.id}
                         className={`pub-timeline-item${item.impacto === 'critico' ? ' pub-timeline-item--critico' : ''}${!item.lida ? ' pub-timeline-item--unread' : ''}`}
-                        onClick={() => { setSelected(item); setObsInput(item.observacoes); }}
+                        onClick={() => { setSelected(item); setObsInput(item.observacoes); setDrawerOpen(true); }}
                         tabIndex={0}
                         role="button"
                         aria-label={`${TIPO_LABEL[item.tipo]} — ${item.processLabel} — ${item.client}`}
-                        onKeyDown={(e) => e.key === 'Enter' && setSelected(item)}
+                        onKeyDown={(e) => e.key === 'Enter' && (setSelected(item), setObsInput(item.observacoes), setDrawerOpen(true))}
                       >
                         <div className={`pub-timeline-dot pub-timeline-dot--${IMPACTO_CFG[item.impacto].variant}`} aria-hidden="true" />
                         <div className="pub-timeline-content">
@@ -963,96 +1032,170 @@ export function Publications({ user }: PublicationsProps) {
       )}
 
       {/* ── Drawer ───────────────────────────────────────────────── */}
-      {selected && (
+      {selected && drawerOpen && (
         <>
           <div
             className="pub-drawer-overlay"
-            onClick={() => setSelected(null)}
+            onClick={() => setDrawerOpen(false)}
             aria-hidden="true"
           />
           <aside
             className="pub-drawer pub-drawer--open"
+            data-tipo={selected.tipo}
             role="complementary"
             aria-label={`Detalhe: ${TIPO_LABEL[selected.tipo]} — ${selected.processLabel}`}
           >
-            <div className="pub-drawer-top">
-              <div>
-                <TipoChip tipo={selected.tipo} />
-                <h3>{selected.processLabel} · {selected.processTitle}</h3>
-                <OriginBadgeRow
-                  originReference={selectedOriginReference}
-                  originStage={selected.originStage}
-                  pipelineStatus={selected.pipelineStatus}
-                  consolidationStatus={selected.consolidationStatus}
-                />
+            {/* ── Hero ── */}
+            <div className="pub-drawer-hero">
+              <div className="pub-drawer-hero-content">
+                <div className="pub-drawer-hero-tags">
+                  <TipoChip tipo={selected.tipo} />
+                  {!selected.lida && <span className="pub-drawer-pill pub-drawer-pill--unread">Não lida</span>}
+                  {selected.exigeAcao && <span className="pub-drawer-pill pub-drawer-pill--warn">⚠ Exige ação</span>}
+                  {selected.impacto === 'critico' && <span className="pub-drawer-pill pub-drawer-pill--critico">Crítico</span>}
+                </div>
+                <h2 className="pub-drawer-hero-title">
+                  <span className="pub-drawer-hero-proc">{selected.processLabel}</span>
+                  <span className="pub-drawer-hero-sep" aria-hidden="true">·</span>
+                  <span className="pub-drawer-hero-name">{selected.processTitle}</span>
+                </h2>
+                <p className="pub-drawer-hero-meta">
+                  <span>{selected.client}</span>
+                  <span className="pub-drawer-hero-dot" aria-hidden="true" />
+                  <span>{selected.tribunal}</span>
+                  <span className="pub-drawer-hero-dot" aria-hidden="true" />
+                  <span>{formatDate(selected.dataPublicacao)}</span>
+                </p>
+                <div className="pub-drawer-hero-status">
+                  <StatusBadge status={selected.status} />
+                  <ImpactoBadge impacto={selected.impacto} />
+                  {selected.prazoDerivedoLabel && (
+                    <span className="pub-prazo-chip">
+                      <Clock size={10} aria-hidden="true" />{selected.prazoDerivedoLabel}
+                    </span>
+                  )}
+                </div>
               </div>
-              <button className="pub-close-btn" onClick={() => setSelected(null)} aria-label="Fechar detalhe">
-                <X size={16} />
+              <button
+                className="pub-close-btn"
+                onClick={() => setDrawerOpen(false)}
+                aria-label="Fechar detalhe"
+              >
+                <X size={18} />
               </button>
             </div>
 
+            {/* ── Quick actions ── */}
+            <div className="pub-drawer-quickbar">
+              <button
+                type="button"
+                className={`pub-qbtn${selected.lida ? ' pub-qbtn--done' : ''}`}
+                onClick={() => markRead(selected.id)}
+                disabled={selected.lida}
+                title="Marcar como lida"
+              >
+                <Eye size={14} />
+                <span>{selected.lida ? 'Lida' : 'Marcar lida'}</span>
+              </button>
+              <button
+                type="button"
+                className={`pub-qbtn${selected.status === 'tratada' ? ' pub-qbtn--done' : ''}`}
+                onClick={() => markTratada(selected.id)}
+                disabled={selected.status === 'tratada'}
+                title="Marcar como tratada"
+              >
+                <CheckCircle2 size={14} />
+                <span>{selected.status === 'tratada' ? 'Tratada' : 'Tratar'}</span>
+              </button>
+              <button
+                type="button"
+                className={`pub-qbtn pub-qbtn--primary${selected.convertidaEmPrazo ? ' pub-qbtn--done' : ''}`}
+                onClick={() => convertToPrazo(selected.id)}
+                disabled={selected.convertidaEmPrazo}
+                title="Criar prazo derivado"
+              >
+                <Clock size={14} />
+                <span>{selected.convertidaEmPrazo ? 'Prazo criado' : 'Criar prazo'}</span>
+              </button>
+              <button
+                type="button"
+                className="pub-qbtn"
+                onClick={() => createTask(selected.id)}
+                title="Criar tarefa"
+              >
+                <ClipboardList size={14} />
+                <span>Criar tarefa</span>
+              </button>
+              {/* spacer empurra os links para a direita */}
+              <div className="pub-qbtn-spacer" aria-hidden="true" />
+              <button
+                type="button"
+                className="pub-qbtn pub-qbtn--ghost"
+                onClick={() => { navigate(`/processos/${selected.processId}`); setDrawerOpen(false); }}
+                title={`Abrir processo ${selected.processLabel}`}
+              >
+                <ExternalLink size={14} />
+                <span>Processo</span>
+              </button>
+              {selectedCaptureSourceUrl && (
+                <button
+                  type="button"
+                  className="pub-qbtn pub-qbtn--ghost"
+                  onClick={() => window.open(selectedCaptureSourceUrl, '_blank', 'noopener,noreferrer')}
+                  title="Abrir publicação captada"
+                >
+                  <ExternalLink size={14} />
+                  <span>Publicação</span>
+                </button>
+              )}
+            </div>
+
+            {/* ── Body scrollável ── */}
             <div className="pub-drawer-body">
-              {/* Status + impacto row */}
-              <div className="pub-drawer-row2">
-                <div className="pub-drawer-section">
-                  <span className="pub-drawer-label">Status</span>
-                  <StatusBadge status={selected.status} />
-                </div>
-                <div className="pub-drawer-section">
-                  <span className="pub-drawer-label">Impacto</span>
-                  <ImpactoBadge impacto={selected.impacto} />
-                </div>
-              </div>
 
-              <div className="pub-drawer-row2">
-                <div className="pub-drawer-section">
-                  <span className="pub-drawer-label">Cliente</span>
-                  <span className="pub-drawer-val">{selected.client}</span>
+              {/* Metadata grid */}
+              <div className="pub-drawer-meta-grid">
+                <div className="pub-drawer-meta-item">
+                  <span className="pub-drawer-meta-label">Cliente</span>
+                  <span className="pub-drawer-meta-val">{selected.client}</span>
                 </div>
-                <div className="pub-drawer-section">
-                  <span className="pub-drawer-label">Tribunal / Origem</span>
-                  <span className="pub-drawer-val">{selected.tribunal}</span>
+                <div className="pub-drawer-meta-item">
+                  <span className="pub-drawer-meta-label">Tribunal / Origem</span>
+                  <span className="pub-drawer-meta-val">{selected.tribunal}</span>
                 </div>
-              </div>
-
-              <div className="pub-drawer-row2">
-                <div className="pub-drawer-section">
-                  <span className="pub-drawer-label">Data de publicação</span>
-                  <span className="pub-drawer-val">{formatDate(selected.dataPublicacao)}</span>
+                <div className="pub-drawer-meta-item">
+                  <span className="pub-drawer-meta-label">Data de publicação</span>
+                  <span className="pub-drawer-meta-val">{formatDate(selected.dataPublicacao)}</span>
                 </div>
-                <div className="pub-drawer-section">
-                  <span className="pub-drawer-label">Exige ação</span>
-                  <span className={`pub-drawer-val${selected.exigeAcao ? ' pub-drawer-val--alert' : ''}`}>
-                    {selected.exigeAcao ? '⚠ Sim' : 'Não'}
+                <div className="pub-drawer-meta-item">
+                  <span className="pub-drawer-meta-label">Exige ação</span>
+                  <span className={`pub-drawer-meta-val${selected.exigeAcao ? ' pub-drawer-meta-val--alert' : ''}`}>
+                    {selected.exigeAcao ? '⚠ Sim — requer providência' : 'Não'}
                   </span>
                 </div>
+                <div className="pub-drawer-meta-item pub-drawer-meta-item--full">
+                  <span className="pub-drawer-meta-label">Origem da captura</span>
+                  <span className="pub-drawer-meta-val">{selected.origem}</span>
+                </div>
               </div>
 
+              {/* Resumo */}
               <div className="pub-drawer-section">
-                <span className="pub-drawer-label">Origem</span>
-                <span className="pub-drawer-val">{selected.origem}</span>
+                <span className="pub-drawer-section-eyebrow">Resumo</span>
+                <p className="pub-drawer-resumo-text">{selected.resumo}</p>
               </div>
 
-              <div className="pub-drawer-section">
-                <span className="pub-drawer-label">Resumo</span>
-                <p className="pub-drawer-text">{selected.resumo}</p>
-              </div>
-
-              <div className="pub-drawer-section">
-                <span className="pub-drawer-label">Texto relevante</span>
-                <blockquote className="pub-drawer-quote">{selected.textoRelevante}</blockquote>
-              </div>
-
-              {selected.prazoDerivedoLabel && (
+              {/* Trecho relevante */}
+              {selected.textoRelevante && (
                 <div className="pub-drawer-section">
-                  <span className="pub-drawer-label">Prazo derivado</span>
-                  <span className="pub-prazo-chip"><Clock size={12} aria-hidden="true" />{selected.prazoDerivedoLabel}</span>
+                  <span className="pub-drawer-section-eyebrow">Trecho relevante</span>
+                  <blockquote className="pub-drawer-quote">{selected.textoRelevante}</blockquote>
                 </div>
               )}
 
-              {/* Observations */}
+              {/* Observações */}
               <div className="pub-drawer-section">
-                <span className="pub-drawer-label">Observações</span>
+                <span className="pub-drawer-section-eyebrow">Observações internas</span>
                 <Textarea
                   className="pub-obs-input"
                   rows={3}
@@ -1071,47 +1214,24 @@ export function Publications({ user }: PublicationsProps) {
                   <Save size={13} /> Salvar observação
                 </Button>
               </div>
-            </div>
 
-            <div className="pub-drawer-actions">
-              <Button
-                onClick={() => convertToPrazo(selected.id)}
-                disabled={selected.convertidaEmPrazo}
-                aria-label="Criar prazo a partir desta publicação"
-              >
-                <Clock size={13} /> Criar prazo
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => markTratada(selected.id)}
-                disabled={selected.status === 'tratada'}
-                aria-label="Marcar publicação como tratada"
-              >
-                <CheckCircle2 size={13} /> Marcar tratada
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => markRead(selected.id)}
-                disabled={selected.lida}
-                aria-label="Marcar publicação como lida"
-              >
-                {selected.lida ? <Eye size={13} /> : <EyeOff size={13} />}
-                {selected.lida ? 'Lida' : 'Marcar lida'}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => createTask(selected.id)}
-                aria-label="Criar tarefa a partir desta publicação"
-              >
-                <ClipboardList size={13} /> Criar tarefa
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={() => { navigate(`/processos/${selected.processId}`); setSelected(null); }}
-                aria-label={`Abrir processo ${selected.processLabel}`}
-              >
-                <ExternalLink size={13} /> Abrir processo
-              </Button>
+              {/* Rastreabilidade */}
+              <div className="pub-drawer-origin-section">
+                <OriginInsightPanel
+                  title="Capturas e sinais relacionados"
+                  originReference={selectedOriginReference}
+                  originStage={selected.originStage}
+                  pipelineStatus={selected.pipelineStatus}
+                  consolidationStatus={selected.consolidationStatus}
+                  capture={originCapture}
+                  timeline={originTimeline.length ? originTimeline : (selected.timeline ?? [])}
+                  derivedActions={originActions.length ? originActions : (selected.derivedActions ?? [])}
+                  loading={originLoading}
+                  error={originError}
+                  fallbackEvidenceText={selected.textoRelevante}
+                  summary={selected.resumo}
+                />
+              </div>
             </div>
           </aside>
         </>

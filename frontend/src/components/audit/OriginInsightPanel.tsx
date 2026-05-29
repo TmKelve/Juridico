@@ -8,7 +8,7 @@ import type {
 } from '../../api';
 import { Button } from '../ui';
 import { OriginBadgeRow } from './OriginBadgeRow';
-import { formatOriginLabel } from './origin-model';
+import { buildOriginOperationalSummary, formatOriginLabel } from './origin-model';
 import { PipelineTimeline } from '../timeline/PipelineTimeline';
 
 import './origin-insight.css';
@@ -49,6 +49,15 @@ export function OriginInsightPanel({
   footer = null,
 }: OriginInsightPanelProps) {
   const evidenceText = capture?.evidenceText || capture?.normalizedText || fallbackEvidenceText || summary;
+  const operationalSummary = buildOriginOperationalSummary({
+    originReference,
+    sourceType: originReference?.sourceType || capture?.sourceType || null,
+    pipelineStatus,
+    consolidationStatus,
+  });
+  const publicationUrl = originReference?.publicationUrl;
+  const timelineUrl = originReference?.timelineUrl;
+  const evidenceAvailable = Boolean(capture || originReference?.evidenceUrl);
 
   return (
     <section className="origin-panel">
@@ -66,6 +75,47 @@ export function OriginInsightPanel({
         pipelineStatus={pipelineStatus}
         consolidationStatus={consolidationStatus}
       />
+
+      <div className="origin-panel__decision">
+        <div>
+          <span>Por que este item apareceu aqui</span>
+          <strong>{operationalSummary.headline}</strong>
+          <p>{operationalSummary.detail}</p>
+        </div>
+        <div>
+          <span>O que verificar agora</span>
+          <strong>{operationalSummary.nextStep}</strong>
+          <p>{derivedActions.length > 0 ? `${derivedActions.length} acao(oes) derivada(s) ja registrada(s).` : 'Nenhuma acao derivada persistida ainda para esta origem.'}</p>
+        </div>
+      </div>
+
+      <div className="origin-panel__cta-row">
+        {evidenceAvailable ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (originReference?.evidenceUrl) {
+                window.open(originReference.evidenceUrl, '_blank', 'noopener,noreferrer');
+                return;
+              }
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+          >
+            Ver evidencia da captura
+          </Button>
+        ) : null}
+        {publicationUrl ? (
+          <Button variant="outline" size="sm" onClick={() => { window.open(publicationUrl, '_blank', 'noopener,noreferrer'); }}>
+            Abrir publicacao consolidada
+          </Button>
+        ) : null}
+        {timelineUrl ? (
+          <Button variant="ghost" size="sm" onClick={() => { window.open(timelineUrl, '_blank', 'noopener,noreferrer'); }}>
+            Ver timeline da origem
+          </Button>
+        ) : null}
+      </div>
 
       <div className="origin-panel__grid">
         <div>
@@ -123,7 +173,7 @@ export function OriginInsightPanel({
                 <small>{formatDateTime(item.createdAt)}</small>
                 {item.url ? (
                   <div className="origin-action-card__cta">
-                    <Button variant="ghost" size="sm" onClick={() => { window.location.href = item.url as string; }}>
+                    <Button variant="ghost" size="sm" onClick={() => { window.open(item.url as string, '_blank', 'noopener,noreferrer'); }}>
                       Abrir entidade
                     </Button>
                   </div>

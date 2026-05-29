@@ -8,6 +8,7 @@ test('normalizeCnjPublicationPayload maps remote payload into capture contract',
     id: 'ABC-1',
     numeroProcesso: '10000011120265020001',
     tribunal: 'TJSP',
+    publicationUrl: 'https://cnj.exemplo/ABC-1',
     title: 'Sentença publicada',
     resumo: 'Prazo recursal em aberto.',
     textoIntegral: 'Sentença publicada com prazo recursal.',
@@ -21,4 +22,5 @@ test('normalizeCnjPublicationPayload maps remote payload into capture contract',
   assert.equal(payload.tribunal, 'TJSP');
   assert.equal(payload.title, 'Sentença publicada');
   assert.equal(payload.personName, 'Cliente Atlas');
+  assert.equal(payload.sourceUrl, 'https://cnj.exemplo/ABC-1');
 });

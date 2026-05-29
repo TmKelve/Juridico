@@ -1,0 +1,19 @@
+{
+  "phase": "Fase 3 - Console Operacional da Plataforma",
+  "version": "2026-05-27",
+  "contracts": {
+    "platform.company.list": {"in": ["filters?"], "out": ["companies[]"], "errors": ["AUTH_REQUIRED", "PLATFORM_PROFILE_REQUIRED"], "roles": ["platform_admin", "platform_billing", "platform_support"]},
+    "platform.company.detail": {"in": ["companyId"], "out": ["company"], "errors": ["COMPANY_NOT_FOUND"], "roles": ["platform_admin", "platform_billing", "platform_support"]},
+    "platform.company.activate": {"in": ["companyId", "reason?"], "out": ["companyId", "status"], "errors": ["ACCESS_DENIED", "COMPANY_NOT_FOUND"], "roles": ["platform_admin", "platform_billing"]},
+    "platform.company.block": {"in": ["companyId", "reason"], "out": ["companyId", "status"], "errors": ["REASON_REQUIRED", "ACCESS_DENIED"], "roles": ["platform_admin"]},
+    "platform.company.cancel": {"in": ["companyId", "reason"], "out": ["companyId", "status"], "errors": ["REASON_REQUIRED", "ACCESS_DENIED"], "roles": ["platform_admin", "platform_billing"]},
+    "platform.company.reactivate": {"in": ["companyId", "reason"], "out": ["companyId", "status"], "errors": ["REASON_REQUIRED", "ACCESS_DENIED"], "roles": ["platform_admin", "platform_billing"]},
+    "platform.membership.invite": {"in": ["companyId", "email", "role"], "out": ["invitationId", "email", "role", "createdAt"], "errors": ["PLAN_MEMBERSHIP_LIMIT_REACHED", "COMPANY_STATUS_BLOCKED"], "roles": ["platform_admin"]},
+    "platform.membership.assignRole": {"in": ["companyId", "membershipId", "role"], "out": ["membership"], "errors": ["ROLE_INVALID", "ACCESS_DENIED"], "roles": ["platform_admin"]},
+    "platform.membership.deactivate": {"in": ["companyId", "membershipId"], "out": ["membership"], "errors": ["COMPANY_STATUS_BLOCKED"], "roles": ["platform_admin"]},
+    "platform.membership.remove": {"in": ["companyId", "membershipId"], "out": ["removed"], "errors": ["MEMBERSHIP_NOT_FOUND"], "roles": ["platform_admin"]},
+    "platform.access.supportView": {"in": ["companyId", "section?"], "out": ["readOnly", "context", "auditEvent"], "errors": ["PLATFORM_PROFILE_REQUIRED"], "roles": ["platform_admin", "platform_support"]},
+    "platform.audit.list": {"in": ["companyId?", "actor?", "action?", "from?", "to?", "limit?"], "out": ["items[]"], "errors": ["AUDIT_INVALID"], "roles": ["platform_admin", "platform_billing", "platform_support"]},
+    "audit.event": {"in": ["companyId", "actor", "action", "status", "context?", "metadata?"], "out": ["id", "occurredAt"], "errors": ["AUDIT_INVALID"], "idempotency": "caller-defined key in metadata when needed"}
+  }
+}

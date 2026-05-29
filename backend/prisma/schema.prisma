@@ -12,6 +12,7 @@ model User {
   email                  String              @unique
   password               String
   role                   String
+  companyMemberships     CompanyMembership[]
   processes              Process[]
   ownedTasks             Task[]              @relation("TaskOwnerUser")
   responsibleAttendances Atendimento[]       @relation("AttendanceResponsibleUser")
@@ -24,6 +25,113 @@ model User {
   approvedTimeEntries    TimeEntry[]         @relation("TimeEntryApprover")
   timeEntryApprovals     TimeEntryApproval[] @relation("TimeEntryApprovalApprover")
   closedTimesheetClosures TimesheetClosure[] @relation("TimesheetClosedByUser")
+  avatarUrl              String?
+  phone                  String?
+  notifications          Notification[]
+}
+
+enum CompanyStatus {
+  active
+  grace_period
+  read_only
+  suspended
+  cancelled
+}
+
+enum SubscriptionStatus {
+  draft
+  checkout_pending
+  active
+  past_due
+  grace_period
+  read_only
+  suspended
+  cancelled
+}
+
+model Company {
+  id          Int                 @id @default(autoincrement())
+  name        String
+  slug        String              @unique
+  status      CompanyStatus       @default(active)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  memberships CompanyMembership[]
+  subscriptions Subscription[]
+  billingInvoices BillingInvoice[]
+  paymentAttempts PaymentAttempt[]
+  billingEvents BillingEvent[]
+
+  @@unique([name])
+}
+
+model Plan {
+  id            Int            @id @default(autoincrement())
+  code          String         @unique
+  name          String
+  description   String?
+  priceCents    Int
+  currency      String         @default("BRL")
+  billingCycle  String         @default("monthly")
+  active        Boolean        @default(true)
+  metadata      Json?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  subscriptions Subscription[]
+
+  @@index([active, code])
+}
+
+model Subscription {
+  id                 Int                     @id @default(autoincrement())
+  companyId          Int
+  company            Company                 @relation(fields: [companyId], references: [id])
+  planId             Int
+  plan               Plan                    @relation(fields: [planId], references: [id])
+  status             SubscriptionStatus      @default(draft)
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  checkoutReference  String?
+  externalReference  String?
+  cancelledAt        DateTime?
+  metadata           Json?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  transitions        SubscriptionTransition[]
+
+  @@index([companyId, status])
+  @@index([planId, status])
+}
+
+model SubscriptionTransition {
+  id               Int                @id @default(autoincrement())
+  subscriptionId   Int
+  subscription     Subscription       @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  fromStatus       SubscriptionStatus
+  toStatus         SubscriptionStatus
+  reason           String?
+  actor            String?
+  idempotencyKey   String?
+  metadata         Json?
+  createdAt        DateTime           @default(now())
+
+  @@unique([subscriptionId, idempotencyKey], name: "subscription_transition_idempotency")
+  @@index([subscriptionId, createdAt])
+}
+
+model CompanyMembership {
+  id         Int      @id @default(autoincrement())
+  companyId  Int
+  company    Company  @relation(fields: [companyId], references: [id])
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id])
+  role       String
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([companyId, userId])
+  @@index([userId, active])
 }
 
 model Team {
@@ -1203,4 +1311,83 @@ model FinanceIdempotencyRequest {
   createdAt    DateTime @default(now())
 
   @@unique([scope, key], name: "finance_scope_key")
+}
+
+model BillingInvoice {
+  id                Int      @id @default(autoincrement())
+  companyId         Int
+  company           Company  @relation(fields: [companyId], references: [id])
+  planCode          String
+  billingCycle      String
+  status            String   @default("open")
+  amountCents       Int
+  currency          String   @default("BRL")
+  dueDate           DateTime
+  paidAt            DateTime?
+  externalRef       String?
+  metadataJson      Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  attempts          PaymentAttempt[]
+  billingEvents     BillingEvent[]
+
+  @@index([companyId, status, dueDate])
+}
+
+model PaymentAttempt {
+  id                Int            @id @default(autoincrement())
+  invoiceId         Int
+  invoice           BillingInvoice @relation(fields: [invoiceId], references: [id])
+  companyId         Int
+  company           Company        @relation(fields: [companyId], references: [id])
+  attemptNumber     Int
+  provider          String
+  providerInvoiceId String
+  providerEventId   String?
+  status            String         @default("pending")
+  errorCode         String?
+  errorMessage      String?
+  checkoutUrl       String?
+  pixCode           String?
+  boletoUrl         String?
+  paidAt            DateTime?
+  providerPayload   Json?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  billingEvents     BillingEvent[]
+
+  @@unique([invoiceId, attemptNumber], name: "billing_invoice_attempt_unique")
+  @@index([provider, providerInvoiceId])
+}
+
+model BillingEvent {
+  id               Int             @id @default(autoincrement())
+  companyId        Int
+  company          Company         @relation(fields: [companyId], references: [id])
+  invoiceId        Int?
+  invoice          BillingInvoice? @relation(fields: [invoiceId], references: [id])
+  paymentAttemptId Int?
+  paymentAttempt   PaymentAttempt? @relation(fields: [paymentAttemptId], references: [id])
+  eventType        String
+  eventStatus      String
+  summary          String
+  metadataJson     Json?
+  occurredAt       DateTime        @default(now())
+  createdAt        DateTime        @default(now())
+
+  @@index([companyId, occurredAt])
+  @@index([invoiceId, occurredAt])
+  @@index([paymentAttemptId, occurredAt])
+}
+
+model Notification {
+  id              Int      @id @default(autoincrement())
+  recipientUserId Int
+  type            String
+  title           String
+  body            String
+  href            String   @default("/")
+  read            Boolean  @default(false)
+  createdAt       DateTime @default(now()) @map("created_at")
+  user            User     @relation(fields: [recipientUserId], references: [id])
 }

@@ -16,6 +16,18 @@
   justify-content: space-between;
   align-items: flex-start;
   gap: var(--space-6);
+  position: relative;
+  overflow: hidden;
+}
+.process-head-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: #1d4ed8;
+  box-shadow: 2px 0 10px rgba(29, 78, 216, 0.30);
 }
 
 .process-head-main {
@@ -48,11 +60,11 @@
 
 .process-head-eyebrow {
   margin: 0;
-  color: var(--brand-700);
+  color: #1d4ed8;
   font-size: var(--font-size-xs);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0;
+  font-weight: 800;
 }
 
 .process-head-card h2 {

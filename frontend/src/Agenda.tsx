@@ -1,10 +1,13 @@
 import { useEffect, useEffectEvent, useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  BookOpen,
   CalendarClock,
   CalendarDays,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
   Clock3,
   Download,
@@ -12,16 +15,22 @@ import {
   ExternalLink,
   Filter,
   List,
+  MoreHorizontal,
+  Phone,
   Plus,
   RefreshCw,
   Save,
   Search,
+  Shield,
   X,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api, type ApiAgendaEvent } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import { ProcessCombobox } from './ProcessCombobox';
+import './Dashboard.css';
+import './Processes.css';
+import './Publications.css';
 import './Agenda.css';
 
 interface AgendaProps {
@@ -644,88 +653,128 @@ export function Agenda({ user }: AgendaProps) {
 
   return (
     <section className="agenda-page" aria-label="Agenda">
-      <header className="agenda-header-card">
-        <div className="agenda-header-main">
-          <p className="agenda-eyebrow">Planejamento temporal</p>
-          <p className="agenda-summary-head">
-            <strong>{sorted.length}</strong> evento(s) na carteira atual • <strong>{kpis.pendingReturns}</strong> retorno(s) pendente(s) • <strong>{kpis.overlaps}</strong> conflito(s)
+      <header className="ag-hero" aria-label="Cabeçalho da agenda">
+        <div className="ag-hero-copy">
+          <p className="ag-hero-eyebrow">Planejamento Temporal</p>
+          <h1 className="ag-hero-title">Agenda</h1>
+          <p className="ag-hero-subtitle">
+            Consolide compromissos, audiências, prazos e retornos em uma leitura operacional única.
           </p>
-          <p className="agenda-subtitle">
-            Consolide compromissos, audiências, prazos e retornos em uma leitura operacional única, com foco no que exige ação agora.
-          </p>
-          <div className="agenda-header-summary" aria-label="Pulso da agenda">
-            {headerSummaryItems.map((item) => (
-              <div key={item.label} className="agenda-header-summary-card" data-tone={item.tone}>
-                <span>{item.label}</span>
-                <strong>{item.value}</strong>
+          <div className="ag-hero-chips">
+            {kpis.today > 0 && (
+              <div className="ag-hero-chip" data-tone="brand">
+                <strong>{kpis.today}</strong><span>Hoje</span>
               </div>
-            ))}
+            )}
+            {kpis.audienceWeek > 0 && (
+              <div className="ag-hero-chip" data-tone="info">
+                <strong>{kpis.audienceWeek}</strong><span>Audiências</span>
+              </div>
+            )}
+            {kpis.pendingReturns > 0 && (
+              <div className="ag-hero-chip" data-tone="warning">
+                <strong>{kpis.pendingReturns}</strong><span>Retornos</span>
+              </div>
+            )}
+            {kpis.overlaps > 0 && (
+              <div className="ag-hero-chip" data-tone="critical">
+                <strong>{kpis.overlaps}</strong><span>Conflitos</span>
+              </div>
+            )}
+            {(kpis.today > 0 || kpis.audienceWeek > 0 || kpis.pendingReturns > 0 || kpis.overlaps > 0) && (
+              <span className="ag-hero-chips-sep" aria-hidden="true" />
+            )}
+            <div
+              className="ag-hero-pulse"
+              data-tone={kpis.overlaps > 0 ? 'critical' : kpis.pendingReturns > 0 ? 'warning' : 'ok'}
+            >
+              <span className="ag-hero-pulse-dot" aria-hidden="true" />
+              <span>{kpis.overlaps > 0 ? 'Conflitos ativos' : kpis.pendingReturns > 0 ? 'Retornos pendentes' : 'Agenda em ordem'}</span>
+            </div>
           </div>
         </div>
 
-        <div className="agenda-header-side">
-          <div className="agenda-header-actions" role="toolbar" aria-label="Ações da agenda">
-            <button className="btn-primary" onClick={() => openCreateModal('compromisso_interno')} aria-label="Novo compromisso">
-              <Plus size={14} aria-hidden="true" />
-              Novo compromisso
+        <div className="ag-hero-actions">
+          <button type="button" className="btn-primary" onClick={() => openCreateModal('compromisso_interno')} aria-label="Novo compromisso">
+            <Plus size={15} aria-hidden="true" /> Novo compromisso
+          </button>
+          <div className="agenda-create-menu">
+            <button type="button" className="btn-secondary" onClick={() => setCreateMenuOpen((prev) => !prev)} aria-expanded={createMenuOpen}>
+              <CalendarClock size={14} aria-hidden="true" />
+              Mais eventos
+              {createMenuOpen ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
             </button>
-
-            <div className="agenda-create-menu">
-              <button className="btn-secondary" onClick={() => setCreateMenuOpen((prev) => !prev)} aria-label="Abrir menu de novos eventos" aria-expanded={createMenuOpen}>
-                <CalendarClock size={14} aria-hidden="true" />
-                Mais eventos
-                {createMenuOpen ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
-              </button>
-              {createMenuOpen && (
-                <div className="agenda-create-menu-popover" role="menu" aria-label="Criar novo evento">
-                  <button type="button" role="menuitem" onClick={() => openCreateModal('audiencia')}>Nova audiência</button>
-                  <button type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); navigate('/atendimentos'); }}>Novo retorno</button>
-                  <button type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); navigate('/prazos'); }}>Novo prazo</button>
-                  <button type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); navigate('/tarefas'); }}>Nova tarefa</button>
-                </div>
-              )}
-            </div>
-
-            <button className="btn-ghost" onClick={() => exportCsv(sorted)} aria-label="Exportar agenda">
-              <Download size={14} aria-hidden="true" />
-              Exportar
-            </button>
+            {createMenuOpen && (
+              <div className="agenda-create-menu-popover" role="menu" aria-label="Criar novo evento">
+                <button type="button" role="menuitem" onClick={() => openCreateModal('audiencia')}>Nova audiência</button>
+                <button type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); navigate('/atendimentos'); }}>Novo retorno</button>
+                <button type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); navigate('/prazos'); }}>Novo prazo</button>
+                <button type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); navigate('/tarefas'); }}>Nova tarefa</button>
+              </div>
+            )}
           </div>
-          <aside className="agenda-focus-card" data-tone={focusTone} aria-label="Foco do período">
-            <span className="agenda-focus-card-eyebrow">Próxima melhor ação</span>
-            <strong>{focusEvent ? focusEvent.title : 'Nenhum foco aberto'}</strong>
-            <p>{focusEvent ? `${focusEvent.client} · ${EVENT_TYPE_LABEL[focusEvent.type]}` : 'Use filtros e trocas de visão para identificar o próximo evento prioritário.'}</p>
-            <small>{focusMeta}</small>
-          </aside>
+          <button type="button" className="btn-secondary" onClick={() => exportCsv(sorted)} aria-label="Exportar agenda">
+            <Download size={14} aria-hidden="true" /> Exportar
+          </button>
+          <button type="button" className="btn-ghost" onClick={loadAgenda} aria-label="Atualizar agenda">
+            <RefreshCw size={14} aria-hidden="true" />
+          </button>
         </div>
       </header>
 
-      <section className="agenda-kpis" aria-label="Indicadores da agenda">
-        <article className={`agenda-kpi-card${kpis.today > 0 ? ' agenda-kpi-card--warning' : ''}`}>
-          <p>Compromissos hoje</p>
-          <strong>{kpis.today}</strong>
-          <small>Foco imediato</small>
-        </article>
-        <article className="agenda-kpi-card">
-          <p>Audiências da semana</p>
-          <strong>{kpis.audienceWeek}</strong>
-          <small>Ritos presenciais</small>
-        </article>
-        <article className={`agenda-kpi-card${kpis.pendingReturns > 0 ? ' agenda-kpi-card--warning' : ' agenda-kpi-card--success'}`}>
-          <p>Retornos pendentes</p>
-          <strong>{kpis.pendingReturns}</strong>
-          <small>Exigem acompanhamento</small>
-        </article>
-        <article className="agenda-kpi-card">
-          <p>Prazos no calendário</p>
-          <strong>{kpis.deadlines}</strong>
-          <small>Vinculados a entrega</small>
-        </article>
-        <article className={`agenda-kpi-card${kpis.overlaps > 0 ? ' agenda-kpi-card--danger' : ' agenda-kpi-card--success'}`}>
-          <p>Conflitos</p>
-          <strong>{kpis.overlaps}</strong>
-          <small>{kpis.overlaps > 0 ? 'Há sobreposição' : 'Nenhuma sobreposição'}</small>
-        </article>
+      <section className="ag-kpis" aria-label="Indicadores da agenda">
+        <button type="button" className="metric-card"
+          data-kpi-color={kpis.today > 0 ? 'warning' : 'primary'}
+          onClick={() => updateFilter('period', 'hoje')}
+          aria-label={`Compromissos hoje: ${kpis.today}`}>
+          <div className="metric-top-row">
+            <div className="metric-icon"><CalendarDays size={16} aria-hidden="true" /></div>
+            <span className="metric-microtext">Foco imediato</span>
+          </div>
+          <p className="metric-value">{kpis.today}</p>
+          <p className="metric-label">Hoje</p>
+        </button>
+        <button type="button" className="metric-card" data-kpi-color="info"
+          onClick={() => updateFilter('audienciaOnly', !filters.audienciaOnly)}
+          aria-label={`Audiências da semana: ${kpis.audienceWeek}`}>
+          <div className="metric-top-row">
+            <div className="metric-icon"><CalendarClock size={16} aria-hidden="true" /></div>
+            <span className="metric-microtext">Esta semana</span>
+          </div>
+          <p className="metric-value">{kpis.audienceWeek}</p>
+          <p className="metric-label">Audiências</p>
+        </button>
+        <button type="button" className="metric-card"
+          data-kpi-color={kpis.pendingReturns > 0 ? 'warning' : 'success'}
+          onClick={() => updateFilter('retornoOnly', !filters.retornoOnly)}
+          aria-label={`Retornos pendentes: ${kpis.pendingReturns}`}>
+          <div className="metric-top-row">
+            <div className="metric-icon"><Phone size={16} aria-hidden="true" /></div>
+            <span className="metric-microtext">Exigem acompanhamento</span>
+          </div>
+          <p className="metric-value">{kpis.pendingReturns}</p>
+          <p className="metric-label">Retornos pendentes</p>
+        </button>
+        <button type="button" className="metric-card" data-kpi-color="primary"
+          onClick={() => updateFilter('prazoOnly', !filters.prazoOnly)}
+          aria-label={`Prazos no calendário: ${kpis.deadlines}`}>
+          <div className="metric-top-row">
+            <div className="metric-icon"><Clock3 size={16} aria-hidden="true" /></div>
+            <span className="metric-microtext">Vinculados a entrega</span>
+          </div>
+          <p className="metric-value">{kpis.deadlines}</p>
+          <p className="metric-label">Prazos</p>
+        </button>
+        <button type="button" className="metric-card"
+          data-kpi-color={kpis.overlaps > 0 ? 'error' : 'success'}
+          aria-label={`Conflitos: ${kpis.overlaps}`}>
+          <div className="metric-top-row">
+            <div className="metric-icon"><AlertTriangle size={16} aria-hidden="true" /></div>
+            <span className="metric-microtext">{kpis.overlaps > 0 ? 'Sobreposições' : 'Sem choque'}</span>
+          </div>
+          <p className="metric-value">{kpis.overlaps}</p>
+          <p className="metric-label">Conflitos</p>
+        </button>
       </section>
 
       {error && (
@@ -746,27 +795,60 @@ export function Agenda({ user }: AgendaProps) {
         </div>
       )}
 
-      <section className="agenda-filters" aria-label="Busca e filtros da agenda">
-        <div className="agenda-priority-strip" aria-label="Leitura do recorte atual">
-          <div className="agenda-priority-card" data-tone={visibleAttentionCount > 0 ? 'warning' : 'neutral'}>
-            <span>Exigem atenção</span>
-            <strong>{visibleAttentionCount}</strong>
-            <small>{visibleAttentionCount > 0 ? 'eventos com risco temporal' : 'sem alerta imediato'}</small>
+      <section
+        className={`my-processes-filters${showAdvancedFilters ? '' : ' is-compact'}`}
+        aria-label="Busca e filtros da agenda"
+      >
+        <div className="filters-head">
+          <div>
+            <p className="filters-eyebrow">Busca e filtros</p>
+            <h3>Filtros da Agenda</h3>
           </div>
-          <div className="agenda-priority-card" data-tone={kpis.overlaps > 0 ? 'critical' : 'neutral'}>
-            <span>Conflitos</span>
-            <strong>{kpis.overlaps}</strong>
-            <small>{kpis.overlaps > 0 ? 'sobreposições detectadas' : 'agenda sem choque'}</small>
-          </div>
-          <div className="agenda-priority-card" data-tone="info">
-            <span>Modo atual</span>
-            <strong>{formatViewLabel(view)}</strong>
-            <small>{view === 'semana' ? `layout ${weekLayout}` : 'leitura ativa do período'}</small>
+          <div className="filters-head-meta">
+            {hasActiveFilter && <span className="filters-active-pill">Filtros ativos</span>}
+            <span className="filters-total-pill">{sorted.length} evento(s)</span>
+            <button type="button" className="btn-ghost" onClick={saveFilters} aria-label="Salvar filtro">
+              <Save size={13} aria-hidden="true" /> Salvar
+            </button>
+            <button type="button" className="btn-ghost btn-filter-clear" onClick={clearFilters} aria-label="Limpar filtros">
+              <Filter size={13} aria-hidden="true" /> Limpar
+            </button>
+            <button type="button" className="btn-ghost btn-filter-density" onClick={() => setShowAdvancedFilters((prev) => !prev)} aria-expanded={showAdvancedFilters}>
+              <Filter size={14} aria-hidden="true" />
+              {showAdvancedFilters ? 'Menos filtros' : 'Mais filtros'}
+            </button>
           </div>
         </div>
 
-        <div className="agenda-filter-row agenda-filter-row--top">
-          <label className="agenda-field agenda-field--search" htmlFor="agenda-search">
+        <div className="filter-presets" role="toolbar" aria-label="Presets rápidos">
+          <button type="button" className={`filter-preset-btn${filters.period === 'semana' && !filters.audienciaOnly && !filters.retornoOnly && !filters.prazoOnly ? ' is-active' : ''}`}
+            onClick={() => { updateFilter('period', 'semana'); updateFilter('audienciaOnly', false); updateFilter('retornoOnly', false); updateFilter('prazoOnly', false); }}>
+            Esta semana
+          </button>
+          <button type="button" className={`filter-preset-btn${filters.period === 'hoje' ? ' is-active' : ''}`}
+            onClick={() => updateFilter('period', 'hoje')}>
+            Hoje {kpis.today > 0 && <strong>{kpis.today}</strong>}
+          </button>
+          <button type="button" className={`filter-preset-btn${filters.period === 'mes' ? ' is-active' : ''}`}
+            onClick={() => updateFilter('period', 'mes')}>
+            Este mês
+          </button>
+          <button type="button" className={`filter-preset-btn${filters.audienciaOnly ? ' is-active' : ''}`}
+            onClick={() => updateFilter('audienciaOnly', !filters.audienciaOnly)}>
+            Audiências
+          </button>
+          <button type="button" className={`filter-preset-btn${filters.retornoOnly ? ' is-active' : ''}`}
+            onClick={() => updateFilter('retornoOnly', !filters.retornoOnly)}>
+            Retornos
+          </button>
+          <button type="button" className={`filter-preset-btn${filters.prazoOnly ? ' is-active' : ''}`}
+            onClick={() => updateFilter('prazoOnly', !filters.prazoOnly)}>
+            Prazos
+          </button>
+        </div>
+
+        <div className="filters-top-row filter-row-card">
+          <label htmlFor="agenda-search" className="filter-field filter-field-search filter-cascade-item">
             <span>Buscar evento</span>
             <div className="agenda-input-icon">
               <Search size={14} aria-hidden="true" />
@@ -780,7 +862,7 @@ export function Agenda({ user }: AgendaProps) {
             </div>
           </label>
 
-          <label className="agenda-field" htmlFor="agenda-period">
+          <label htmlFor="agenda-period" className="filter-field filter-cascade-item">
             <span>Período</span>
             <select id="agenda-period" value={filters.period} onChange={(event) => updateFilter('period', event.target.value as AgendaPeriod)}>
               <option value="hoje">Hoje</option>
@@ -790,7 +872,7 @@ export function Agenda({ user }: AgendaProps) {
             </select>
           </label>
 
-          <label className="agenda-field" htmlFor="agenda-type">
+          <label htmlFor="agenda-type" className="filter-field filter-cascade-item">
             <span>Tipo de evento</span>
             <select id="agenda-type" value={filters.type} onChange={(event) => updateFilter('type', event.target.value)}>
               <option value="">Todos</option>
@@ -800,7 +882,7 @@ export function Agenda({ user }: AgendaProps) {
             </select>
           </label>
 
-          <label className="agenda-field" htmlFor="agenda-responsible">
+          <label htmlFor="agenda-responsible" className="filter-field filter-cascade-item">
             <span>Responsável</span>
             <select id="agenda-responsible" value={filters.responsible} onChange={(event) => updateFilter('responsible', event.target.value)}>
               <option value="">Todos</option>
@@ -811,28 +893,9 @@ export function Agenda({ user }: AgendaProps) {
           </label>
         </div>
 
-        <div className="agenda-filter-toolbar">
-          <button type="button" className="btn-ghost agenda-advanced-toggle" onClick={() => setShowAdvancedFilters((prev) => !prev)} aria-expanded={showAdvancedFilters}>
-            <Filter size={13} aria-hidden="true" />
-            Filtros avançados
-            {showAdvancedFilters ? <ChevronUp size={13} aria-hidden="true" /> : <ChevronDown size={13} aria-hidden="true" />}
-          </button>
-
-          <div className="agenda-filter-actions">
-            <button className="btn-ghost" onClick={clearFilters} aria-label="Limpar filtros">
-              <Filter size={13} aria-hidden="true" />
-              Limpar filtros
-            </button>
-            <button className="btn-ghost" onClick={saveFilters} aria-label="Salvar filtro">
-              <Save size={13} aria-hidden="true" />
-              Salvar filtro
-            </button>
-          </div>
-        </div>
-
         {showAdvancedFilters && (
-          <div className="agenda-filter-row agenda-filter-row--bottom">
-            <label className="agenda-field" htmlFor="agenda-client">
+          <div className="filters-bottom-row filter-row-card">
+            <label htmlFor="agenda-client" className="filter-field filter-cascade-item">
               <span>Cliente</span>
               <select id="agenda-client" value={filters.client} onChange={(event) => updateFilter('client', event.target.value)}>
                 <option value="">Todos</option>
@@ -842,12 +905,12 @@ export function Agenda({ user }: AgendaProps) {
               </select>
             </label>
 
-            <label className="agenda-field" htmlFor="agenda-process">
+            <label htmlFor="agenda-process" className="filter-field filter-cascade-item">
               <span>Processo</span>
               <ProcessCombobox id="agenda-process" value={filters.process} onChange={(value) => updateFilter('process', value)} options={processOptions} placeholder="Buscar processo" emptyLabel="Todos" />
             </label>
 
-            <label className="agenda-field" htmlFor="agenda-priority">
+            <label htmlFor="agenda-priority" className="filter-field filter-cascade-item">
               <span>Prioridade</span>
               <select id="agenda-priority" value={filters.priority} onChange={(event) => updateFilter('priority', event.target.value)}>
                 <option value="">Todas</option>
@@ -857,34 +920,30 @@ export function Agenda({ user }: AgendaProps) {
               </select>
             </label>
 
-            <label className="agenda-checkline" htmlFor="agenda-audiencia">
-              <input id="agenda-audiencia" type="checkbox" checked={filters.audienciaOnly} onChange={(event) => updateFilter('audienciaOnly', event.target.checked)} />
-              Audiência
-            </label>
-
-            <label className="agenda-checkline" htmlFor="agenda-retorno">
-              <input id="agenda-retorno" type="checkbox" checked={filters.retornoOnly} onChange={(event) => updateFilter('retornoOnly', event.target.checked)} />
-              Retorno
-            </label>
-
-            <label className="agenda-checkline" htmlFor="agenda-prazo">
-              <input id="agenda-prazo" type="checkbox" checked={filters.prazoOnly} onChange={(event) => updateFilter('prazoOnly', event.target.checked)} />
-              Prazo
-            </label>
+            <div className="filter-toggle-group filter-cascade-item" role="group" aria-label="Filtros rápidos">
+              <label className="filter-toggle-chip">
+                <input type="checkbox" checked={filters.audienciaOnly} onChange={(event) => updateFilter('audienciaOnly', event.target.checked)} />
+                <span>Audiência</span>
+              </label>
+              <label className="filter-toggle-chip">
+                <input type="checkbox" checked={filters.retornoOnly} onChange={(event) => updateFilter('retornoOnly', event.target.checked)} />
+                <span>Retorno</span>
+              </label>
+              <label className="filter-toggle-chip">
+                <input type="checkbox" checked={filters.prazoOnly} onChange={(event) => updateFilter('prazoOnly', event.target.checked)} />
+                <span>Prazo</span>
+              </label>
+            </div>
           </div>
         )}
 
-        <div className="agenda-filter-summary">
-          <div className="agenda-filter-summary-copy">
-            <strong>{sorted.length}</strong> evento(s) encontrados.
-            {hasActiveFilter && <span className="agenda-chip">Filtro ativo</span>}
-          </div>
+        {hasActiveFilter && activeFilterChips.length > 0 && (
           <div className="agenda-filter-summary-chips">
             {activeFilterChips.map((chip) => (
               <span key={chip} className="agenda-chip agenda-chip--muted">{chip}</span>
             ))}
           </div>
-        </div>
+        )}
       </section>
 
       {!error && events.length === 0 && (
@@ -906,12 +965,16 @@ export function Agenda({ user }: AgendaProps) {
       {!error && sorted.length > 0 && (
         <section className="agenda-main" aria-label="Calendário e lista de eventos">
           <header className="agenda-main-head">
-            <div>
+            <div className="agenda-main-head-info">
               <h3>{formatViewLabel(view)}</h3>
-              <p>Data de referência: {selectedDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+              <p className="agenda-main-head-date">
+                <CalendarDays size={13} aria-hidden="true" />
+                Data de referência: {selectedDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+              </p>
             </div>
 
             <div className="agenda-main-head-actions">
+              {/* View mode tabs */}
               <div className="agenda-view-toggle" role="tablist" aria-label="Alternar visão da agenda">
                 {(['dia', 'semana', 'mes', 'lista'] as AgendaView[]).map((mode) => (
                   <button
@@ -928,50 +991,80 @@ export function Agenda({ user }: AgendaProps) {
                 ))}
               </div>
 
+              {/* Week density toggle */}
               {view === 'semana' && (
-                <div className="agenda-view-toggle agenda-view-toggle--soft" role="tablist" aria-label="Alternar densidade semanal">
-                  {(['compacta', 'completa'] as WeekLayout[]).map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      role="tab"
-                      aria-selected={weekLayout === mode}
-                      className={`agenda-view-btn${weekLayout === mode ? ' agenda-view-btn--active' : ''}`}
-                      onClick={() => setWeekLayout(mode)}
-                    >
-                      {mode === 'compacta' ? 'Semana compacta' : 'Semana completa'}
-                    </button>
-                  ))}
+                <div className="agenda-layout-toggle" role="group" aria-label="Densidade semanal">
+                  <button
+                    type="button"
+                    className={`agenda-layout-btn${weekLayout === 'compacta' ? ' is-active' : ''}`}
+                    onClick={() => setWeekLayout('compacta')}
+                    aria-pressed={weekLayout === 'compacta'}
+                  >
+                    {weekLayout === 'compacta' && <span className="agenda-layout-knob" aria-hidden="true" />}
+                    Semana compacta
+                  </button>
+                  <button
+                    type="button"
+                    className={`agenda-layout-btn${weekLayout === 'completa' ? ' is-active' : ''}`}
+                    onClick={() => setWeekLayout('completa')}
+                    aria-pressed={weekLayout === 'completa'}
+                  >
+                    Semana completa
+                  </button>
                 </div>
               )}
 
-              <button className="btn-ghost" onClick={() => setSelectedDate((prev) => addDays(prev, view === 'mes' ? -30 : -7))} aria-label="Período anterior">
-                Período anterior
-              </button>
-              <button className="btn-ghost" onClick={() => setSelectedDate(new Date())} aria-label="Ir para hoje">
-                Hoje
-              </button>
-              <button className="btn-ghost" onClick={() => setSelectedDate((prev) => addDays(prev, view === 'mes' ? 30 : 7))} aria-label="Próximo período">
-                Próximo período
-              </button>
+              {/* Navigation */}
+              <div className="agenda-nav-group" role="group" aria-label="Navegar período">
+                <button type="button" className="agenda-nav-btn" onClick={() => setSelectedDate((prev) => addDays(prev, view === 'mes' ? -30 : -7))} aria-label="Período anterior">
+                  <ChevronLeft size={14} aria-hidden="true" /> Período anterior
+                </button>
+                <button type="button" className="agenda-nav-btn agenda-nav-btn--today" onClick={() => setSelectedDate(new Date())} aria-label="Ir para hoje">
+                  <CalendarDays size={13} aria-hidden="true" /> Hoje
+                </button>
+                <button type="button" className="agenda-nav-btn" onClick={() => setSelectedDate((prev) => addDays(prev, view === 'mes' ? 30 : 7))} aria-label="Próximo período">
+                  Próximo período <ChevronRight size={14} aria-hidden="true" />
+                </button>
+              </div>
             </div>
           </header>
 
           <div className="agenda-main-summary" aria-label="Resumo da visão atual">
             <div className="agenda-main-summary-card">
-              <span>Leitura ativa</span>
-              <strong>{formatViewLabel(view)}</strong>
-              <small>{sorted.length} evento(s) ordenados no período</small>
+              <div className="agenda-summary-icon" data-color="brand">
+                <BookOpen size={20} aria-hidden="true" />
+              </div>
+              <div className="agenda-summary-body">
+                <span>Leitura ativa</span>
+                <strong>{formatViewLabel(view)}</strong>
+                <small>
+                  <span className="agenda-summary-dot" aria-hidden="true" />
+                  {sorted.length} evento(s) ordenados no período
+                </small>
+              </div>
             </div>
             <div className="agenda-main-summary-card">
-              <span>Data de referência</span>
-              <strong>{selectedDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</strong>
-              <small>{selectedDate.toLocaleDateString('pt-BR', { weekday: 'long' })}</small>
+              <div className="agenda-summary-icon" data-color="info">
+                <CalendarDays size={20} aria-hidden="true" />
+              </div>
+              <div className="agenda-summary-body">
+                <span>Data de referência</span>
+                <strong>{selectedDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</strong>
+                <small>{selectedDate.toLocaleDateString('pt-BR', { weekday: 'long' })}</small>
+              </div>
             </div>
             <div className="agenda-main-summary-card">
-              <span>Risco visível</span>
-              <strong>{visibleAttentionCount}</strong>
-              <small>{kpis.overlaps > 0 ? `${kpis.overlaps} conflito(s) na agenda` : 'sem conflito de horário'}</small>
+              <div className="agenda-summary-icon" data-color={visibleAttentionCount > 0 ? 'warning' : 'success'}>
+                <Shield size={20} aria-hidden="true" />
+              </div>
+              <div className="agenda-summary-body">
+                <span>Risco visível</span>
+                <strong>{visibleAttentionCount}</strong>
+                <small>
+                  <span className="agenda-summary-dot" data-tone={kpis.overlaps > 0 ? 'warning' : 'success'} aria-hidden="true" />
+                  {kpis.overlaps > 0 ? `${kpis.overlaps} conflito(s) na agenda` : 'sem conflito de horário'}
+                </small>
+              </div>
             </div>
           </div>
 
@@ -1029,27 +1122,38 @@ export function Agenda({ user }: AgendaProps) {
 
                     <div className="agenda-week-events">
                       {day.events.length === 0 ? (
-                        <div className="agenda-hour-empty">Sem eventos</div>
+                        <div className="agenda-week-empty">
+                          <CalendarDays size={26} aria-hidden="true" />
+                          <span>Sem eventos</span>
+                        </div>
                       ) : (
                         day.events.map((event) => (
                           <button
                             key={event.id}
-                            className={`agenda-event-card agenda-event-card--compact agenda-type-surface--${event.type}${overlapEventIds.has(event.id) ? ' agenda-event-card--conflict' : ''}`}
+                            className={`agenda-event-card agenda-event-card--week agenda-type-surface--${event.type}${overlapEventIds.has(event.id) ? ' agenda-event-card--conflict' : ''}`}
                             onClick={() => setSelectedEvent(event)}
                             aria-label={`Abrir detalhe do evento ${event.title}`}
                           >
-                            <div className="agenda-event-card-meta">
-                              <span className={`agenda-badge agenda-badge--type agenda-type--${event.type}`}>{EVENT_TYPE_LABEL[event.type]}</span>
-                              <span className="agenda-time-badge">{event.startTime}–{event.endTime}</span>
+                            <div className="agenda-event-time-col">
+                              <span className="agenda-event-time-start">{event.startTime}</span>
+                              <span className="agenda-event-time-end">{event.endTime}</span>
                             </div>
-                            <strong>{event.title}</strong>
-                            <p>{event.client}</p>
-                            <small>{event.processLabel}</small>
-                            <div className="agenda-event-card-bottom">
-                              <span className={`agenda-badge agenda-badge--status agenda-status--${event.status}`}>{STATUS_LABEL[event.status]}</span>
-                              {event.priority === 'alta' && <span className="agenda-badge agenda-badge--priority">{PRIORITY_LABEL[event.priority]}</span>}
-                              {overlapEventIds.has(event.id) && <span className="agenda-badge agenda-badge--conflict">Conflito</span>}
+                            <div className="agenda-event-main">
+                              <strong>{event.title}</strong>
+                              <div className="agenda-event-badges">
+                                <span className={`agenda-badge agenda-badge--status agenda-status--${event.status}`}>{STATUS_LABEL[event.status]}</span>
+                                {event.priority && <span className={`agenda-badge agenda-badge--priority agenda-priority--${event.priority}`}>{PRIORITY_LABEL[event.priority]}</span>}
+                                {overlapEventIds.has(event.id) && <span className="agenda-badge agenda-badge--conflict">Conflito</span>}
+                              </div>
                             </div>
+                            <button
+                              type="button"
+                              className="agenda-event-menu-btn"
+                              onClick={(e) => e.stopPropagation()}
+                              aria-label={`Mais opções para ${event.title}`}
+                            >
+                              <MoreHorizontal size={14} aria-hidden="true" />
+                            </button>
                           </button>
                         ))
                       )}
@@ -1071,7 +1175,10 @@ export function Agenda({ user }: AgendaProps) {
                       </header>
                       <div className="agenda-weekend-list">
                         {day.events.length === 0 ? (
-                          <div className="agenda-hour-empty">Sem eventos</div>
+                          <div className="agenda-week-empty">
+                            <CalendarDays size={22} aria-hidden="true" />
+                            <span>Sem eventos</span>
+                          </div>
                         ) : (
                           day.events.map((event) => (
                             <button key={event.id} className={`agenda-weekend-item${overlapEventIds.has(event.id) ? ' agenda-weekend-item--conflict' : ''}`} onClick={() => setSelectedEvent(event)}>
@@ -1142,90 +1249,127 @@ export function Agenda({ user }: AgendaProps) {
         <>
           <button className="agenda-drawer-overlay" onClick={closeDrawer} aria-label="Fechar detalhe rápido" />
 
-          <aside className="agenda-drawer" role="dialog" aria-modal="true" aria-labelledby="agenda-drawer-title">
-            <div className="agenda-drawer-head">
-              <div>
-                <p className="agenda-eyebrow">Detalhe do evento</p>
-                <h3 id="agenda-drawer-title">{selectedEvent.title}</h3>
-                <div className="agenda-drawer-badges">
-                  <span className={`agenda-badge agenda-badge--type agenda-type--${selectedEvent.type}`}>{EVENT_TYPE_LABEL[selectedEvent.type]}</span>
-                  <span className={`agenda-badge agenda-badge--status agenda-status--${selectedEvent.status}`}>{STATUS_LABEL[selectedEvent.status]}</span>
-                  {selectedEvent.priority === 'alta' && <span className="agenda-badge agenda-badge--priority">{PRIORITY_LABEL[selectedEvent.priority]}</span>}
+          <aside className="ag-drawer" data-type={selectedEvent.type} role="dialog" aria-modal="true" aria-labelledby="agenda-drawer-title">
+
+            {/* Hero */}
+            <div className="ag-drawer-hero">
+              <div className="ag-drawer-hero-content">
+                <div className="ag-drawer-hero-tags">
+                  <span className={`agenda-badge agenda-badge--type agenda-type--${selectedEvent.type}`}>
+                    {EVENT_TYPE_LABEL[selectedEvent.type]}
+                  </span>
+                  <span className={`agenda-badge agenda-badge--status agenda-status--${selectedEvent.status}`}>
+                    {STATUS_LABEL[selectedEvent.status]}
+                  </span>
+                  {selectedEvent.priority === 'alta' && (
+                    <span className="agenda-badge agenda-badge--priority">{PRIORITY_LABEL[selectedEvent.priority]}</span>
+                  )}
+                  {overlapEventIds.has(selectedEvent.id) && (
+                    <span className="agenda-badge agenda-badge--conflict">Conflito</span>
+                  )}
                 </div>
+                <h3 className="ag-drawer-hero-title" id="agenda-drawer-title">{selectedEvent.title}</h3>
+                <p className="ag-drawer-hero-meta">
+                  <span>{selectedEvent.client}</span>
+                  <span className="ag-drawer-hero-dot" aria-hidden="true" />
+                  <span>{formatPtDate(selectedEvent.date)} · {selectedEvent.startTime}–{selectedEvent.endTime}</span>
+                  <span className="ag-drawer-hero-dot" aria-hidden="true" />
+                  <span>{selectedEvent.responsible}</span>
+                </p>
               </div>
-              <button className="agenda-close" onClick={closeDrawer} aria-label="Fechar detalhe">
+              <button className="dl-close-btn" onClick={closeDrawer} aria-label="Fechar detalhe">
                 <X size={16} aria-hidden="true" />
               </button>
             </div>
 
-            <div className="agenda-drawer-body">
-              <section className="agenda-drawer-section">
-                <h4>Quando e onde</h4>
-                <div className="agenda-drawer-grid2">
-                  <div><span>Data</span><strong>{formatPtDate(selectedEvent.date)}</strong></div>
-                  <div><span>Horário</span><strong>{selectedEvent.startTime} - {selectedEvent.endTime}</strong></div>
-                </div>
-                <div className="agenda-drawer-grid2">
-                  <div><span>Local / canal</span><strong>{selectedEvent.locationOrChannel}</strong></div>
-                  <div><span>Responsável</span><strong>{selectedEvent.responsible}</strong></div>
-                </div>
-              </section>
-
-              <section className="agenda-drawer-section">
-                <h4>Contexto</h4>
-                <div className="agenda-drawer-grid2">
-                  <div><span>Cliente</span><strong>{selectedEvent.client}</strong></div>
-                  <div><span>Processo</span><strong>{selectedEvent.processLabel}</strong></div>
-                </div>
-              </section>
-
-              <section className="agenda-drawer-section">
-                <h4>Observações</h4>
-                <p>{selectedEvent.notes || 'Sem observações registradas.'}</p>
-              </section>
-
-              {overlapEventIds.has(selectedEvent.id) && (
-                <section className="agenda-drawer-section agenda-drawer-section--warning">
-                  <h4>Conflito identificado</h4>
-                  <p>Este compromisso sobrepõe outro evento no mesmo horário. Use “Remarcar” para redistribuir a agenda.</p>
-                </section>
-              )}
-
-              <div className="agenda-drawer-links">
-                <button
-                  className="btn-ghost"
-                  onClick={() => selectedEvent.processId && navigate(`/processos/${selectedEvent.processId}`)}
-                  aria-label="Abrir processo"
-                  disabled={!selectedEvent.processId}
-                >
-                  <ExternalLink size={13} aria-hidden="true" />
-                  Abrir processo
-                </button>
-                <button className="btn-ghost" onClick={() => navigate('/clientes')} aria-label="Abrir cliente">
-                  <ExternalLink size={13} aria-hidden="true" />
-                  Abrir cliente
-                </button>
-              </div>
+            {/* Quickbar */}
+            <div className="ag-drawer-quickbar">
+              <button
+                type="button"
+                className={`pub-qbtn${selectedEvent.status === 'realizado' ? ' pub-qbtn--done' : ' pub-qbtn--primary'}`}
+                onClick={() => markAsDone(selectedEvent.id)}
+                disabled={selectedEvent.status === 'realizado'}
+              >
+                <CheckCircle2 size={13} aria-hidden="true" />
+                {selectedEvent.status === 'realizado' ? 'Realizado' : 'Marcar realizado'}
+              </button>
+              <button type="button" className="pub-qbtn" onClick={() => setSuccess('Fluxo de edição iniciado.')}>
+                <Edit3 size={13} aria-hidden="true" /> Editar
+              </button>
+              <button type="button" className="pub-qbtn" onClick={() => rescheduleEvent(selectedEvent.id)}>
+                <CalendarClock size={13} aria-hidden="true" /> Remarcar
+              </button>
+              <button type="button" className="pub-qbtn pub-qbtn--ghost ag-btn-danger" onClick={() => cancelEvent(selectedEvent.id)}>
+                <X size={13} aria-hidden="true" /> Cancelar
+              </button>
+              <span className="ag-drawer-quickbar-sep" aria-hidden="true" />
+              <button
+                type="button"
+                className="pub-qbtn pub-qbtn--ghost"
+                onClick={() => selectedEvent.processId && navigate(`/processos/${selectedEvent.processId}`)}
+                disabled={!selectedEvent.processId}
+              >
+                <ExternalLink size={12} aria-hidden="true" /> Processo
+              </button>
+              <button type="button" className="pub-qbtn pub-qbtn--ghost" onClick={() => navigate('/clientes')}>
+                <ExternalLink size={12} aria-hidden="true" /> Cliente
+              </button>
             </div>
 
-            <div className="agenda-drawer-footer" role="toolbar" aria-label="Ações rápidas do evento">
-              <button className="btn-primary" onClick={() => markAsDone(selectedEvent.id)} aria-label="Marcar como realizado">
-                <CheckCircle2 size={13} aria-hidden="true" />
-                Marcar como realizado
-              </button>
-              <button className="btn-secondary" onClick={() => setSuccess('Fluxo de edição iniciado.')} aria-label="Editar evento">
-                <Edit3 size={13} aria-hidden="true" />
-                Editar
-              </button>
-              <div className="agenda-drawer-footer-secondary">
-                <button className="btn-ghost" onClick={() => rescheduleEvent(selectedEvent.id)} aria-label="Remarcar evento">
-                  <CalendarClock size={13} aria-hidden="true" />
-                  Remarcar
-                </button>
-                <button className="btn-ghost agenda-btn-danger" onClick={() => cancelEvent(selectedEvent.id)} aria-label="Cancelar evento">
-                  <X size={13} aria-hidden="true" />
-                  Cancelar
-                </button>
+            {/* Body */}
+            <div className="ag-drawer-body">
+              <dl className="pub-drawer-meta-grid">
+                <div className="pub-drawer-meta-item">
+                  <dt>Data</dt>
+                  <dd>{formatPtDate(selectedEvent.date)}</dd>
+                </div>
+                <div className="pub-drawer-meta-item">
+                  <dt>Horário</dt>
+                  <dd>{selectedEvent.startTime} – {selectedEvent.endTime}</dd>
+                </div>
+                <div className="pub-drawer-meta-item">
+                  <dt>Local / canal</dt>
+                  <dd>{selectedEvent.locationOrChannel}</dd>
+                </div>
+                <div className="pub-drawer-meta-item">
+                  <dt>Responsável</dt>
+                  <dd>{selectedEvent.responsible}</dd>
+                </div>
+                <div className="pub-drawer-meta-item pub-drawer-meta-item--full">
+                  <dt>Processo</dt>
+                  <dd>{selectedEvent.processLabel || 'Não vinculado'}</dd>
+                </div>
+              </dl>
+
+              {selectedEvent.notes && (
+                <div className="pub-drawer-section">
+                  <p className="pub-drawer-section-eyebrow">Observações</p>
+                  <p className="pub-drawer-resumo-text">{selectedEvent.notes}</p>
+                </div>
+              )}
+
+              {!selectedEvent.notes && (
+                <div className="pub-drawer-section">
+                  <p className="pub-drawer-section-eyebrow">Observações</p>
+                  <p className="dl-drawer-empty-text">Sem observações registradas.</p>
+                </div>
+              )}
+
+              {overlapEventIds.has(selectedEvent.id) && (
+                <div className="pub-drawer-section ag-conflict-section">
+                  <p className="pub-drawer-section-eyebrow">⚠ Conflito identificado</p>
+                  <p>Este compromisso sobrepõe outro evento no mesmo horário. Use "Remarcar" para redistribuir a agenda.</p>
+                </div>
+              )}
+
+              <div className="pub-drawer-section">
+                <p className="pub-drawer-section-eyebrow">Rastreabilidade</p>
+                <p className="ag-drawer-origin-text">
+                  Origem: <strong>{selectedEvent.origin}</strong>
+                  {selectedEvent.isAudience && <> · <strong>Audiência judicial</strong></>}
+                  {selectedEvent.isReturn && <> · <strong>Retorno ao cliente</strong></>}
+                  {selectedEvent.isDeadline && <> · <strong>Prazo vinculado</strong></>}
+                </p>
               </div>
             </div>
           </aside>

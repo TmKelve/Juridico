@@ -45,6 +45,36 @@
   color: var(--neutral-600, #5f6f82);
 }
 
+.triage-usage-guide {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.triage-usage-card {
+  padding: 18px 20px;
+  border-radius: 16px;
+  border: 1px solid var(--neutral-200, #dbe2ea);
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+  display: grid;
+  gap: 8px;
+}
+
+.triage-usage-card--active {
+  border-color: #bfd2e6;
+  background: linear-gradient(180deg, #eef5ff, #ffffff);
+}
+
+.triage-usage-card strong {
+  color: #0f172a;
+  font-size: 16px;
+}
+
+.triage-usage-card p {
+  margin: 0;
+  color: var(--neutral-600, #5f6f82);
+}
+
 .triage-kpis {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -298,6 +328,13 @@
   overflow: hidden;
 }
 
+@media (max-width: 900px) {
+  .triage-usage-guide,
+  .triage-origin-callout {
+    grid-template-columns: 1fr;
+  }
+}
+
 .triage-main {
   padding: 20px;
   border-right: 1px solid var(--neutral-200, #dbe2ea);
@@ -441,6 +478,25 @@
   color: var(--neutral-700, #334155);
 }
 
+.triage-card__origin-hint {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #dbe2ea;
+  background: #f8fafc;
+}
+
+.triage-card__origin-hint strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.triage-card__origin-hint span {
+  color: var(--neutral-600, #5f6f82);
+  font-size: 12px;
+}
+
 .triage-source,
 .triage-confidence,
 .triage-action-chip {
@@ -508,6 +564,35 @@
   display: grid;
   gap: 12px;
   padding: 16px;
+}
+
+.triage-origin-callout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.triage-origin-callout > div {
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--neutral-200, #dbe2ea);
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+}
+
+.triage-origin-callout span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--neutral-600, #5f6f82);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.triage-origin-callout strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #0f172a;
 }
 
 .triage-panel h4 {

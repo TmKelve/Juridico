@@ -8,6 +8,7 @@ test('normalizeCpfPublicationPayload maps cpf publication payload', async () => 
     id: 'CPF-1',
     cpf: '12345678900',
     tribunal: 'TJMG',
+    url: 'https://diario.exemplo/CPF-1',
     title: 'Publicação localizada por CPF',
     resumo: 'Cliente sem processo ativo na carteira.',
     textoIntegral: 'Publicação encontrada por CPF sem processo ativo.',
@@ -19,4 +20,5 @@ test('normalizeCpfPublicationPayload maps cpf publication payload', async () => 
   assert.equal(payload.cpf, '12345678900');
   assert.equal(payload.personName, 'Cliente Prisma');
   assert.equal(payload.tribunal, 'TJMG');
+  assert.equal(payload.sourceUrl, 'https://diario.exemplo/CPF-1');
 });

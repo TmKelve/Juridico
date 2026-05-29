@@ -20,11 +20,11 @@ export interface UsersWorkspaceProps {
 }
 
 function roleLabel(role: string) {
-  const labels = {
+  const labels: Record<string, string> = {
     ADM: 'Administrador',
     ADV: 'Advogado',
-    ATD: 'Atendimento',
     FIN: 'Financeiro',
+    ATD: 'Atendimento',
   } as const;
 
   return labels[role as keyof typeof labels] || role;
