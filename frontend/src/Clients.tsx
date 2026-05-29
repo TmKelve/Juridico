@@ -31,6 +31,7 @@ import { ClientCommunicationPanel } from './components/communication/ClientCommu
 import { api, type ApiClient } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import './Clients.css';
+import './Processes.css';
 
 interface ClientsProps {
   user: { id: number; email: string; role: string };
