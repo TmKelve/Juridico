@@ -129,6 +129,7 @@ function PieceTemplates({ user }: PieceTemplatesProps) {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<TemplateModel | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   const [generation, setGeneration] = useState<GenerationState>({
     open: false,
@@ -379,6 +380,20 @@ function PieceTemplates({ user }: PieceTemplatesProps) {
     return { total, oficiais, favoritos, usadosRecentes, revisao };
   }, [models]);
 
+  const focusTemplate = useMemo(() => {
+    if (kpis.revisao === 0) return null;
+    return models
+      .filter((m) => m.precisaRevisao)
+      .sort((a, b) => a.ultimaAtualizacao.localeCompare(b.ultimaAtualizacao))[0] ?? null;
+  }, [models, kpis.revisao]);
+
+  const chipCounts = useMemo(() => ({
+    ativo: models.filter((m) => m.status === 'ativo').length,
+    revisao: models.filter((m) => m.status === 'revisao').length,
+    rascunho: models.filter((m) => m.status === 'rascunho').length,
+    arquivado: models.filter((m) => m.status === 'arquivado').length,
+  }), [models]);
+
   const uniqueAutores = useMemo(() => [...new Set(models.map((m) => m.autor))].sort(), [models]);
 
   const filtered = useMemo(() => {
@@ -437,15 +452,17 @@ function PieceTemplates({ user }: PieceTemplatesProps) {
             {m.favorito && <Star size={12} className="tpl-star-on" aria-label="Favorito" />}
             {m.oficial && <span className="tpl-chip-official">Oficial</span>}
           </div>
-          <span className="tpl-modelo-tags">{m.tags.map((t) => `#${t}`).join(' • ')}</span>
+          <div className="tpl-modelo-secondary">
+            <AutoFillBadge enabled={m.autoFill} />
+            <span className="tpl-uso-meta">Uso: {formatRelative(m.usoRecente)}</span>
+            {m.tags.length > 0 && <span className="tpl-modelo-tags">{m.tags.map((t) => `#${t}`).join(' • ')}</span>}
+          </div>
         </td>
         <td>{m.area}</td>
         <td>{m.tipoPeca}</td>
         <td><StatusBadge status={m.status} /></td>
         <td>{m.versao}</td>
         <td>{formatDate(m.ultimaAtualizacao)}</td>
-        <td><AutoFillBadge enabled={m.autoFill} /></td>
-        <td>{formatRelative(m.usoRecente)}</td>
         <td className="tpl-col-actions" onClick={(e) => e.stopPropagation()}>
           <div className="tpl-menu-wrap">
             <button
@@ -501,9 +518,9 @@ function PieceTemplates({ user }: PieceTemplatesProps) {
 
   return (
     <div className="tpl-page" onClick={() => { if (openMenuId) setOpenMenuId(null); }}>
-      <div className="tpl-header-card">
-        <div>
-          <p className="tpl-eyebrow">Biblioteca Jurídica</p>
+      <div className="tpl-hero">
+        <div className="tpl-hero-copy">
+          <p className="tpl-eyebrow">BIBLIOTECA JURÍDICA</p>
           <h2>Modelos de Peças</h2>
           <p className="tpl-subtitle">Encontre, versione e reutilize modelos oficiais para gerar novas peças com autopreenchimento seguro.</p>
         </div>
@@ -536,109 +553,143 @@ function PieceTemplates({ user }: PieceTemplatesProps) {
         </div>
       )}
 
+      {focusTemplate && (
+        <div className="tpl-context-strip" role="status" aria-label="Atenção necessária">
+          <AlertTriangle size={15} aria-hidden="true" className="tpl-context-strip-icon" />
+          <div className="tpl-context-strip-body">
+            <span className="tpl-context-strip-eyebrow">Atenção necessária</span>
+            <strong className="tpl-context-strip-title">
+              {kpis.revisao === 1 ? '1 modelo precisa de revisão' : `${kpis.revisao} modelos precisam de revisão`}
+            </strong>
+            <span className="tpl-context-strip-meta">
+              Mais antigo: <em>{focusTemplate.nome}</em> · atualizado {formatRelative(focusTemplate.ultimaAtualizacao)}
+            </span>
+          </div>
+          <button
+            className="btn-secondary tpl-context-strip-cta"
+            onClick={() => { updateFilter('status', 'revisao'); }}
+          >
+            Ver em revisão
+          </button>
+        </div>
+      )}
+
       <div className="tpl-kpis" aria-label="Indicadores de modelos">
-        <div className="tpl-kpi-card"><p>Total de modelos</p><strong>{loading ? '—' : kpis.total}</strong></div>
-        <div className="tpl-kpi-card tpl-kpi-card--official"><p>Modelos oficiais</p><strong>{loading ? '—' : kpis.oficiais}</strong></div>
-        <div className="tpl-kpi-card tpl-kpi-card--fav"><p>Favoritos</p><strong>{loading ? '—' : kpis.favoritos}</strong></div>
-        <div className="tpl-kpi-card"><p>Usados recentemente</p><strong>{loading ? '—' : kpis.usadosRecentes}</strong></div>
-        <div className="tpl-kpi-card tpl-kpi-card--review"><p>Precisando revisão</p><strong>{loading ? '—' : kpis.revisao}</strong></div>
+        <div className="tpl-kpi-card"><p>Total de modelos</p><strong className="tpl-kpi-value">{loading ? '—' : kpis.total}</strong></div>
+        <div className="tpl-kpi-card"><p>Modelos oficiais</p><strong className="tpl-kpi-value tpl-kpi-value--brand">{loading ? '—' : kpis.oficiais}</strong></div>
+        <div className="tpl-kpi-card"><p>Favoritos</p><strong className="tpl-kpi-value tpl-kpi-value--warning">{loading ? '—' : kpis.favoritos}</strong></div>
+        <div className="tpl-kpi-card"><p>Usados recentemente</p><strong className="tpl-kpi-value">{loading ? '—' : kpis.usadosRecentes}</strong></div>
+        <div className="tpl-kpi-card"><p>Precisando revisão</p><strong className="tpl-kpi-value tpl-kpi-value--error">{loading ? '—' : kpis.revisao}</strong></div>
       </div>
 
       <div className="tpl-filters">
-        <div className="tpl-filters-top">
-          <div className="tpl-field tpl-field--search">
-            <label htmlFor="tpl-search" className="sr-only">Buscar modelo</label>
-            <span className="tpl-input-wrap">
-              <Search size={14} aria-hidden="true" />
-              <input
-                id="tpl-search"
-                type="search"
-                value={filters.query}
-                onChange={(e) => updateFilter('query', e.target.value)}
-                placeholder="Buscar por nome, área, tipo, tags ou responsável..."
-              />
-            </span>
+        {/* Linha 1: Busca full-width */}
+        <div className="tpl-filters-search">
+          <label htmlFor="tpl-search" className="sr-only">Buscar modelo</label>
+          <span className="tpl-input-wrap">
+            <Search size={14} aria-hidden="true" />
+            <input
+              id="tpl-search"
+              type="search"
+              value={filters.query}
+              onChange={(e) => updateFilter('query', e.target.value)}
+              placeholder="Buscar por nome, área, tipo, tags ou responsável..."
+            />
+          </span>
+        </div>
+
+        {/* Linha 2: chips de status + dropdowns compactos + controles */}
+        <div className="tpl-filters-row2">
+          <div className="tpl-status-chips" role="group" aria-label="Filtrar por status">
+            {([
+              { value: '', label: 'Todos', count: models.length },
+              { value: 'ativo', label: 'Ativo', count: chipCounts.ativo },
+              { value: 'revisao', label: 'Revisão', count: chipCounts.revisao },
+              { value: 'rascunho', label: 'Rascunho', count: chipCounts.rascunho },
+              { value: 'arquivado', label: 'Arquivado', count: chipCounts.arquivado },
+            ] as const).map(({ value, label, count }) => (
+              <button
+                key={value}
+                type="button"
+                className={`tpl-chip${filters.status === value ? ' tpl-chip--active' : ''}${value === 'revisao' && chipCounts.revisao > 0 ? ' tpl-chip--urgent' : ''}`}
+                onClick={() => updateFilter('status', value)}
+                aria-pressed={filters.status === value}
+              >
+                {label}
+                {count > 0 && <span className="tpl-chip-count">{count}</span>}
+              </button>
+            ))}
           </div>
 
-          <div className="tpl-field">
-            <label htmlFor="tpl-area">Área jurídica</label>
-            <select id="tpl-area" value={filters.area} onChange={(e) => updateFilter('area', e.target.value)}>
-              <option value="">Todas</option>
+          <div className="tpl-compact-dropdowns">
+            <select value={filters.area} onChange={(e) => updateFilter('area', e.target.value)} aria-label="Área jurídica">
+              <option value="">Área</option>
               {AREAS.map((a) => <option key={a} value={a}>{a}</option>)}
             </select>
-          </div>
-
-          <div className="tpl-field">
-            <label htmlFor="tpl-tipo">Tipo de peça</label>
-            <select id="tpl-tipo" value={filters.tipoPeca} onChange={(e) => updateFilter('tipoPeca', e.target.value)}>
-              <option value="">Todos</option>
+            <select value={filters.tipoPeca} onChange={(e) => updateFilter('tipoPeca', e.target.value)} aria-label="Tipo de peça">
+              <option value="">Tipo</option>
               {TIPOS.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
-          </div>
-
-          <div className="tpl-field">
-            <label htmlFor="tpl-status">Status</label>
-            <select id="tpl-status" value={filters.status} onChange={(e) => updateFilter('status', e.target.value)}>
-              <option value="">Todos</option>
-              {(Object.entries(STATUS_CFG) as Array<[TemplateStatus, { label: string }]>).map(([k, v]) => (
-                <option key={k} value={k}>{v.label}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="tpl-field">
-            <label htmlFor="tpl-oficial">Oficial / Rascunho</label>
-            <select id="tpl-oficial" value={filters.oficialOuRascunho} onChange={(e) => updateFilter('oficialOuRascunho', e.target.value)}>
-              <option value="">Todos</option>
-              <option value="oficial">Oficial</option>
-              <option value="rascunho">Rascunho</option>
-            </select>
-          </div>
-
-          <div className="tpl-field">
-            <label htmlFor="tpl-fase">Fase processual</label>
-            <select id="tpl-fase" value={filters.fase} onChange={(e) => updateFilter('fase', e.target.value)}>
-              <option value="">Todas</option>
+            <select value={filters.fase} onChange={(e) => updateFilter('fase', e.target.value)} aria-label="Fase processual">
+              <option value="">Fase</option>
               {FASES.map((f) => <option key={f} value={f}>{f}</option>)}
             </select>
           </div>
 
-          <div className="tpl-field">
-            <label htmlFor="tpl-autor">Autor</label>
-            <select id="tpl-autor" value={filters.autor} onChange={(e) => updateFilter('autor', e.target.value)}>
-              <option value="">Todos</option>
-              {uniqueAutores.map((a) => <option key={a} value={a}>{a}</option>)}
-            </select>
+          <div className="tpl-filter-controls">
+            <button
+              className={`btn-ghost tpl-adv-toggle${showAdvancedFilters ? ' tpl-adv-toggle--active' : ''}`}
+              onClick={() => setShowAdvancedFilters((v) => !v)}
+              aria-expanded={showAdvancedFilters}
+            >
+              <Filter size={13} /> Avançado
+            </button>
+            {hasActiveFilters && (
+              <button className="btn-ghost" onClick={clearFilters} aria-label="Limpar filtros"><X size={13} /> Limpar</button>
+            )}
+            <button className="btn-ghost" onClick={saveFilters} aria-label="Salvar filtro"><Save size={13} /> Salvar</button>
+            <div className="tpl-view-toggle" role="group" aria-label="Modo de visualização">
+              <button className={`tpl-view-btn${viewMode === 'lista' ? ' tpl-view-btn--active' : ''}`} onClick={() => setViewMode('lista')} aria-pressed={viewMode === 'lista'}>
+                <List size={13} /> Lista
+              </button>
+              <button className={`tpl-view-btn${viewMode === 'cards' ? ' tpl-view-btn--active' : ''}`} onClick={() => setViewMode('cards')} aria-pressed={viewMode === 'cards'}>
+                <LayoutGrid size={13} /> Cards
+              </button>
+            </div>
           </div>
         </div>
 
-        <div className="tpl-filters-bottom">
-          <label className="tpl-checkline">
-            <input type="checkbox" checked={filters.favorito} onChange={(e) => updateFilter('favorito', e.target.checked)} />
-            Favorito
-          </label>
-          <label className="tpl-checkline">
-            <input type="checkbox" checked={filters.autoFill} onChange={(e) => updateFilter('autoFill', e.target.checked)} />
-            Com autopreenchimento
-          </label>
-
-          <div className="tpl-filter-actions">
+        {/* Filtros avançados colapsáveis */}
+        {showAdvancedFilters && (
+          <div className="tpl-advanced-filters">
+            <div className="tpl-field">
+              <label htmlFor="tpl-oficial">Oficial / Rascunho</label>
+              <select id="tpl-oficial" value={filters.oficialOuRascunho} onChange={(e) => updateFilter('oficialOuRascunho', e.target.value)}>
+                <option value="">Todos</option>
+                <option value="oficial">Oficial</option>
+                <option value="rascunho">Rascunho</option>
+              </select>
+            </div>
+            <div className="tpl-field">
+              <label htmlFor="tpl-autor">Autor</label>
+              <select id="tpl-autor" value={filters.autor} onChange={(e) => updateFilter('autor', e.target.value)}>
+                <option value="">Todos</option>
+                {uniqueAutores.map((a) => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </div>
+            <label className="tpl-checkline">
+              <input type="checkbox" checked={filters.favorito} onChange={(e) => updateFilter('favorito', e.target.checked)} />
+              Somente favoritos
+            </label>
+            <label className="tpl-checkline">
+              <input type="checkbox" checked={filters.autoFill} onChange={(e) => updateFilter('autoFill', e.target.checked)} />
+              Com autopreenchimento
+            </label>
             {hasActiveFilters && (
               <span className="tpl-filter-summary"><Filter size={12} /><strong>{filtered.length}</strong> de {models.length}</span>
             )}
-            <button className="btn-ghost" onClick={clearFilters} aria-label="Limpar filtros"><X size={13} /> Limpar</button>
-            <button className="btn-ghost" onClick={saveFilters} aria-label="Salvar filtro"><Save size={13} /> Salvar filtro</button>
           </div>
-
-          <div className="tpl-view-toggle" role="group" aria-label="Modo de visualização">
-            <button className={`tpl-view-btn${viewMode === 'lista' ? ' tpl-view-btn--active' : ''}`} onClick={() => setViewMode('lista')} aria-pressed={viewMode === 'lista'}>
-              <List size={13} /> Lista
-            </button>
-            <button className={`tpl-view-btn${viewMode === 'cards' ? ' tpl-view-btn--active' : ''}`} onClick={() => setViewMode('cards')} aria-pressed={viewMode === 'cards'}>
-              <LayoutGrid size={13} /> Cards
-            </button>
-          </div>
-        </div>
+        )}
       </div>
 
       {loading && (
@@ -703,8 +754,6 @@ function PieceTemplates({ user }: PieceTemplatesProps) {
                       <th scope="col">Status</th>
                       <th scope="col">Versão</th>
                       <th scope="col">Última atualização</th>
-                      <th scope="col">Preenchimento automático</th>
-                      <th scope="col">Uso recente</th>
                       <th scope="col"><span className="sr-only">Ações</span></th>
                     </tr>
                   </thead>
@@ -840,23 +889,26 @@ function PieceTemplates({ user }: PieceTemplatesProps) {
             </div>
 
             <div className="tpl-drawer-actions">
-              <button className="btn-primary" onClick={() => openGenerateFlow(selected.id)}>
-                <FilePlus2 size={13} /> Gerar peça
+              <button className="btn-primary tpl-drawer-cta" onClick={() => openGenerateFlow(selected.id)}>
+                <FilePlus2 size={14} /> Gerar peça
               </button>
-              <button className="btn-secondary" onClick={() => setSuccess('Pré-visualização completa aberta.')}>
-                <Eye size={13} /> Visualizar completo
-              </button>
-              <button className="btn-secondary" onClick={() => setSuccess('Edição de modelo iniciada.')}>
-                <PenSquare size={13} /> Editar
-              </button>
-              <button className="btn-secondary" onClick={() => duplicateTemplate(selected.id)}>
-                <Copy size={13} /> Duplicar
-              </button>
-              <button className="btn-secondary" onClick={() => createNewVersion(selected.id)}>
-                <RefreshCw size={13} /> Versionar
-              </button>
-              <button className="btn-ghost" onClick={() => toggleFavorite(selected.id)}>
-                <Star size={13} /> {selected.favorito ? 'Desfavoritar' : 'Favoritar'}
+              <div className="tpl-drawer-secondary-grid">
+                <button className="btn-secondary" onClick={() => setSuccess('Pré-visualização completa aberta.')}>
+                  <Eye size={13} /> Visualizar
+                </button>
+                <button className="btn-secondary" onClick={() => setSuccess('Edição de modelo iniciada.')}>
+                  <PenSquare size={13} /> Editar
+                </button>
+                <button className="btn-secondary" onClick={() => duplicateTemplate(selected.id)}>
+                  <Copy size={13} /> Duplicar
+                </button>
+                <button className="btn-secondary" onClick={() => createNewVersion(selected.id)}>
+                  <RefreshCw size={13} /> Versionar
+                </button>
+              </div>
+              <button className="btn-ghost tpl-drawer-fav" onClick={() => toggleFavorite(selected.id)}>
+                <Star size={13} className={selected.favorito ? 'tpl-star-on' : ''} />
+                {selected.favorito ? 'Desfavoritar' : 'Favoritar'}
               </button>
             </div>
           </aside>
@@ -873,10 +925,25 @@ function PieceTemplates({ user }: PieceTemplatesProps) {
             </div>
 
             <div className="tpl-gen-steps" aria-label="Etapas da geração">
-              {[1, 2, 3, 4].map((step) => (
-                <span key={step} className={`tpl-step${generation.step === step ? ' tpl-step--active' : ''}`}>
-                  {step}
-                </span>
+              {([
+                { n: 1, label: 'Modelo' },
+                { n: 2, label: 'Processo' },
+                { n: 3, label: 'Campos' },
+                { n: 4, label: 'Revisar' },
+              ] as const).map(({ n, label }) => (
+                <div
+                  key={n}
+                  className={`tpl-step-item${generation.step === n ? ' tpl-step-item--active' : ''}${generation.step > n ? ' tpl-step-item--done' : ''}`}
+                >
+                  <span
+                    className={`tpl-step${generation.step === n ? ' tpl-step--active' : ''}`}
+                    aria-current={generation.step === n ? 'step' : undefined}
+                    aria-label={`Etapa ${n} de 4: ${label}`}
+                  >
+                    {n}
+                  </span>
+                  <span className="tpl-step-label">{label}</span>
+                </div>
               ))}
             </div>
 
