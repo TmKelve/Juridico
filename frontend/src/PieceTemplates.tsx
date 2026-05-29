@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  BookOpen,
   CheckCircle2,
   Copy,
   Download,
@@ -26,6 +27,7 @@ import { api, type ApiProcess, type ApiTemplate } from './api';
 import { captureException, trackEvent, trackPageView } from './monitoring';
 import { ProcessCombobox } from './ProcessCombobox';
 import './PieceTemplates.css';
+import './Dashboard.css';
 
 interface PieceTemplatesProps {
   user: { id: number; email: string; role: string };
@@ -434,6 +436,25 @@ function PieceTemplates({ user }: PieceTemplatesProps) {
   const pageItems = sorted.slice((page - 1) * PER_PAGE, page * PER_PAGE);
   const hasActiveFilters = Object.values(filters).some((v) => (typeof v === 'boolean' ? v : v !== ''));
 
+  const kpiCards = [
+    { label: 'Total de modelos', value: loading ? '—' : String(kpis.total), description: 'Acervo da biblioteca', icon: BookOpen, tone: 'primary' as const, onClick: () => clearFilters() },
+    { label: 'Modelos oficiais', value: loading ? '—' : String(kpis.oficiais), description: 'Aprovados para uso', icon: CheckCircle2, tone: 'info' as const, onClick: () => updateFilter('oficialOuRascunho', 'oficial') },
+    { label: 'Favoritos', value: loading ? '—' : String(kpis.favoritos), description: 'Marcados pela equipe', icon: Star, tone: 'warning' as const, onClick: () => updateFilter('favorito', true) },
+    { label: 'Usados recentemente', value: loading ? '—' : String(kpis.usadosRecentes), description: 'Últimos 14 dias', icon: RefreshCw, tone: 'success' as const, onClick: () => {} },
+    { label: 'Precisando revisão', value: loading ? '—' : String(kpis.revisao), description: kpis.revisao > 0 ? 'Requerem atenção' : 'Biblioteca atualizada', icon: AlertTriangle, tone: 'error' as const, onClick: () => updateFilter('status', 'revisao') },
+  ] as const;
+
+  const libraryHealthTone = kpis.revisao > 0 ? 'critical' : 'stable';
+  const libraryHealthLabel = kpis.revisao > 0
+    ? `${kpis.revisao} ${kpis.revisao === 1 ? 'modelo precisa' : 'modelos precisam'} de revisão.`
+    : 'Biblioteca atualizada.';
+  const headerSummaryItems = [
+    { label: 'Em exibição', value: filtered.length, tone: 'neutral' as const },
+    { label: 'Em revisão', value: kpis.revisao, tone: kpis.revisao > 0 ? 'critical' as const : 'neutral' as const },
+    { label: 'Favoritos', value: kpis.favoritos, tone: 'info' as const },
+    { label: 'Oficiais', value: kpis.oficiais, tone: 'info' as const },
+  ] as const;
+
   function renderRow(m: TemplateModel) {
     const isOpen = openMenuId === m.id;
     return (
@@ -518,24 +539,36 @@ function PieceTemplates({ user }: PieceTemplatesProps) {
 
   return (
     <div className="tpl-page" onClick={() => { if (openMenuId) setOpenMenuId(null); }}>
-      <div className="tpl-hero">
+      <header className="tpl-hero" aria-label="Cabeçalho da biblioteca de modelos">
         <div className="tpl-hero-copy">
-          <p className="tpl-eyebrow">BIBLIOTECA JURÍDICA</p>
-          <h2>Modelos de Peças</h2>
-          <p className="tpl-subtitle">Encontre, versione e reutilize modelos oficiais para gerar novas peças com autopreenchimento seguro.</p>
+          <p className="tpl-hero-eyebrow">BIBLIOTECA JURÍDICA</p>
+          <h1 className="tpl-hero-title">Modelos de Peças</h1>
+          <p className="tpl-hero-subtitle">Encontre, versione e reutilize modelos oficiais para gerar novas peças com autopreenchimento seguro.</p>
+          <div className="tpl-hero-chips" aria-label="Resumo da biblioteca">
+            {headerSummaryItems.map((item) => (
+              <div key={item.label} className="tpl-hero-summary-chip" data-tone={item.tone}>
+                <strong>{item.value}</strong>
+                <span>{item.label}</span>
+              </div>
+            ))}
+            <div className="tpl-hero-pulse" data-tone={libraryHealthTone}>
+              <span className="tpl-hero-pulse-dot" aria-hidden="true" />
+              <span>{libraryHealthLabel}</span>
+            </div>
+          </div>
         </div>
         <div className="tpl-header-actions">
           <button className="btn-primary" onClick={() => setSuccess('Fluxo de novo modelo iniciado.')} aria-label="Criar novo modelo">
-            <Plus size={14} /> Novo Modelo
+            <Plus size={16} /> Novo Modelo
           </button>
           <button className="btn-secondary" onClick={() => openGenerateFlow()} aria-label="Gerar nova peça a partir de modelo">
-            <WandSparkles size={14} /> Nova Peça a partir de Modelo
+            <WandSparkles size={16} /> Nova Peça
           </button>
           <button className="btn-secondary" onClick={() => setSuccess('Importação de modelo iniciada.')} aria-label="Importar modelo">
-            <Upload size={14} /> Importar Modelo
+            <Upload size={16} /> Importar
           </button>
         </div>
-      </div>
+      </header>
 
       {error && (
         <div className="tpl-alert tpl-alert--error" role="alert">
@@ -552,6 +585,21 @@ function PieceTemplates({ user }: PieceTemplatesProps) {
           <span>{success}</span>
         </div>
       )}
+
+      <section className="tpl-kpis" aria-label="Indicadores da biblioteca">
+        {kpiCards.map((kpi) => (
+          <button key={kpi.label} type="button" className="metric-card" data-kpi-color={kpi.tone} onClick={kpi.onClick} aria-label={`${kpi.label}: ${kpi.value}`}>
+            <div className="metric-top-row">
+              <p className="metric-value">{kpi.value}</p>
+              <div className="metric-icon" aria-hidden="true">
+                <kpi.icon size={16} />
+              </div>
+            </div>
+            <p className="metric-label">{kpi.label}</p>
+            <p className="metric-microtext">{kpi.description}</p>
+          </button>
+        ))}
+      </section>
 
       {focusTemplate && (
         <div className="tpl-context-strip" role="status" aria-label="Atenção necessária">
@@ -573,14 +621,6 @@ function PieceTemplates({ user }: PieceTemplatesProps) {
           </button>
         </div>
       )}
-
-      <div className="tpl-kpis" aria-label="Indicadores de modelos">
-        <div className="tpl-kpi-card"><p>Total de modelos</p><strong className="tpl-kpi-value">{loading ? '—' : kpis.total}</strong></div>
-        <div className="tpl-kpi-card"><p>Modelos oficiais</p><strong className="tpl-kpi-value tpl-kpi-value--brand">{loading ? '—' : kpis.oficiais}</strong></div>
-        <div className="tpl-kpi-card"><p>Favoritos</p><strong className="tpl-kpi-value tpl-kpi-value--warning">{loading ? '—' : kpis.favoritos}</strong></div>
-        <div className="tpl-kpi-card"><p>Usados recentemente</p><strong className="tpl-kpi-value">{loading ? '—' : kpis.usadosRecentes}</strong></div>
-        <div className="tpl-kpi-card"><p>Precisando revisão</p><strong className="tpl-kpi-value tpl-kpi-value--error">{loading ? '—' : kpis.revisao}</strong></div>
-      </div>
 
       <div className="tpl-filters">
         {/* Linha 1: Busca full-width */}
