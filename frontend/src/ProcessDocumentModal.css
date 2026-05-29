@@ -155,8 +155,8 @@
   height: 28px;
   border: 1px solid var(--neutral-300);
   border-radius: var(--radius-md);
-  background: var(--white);
-  color: var(--neutral-700);
+  background: var(--neutral-50);
+  color: var(--neutral-600);
   cursor: pointer;
   flex-shrink: 0;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
@@ -167,7 +167,7 @@
   border-color: var(--neutral-400);
 }
 .pdm-phase-arrow:disabled {
-  opacity: 0.3;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
@@ -249,17 +249,20 @@
 .pdm-phase-step.is-current .pdm-step-dot {
   background: var(--brand-600);
   border-color: var(--brand-700);
-  box-shadow: 0 0 0 3px var(--brand-100);
 }
 .pdm-phase-step.is-current .pdm-step-label {
   color: var(--brand-700);
   font-weight: 600;
 }
 
-/* Selected (what the user is viewing) */
-.pdm-phase-step.is-selected .pdm-step-dot {
+/* Selected (what the user is viewing) — only when NOT also current */
+.pdm-phase-step.is-selected:not(.is-current) .pdm-step-dot {
   outline: 2px solid var(--brand-600);
   outline-offset: 2px;
+}
+/* When current AND selected — one subtle glow, no double ring */
+.pdm-phase-step.is-current.is-selected .pdm-step-dot {
+  box-shadow: 0 0 0 3px var(--brand-100);
 }
 .pdm-phase-step.is-selected .pdm-step-label {
   font-weight: 600;
