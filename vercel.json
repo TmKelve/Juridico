@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "npm ci && npm --prefix frontend ci",
-  "buildCommand": "VITE_API_URL=https://juridico-api-staging.onrender.com npm run frontend:build",
+  "buildCommand": "npm run frontend:build",
   "outputDirectory": "frontend/dist",
   "rewrites": [
     {

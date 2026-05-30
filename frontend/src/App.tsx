@@ -627,14 +627,6 @@ function App() {
             </button>
           </form>
 
-          <details className="credentials-helper">
-            <summary>Precisa de credenciais para teste?</summary>
-            <div className="credentials-list">
-              <p><strong>Administrador:</strong> admin@juridico.com / 123456</p>
-              <p><strong>Advogado:</strong> advogado@juridico.com / 123456</p>
-              <p><strong>Financeiro:</strong> financeiro@juridico.com / 123456</p>
-            </div>
-          </details>
         </div>
       </div>
     )

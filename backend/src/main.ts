@@ -141,58 +141,6 @@ const devMockDeadlines = [
 ] as const;
 
 // === Profile & Notifications (Topbar evolution) ===
-const devMockNotifications = [
-  {
-    id: 1,
-    recipientUserId: 1,
-    type: 'prazo_vencendo',
-    title: 'Prazo crítico em 2 dias',
-    body: 'Contestação — Proc. 0001234-56.2024.8.26.0100 vence em 13/06.',
-    href: '/prazos',
-    read: false,
-    createdAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 2,
-    recipientUserId: 1,
-    type: 'publicacao_nova',
-    title: 'Nova publicação TJ-SP',
-    body: 'Despacho publicado em Ação Civil Pública — lote de hoje.',
-    href: '/publicacoes-intimacoes',
-    read: false,
-    createdAt: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 3,
-    recipientUserId: 1,
-    type: 'tarefa_pendente',
-    title: 'Tarefa sem movimentação',
-    body: 'Juntar petição inicial — aguardando há 3 dias.',
-    href: '/tarefas',
-    read: false,
-    createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 4,
-    recipientUserId: 1,
-    type: 'atendimento_retorno',
-    title: 'Retorno agendado para hoje',
-    body: 'Cliente Atlas LTDA — retorno marcado para 14h.',
-    href: '/atendimentos',
-    read: true,
-    createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 5,
-    recipientUserId: 1,
-    type: 'sistema',
-    title: 'Bem-vindo ao Lexora',
-    body: 'Configure seu perfil para uma experiência personalizada.',
-    href: '/',
-    read: true,
-    createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-  },
-];
 
 const devMockAgendaEvents = [
   { id: 201, processId: 1, title: 'Audiência de instrução', type: 'audiencia', status: 'confirmado', priority: 'alta', dayOffset: 0, startTime: '10:00', endTime: '11:00', locationOrChannel: 'Fórum Trabalhista', origin: 'processo', notes: 'Levar documentos complementares.' },
@@ -3970,47 +3918,65 @@ app.post('/me/change-password', async (req, res) => {
   }
 });
 
-app.get('/notifications', (req, res) => {
+app.get('/notifications', async (req, res) => {
   const decoded = getUserFromReq(req);
   if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
 
   try {
-    const userNotifications = devMockNotifications
-      .filter((n) => n.recipientUserId === decoded.sub)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 20);
-    return res.json({ notifications: userNotifications });
+    const notifications = await prisma.notification.findMany({
+      where: { recipientUserId: decoded.sub },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+    return res.json({ notifications });
   } catch (error) {
     return res.status(500).json({ message: error instanceof Error ? error.message : 'Erro ao carregar notificações' });
   }
 });
 
-app.post('/notifications/:id/read', (req, res) => {
+app.post('/notifications/:id/read', async (req, res) => {
   const decoded = getUserFromReq(req);
   if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
 
   const notifId = Number(req.params.id);
-  const notif = devMockNotifications.find((n) => n.id === notifId && n.recipientUserId === decoded.sub);
-  if (notif) notif.read = true;
-  return res.json({ success: true });
+  try {
+    await prisma.notification.updateMany({
+      where: { id: notifId, recipientUserId: decoded.sub },
+      data: { read: true },
+    });
+    return res.json({ success: true });
+  } catch (error) {
+    return res.status(500).json({ message: error instanceof Error ? error.message : 'Erro ao marcar notificação como lida' });
+  }
 });
 
-app.post('/notifications/read-all', (req, res) => {
+app.post('/notifications/read-all', async (req, res) => {
   const decoded = getUserFromReq(req);
   if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
 
-  devMockNotifications
-    .filter((n) => n.recipientUserId === decoded.sub)
-    .forEach((n) => { n.read = true; });
-  return res.json({ success: true });
+  try {
+    await prisma.notification.updateMany({
+      where: { recipientUserId: decoded.sub, read: false },
+      data: { read: true },
+    });
+    return res.json({ success: true });
+  } catch (error) {
+    return res.status(500).json({ message: error instanceof Error ? error.message : 'Erro ao marcar notificações como lidas' });
+  }
 });
 
-app.get('/notifications/count', (req, res) => {
+app.get('/notifications/count', async (req, res) => {
   const decoded = getUserFromReq(req);
   if (!decoded) return res.status(401).send({ message: 'Token não fornecido ou inválido' });
 
-  const count = devMockNotifications.filter((n) => n.recipientUserId === decoded.sub && !n.read).length;
-  return res.json({ count });
+  try {
+    const count = await prisma.notification.count({
+      where: { recipientUserId: decoded.sub, read: false },
+    });
+    return res.json({ count });
+  } catch (error) {
+    return res.status(500).json({ message: error instanceof Error ? error.message : 'Erro ao contar notificações' });
+  }
 });
 
 // === Fim Profile & Notifications ===

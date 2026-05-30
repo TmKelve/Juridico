@@ -7,7 +7,8 @@ export type UserToken = {
   email: string;
 };
 
-const JWT_SECRET = process.env.JWT_SECRET || 's3cr3t-juridico';
+if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET environment variable is required');
+const JWT_SECRET = process.env.JWT_SECRET as string;
 
 export function signUserToken(user: { id: number; email: string; role: string }) {
   return jwt.sign({ sub: user.id, role: user.role, email: user.email }, JWT_SECRET, { expiresIn: '8h' });
