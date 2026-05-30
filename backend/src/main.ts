@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import { put as blobPut } from '@vercel/blob';
 import bcrypt from 'bcrypt';
 import { createHash, randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
@@ -693,9 +694,51 @@ function createLocalDocumentStorageAdapter() {
   };
 }
 
+// ── Cloud storage adapter (Vercel Blob) ──────────────────────────────────────
+// Ativo quando BLOB_READ_WRITE_TOKEN está configurado (Render em produção).
+// Fallback para disco local quando não configurado (dev offline).
+function createCloudDocumentStorageAdapter() {
+  return {
+    async store(input: {
+      processId: number;
+      fileName: string;
+      contentBase64: string;
+      mimeType: string;
+      sizeInBytes: number;
+      metadata: Record<string, unknown>;
+    }) {
+      const checksum = computeContentChecksum(input.contentBase64);
+      const extension = getFileExtension(input.fileName);
+      const blobPath = `documents/${new Date().toISOString().slice(0, 10)}-${input.processId}-${checksum.slice(0, 12)}${extension}`;
+
+      const blob = await blobPut(
+        blobPath,
+        Buffer.from(input.contentBase64, 'base64'),
+        {
+          access: 'public',
+          contentType: input.mimeType || 'application/octet-stream',
+          token: process.env.BLOB_READ_WRITE_TOKEN,
+        },
+      );
+
+      return {
+        storageKey: blob.url,
+        mimeType: input.mimeType,
+        sizeInBytes: input.sizeInBytes,
+        checksum,
+        previewUrl: blob.url,
+      };
+    },
+  };
+}
+
 function createDocumentUploadService() {
+  const storageAdapter = process.env.BLOB_READ_WRITE_TOKEN
+    ? createCloudDocumentStorageAdapter()
+    : createLocalDocumentStorageAdapter();
+
   return new DocumentUploadService(
-    createLocalDocumentStorageAdapter(),
+    storageAdapter,
     {
       async assertProcessExists(processId: number) {
         const process = await prisma.process.findUnique({
