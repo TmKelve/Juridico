@@ -1,26 +1,27 @@
-import type { ComponentProps } from 'react'
+import type { CSSProperties, ComponentProps } from 'react'
 
 import { Badge } from '@/components/ui'
 import { cn } from '@/lib/cn'
 
-type StatusTone = 'positive' | 'warning' | 'critical' | 'neutral' | 'info'
+export type StatusTone = 'positive' | 'warning' | 'critical' | 'neutral' | 'info'
 
 interface StatusPillProps extends ComponentProps<typeof Badge> {
   tone?: StatusTone
 }
 
-const statusToneClass: Record<StatusTone, string> = {
-  positive: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  warning: 'border-amber-200 bg-amber-50 text-amber-700',
-  critical: 'border-rose-200 bg-rose-50 text-rose-700',
-  neutral: 'border-slate-200 bg-slate-100 text-slate-700',
-  info: 'border-sky-200 bg-sky-50 text-sky-700',
+const toneStyle: Record<StatusTone, CSSProperties> = {
+  positive: { color: 'var(--success-700)', backgroundColor: 'var(--success-100)', borderColor: 'var(--success-100)' },
+  warning:  { color: 'var(--warning-700)', backgroundColor: 'var(--warning-100)', borderColor: 'var(--warning-100)' },
+  critical: { color: 'var(--error-700)',   backgroundColor: 'var(--error-100)',   borderColor: 'var(--error-100)'   },
+  neutral:  { color: 'var(--neutral-700)', backgroundColor: 'var(--neutral-100)', borderColor: 'var(--neutral-200)' },
+  info:     { color: 'var(--info-700)',    backgroundColor: 'var(--info-100)',    borderColor: 'var(--info-100)'    },
 }
 
-export function StatusPill({ tone = 'neutral', className, ...props }: StatusPillProps) {
+export function StatusPill({ tone = 'neutral', className, style, ...props }: StatusPillProps) {
   return (
     <Badge
-      className={cn('inline-flex items-center rounded-full border px-2 py-1 text-xs font-medium', statusToneClass[tone], className)}
+      className={cn('inline-flex items-center rounded-full border px-2 py-1 text-xs font-medium', className)}
+      style={{ ...toneStyle[tone], ...style }}
       {...props}
     />
   )

@@ -4,6 +4,7 @@ import { Search } from 'lucide-react'
 
 import { Button } from '@/components/ui'
 import { cn } from '@/lib/cn'
+import { productSurfaceBase, productSurfaceStyle } from './styles'
 
 interface FilterBarProps extends HTMLAttributes<HTMLDivElement> {
   searchPlaceholder?: string
@@ -22,18 +23,16 @@ export function FilterBar({
   onSearchChange,
   actions,
   className,
+  style,
   children,
   ...props
 }: FilterBarProps) {
   return (
     <div
-      className={cn(
-        'flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-3',
-        className,
-      )}
+      className={cn(productSurfaceBase, 'flex flex-wrap items-center gap-3 p-3', className)}
+      style={{ ...productSurfaceStyle, ...style }}
       {...props}
     >
-      {/* Search: flex-row pattern — icon sibling, no padding-left override needed */}
       <div className="filterbar-search-wrap">
         <Search className="filterbar-search-icon" aria-hidden="true" />
         <input
