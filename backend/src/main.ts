@@ -8356,7 +8356,7 @@ app.get('/', (req, res) => {
 app.post('/admin/seed-finance', async (req, res) => {
   const actor = getUserFromReq(req);
   if (!actor) return res.status(401).json({ error: 'Não autenticado' });
-  if (actor.role !== 'admin') return res.status(403).json({ error: 'Apenas administradores' });
+  if (actor.role !== 'ADM') return res.status(403).json({ error: 'Apenas administradores' });
 
   try {
     // Guard: skip if already seeded
