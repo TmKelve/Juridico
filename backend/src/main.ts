@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import bcrypt from 'bcrypt';
 import { createHash, randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
@@ -95,6 +97,11 @@ import { registerPlatformConsoleRoutes } from './platform/register-platform-cons
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+// Render roda atrás de um único reverse proxy. Necessário para que req.ip
+// reflita o IP real do cliente (rate limiting) sem permitir spoofing de
+// X-Forwarded-For. '1' = confia apenas no primeiro hop.
+app.set('trust proxy', 1);
 const prisma = new PrismaClient() as PrismaClient & {
   client: any;
   publicationCapture: any;
@@ -114,12 +121,13 @@ const isProduction = process.env.NODE_ENV === 'production';
 const authCookieName = 'Authorization';
 const devMockEnabled = !isProduction && process.env.LEXORA_DEV_MOCK !== '0';
 
+const devMockPassword = process.env.LEXORA_DEV_PASSWORD ?? '123456';
 const devMockUsers = [
-  { id: 1, email: 'admin@juridico.com', password: '123456', role: 'ADM' },
-  { id: 2, email: 'advogado@juridico.com', password: '123456', role: 'ADV' },
-  { id: 3, email: 'financeiro@juridico.com', password: '123456', role: 'FIN' },
-  { id: 4, email: 'atendimento@juridico.com', password: '123456', role: 'ATD' },
-] as const;
+  { id: 1, email: 'admin@juridico.com',      password: devMockPassword, role: 'ADM' },
+  { id: 2, email: 'advogado@juridico.com',   password: devMockPassword, role: 'ADV' },
+  { id: 3, email: 'financeiro@juridico.com', password: devMockPassword, role: 'FIN' },
+  { id: 4, email: 'atendimento@juridico.com',password: devMockPassword, role: 'ATD' },
+];
 
 const devMockProcesses = [
   { id: 3, title: 'Recuperacao de Credito Cliente Nexo', processNumber: '10024567820265020001', client: 'Cliente Nexo', phase: 'Recurso', status: 'pausado', ownerId: 1 },
@@ -227,6 +235,12 @@ function buildAllowedOrigins(primaryOrigin: string) {
 }
 
 const allowedOrigins = buildAllowedOrigins(frontendUrl);
+
+// ── Segurança: headers HTTP via Helmet ───────────────────────────────────────
+app.use(helmet({
+  contentSecurityPolicy: false,   // CSP gerenciado pelo Vercel/frontend
+  crossOriginEmbedderPolicy: false, // necessário para cookies cross-origin
+}));
 
 app.use(cors({
   origin(origin, callback) {
@@ -2437,11 +2451,12 @@ async function syncClientsFromProcesses() {
 async function seedData() {
   const count = await prisma.user.count();
   if (count === 0) {
+    const seedPassword = process.env.LEXORA_SEED_PASSWORD ?? process.env.LEXORA_DEV_PASSWORD ?? '123456';
     const users = [
-      { email: 'admin@juridico.com', password: '123456', role: 'ADM' },
-      { email: 'advogado@juridico.com', password: '123456', role: 'ADV' },
-      { email: 'financeiro@juridico.com', password: '123456', role: 'FIN' },
-    ] as const;
+      { email: 'admin@juridico.com',      password: seedPassword, role: 'ADM' },
+      { email: 'advogado@juridico.com',   password: seedPassword, role: 'ADV' },
+      { email: 'financeiro@juridico.com', password: seedPassword, role: 'FIN' },
+    ];
 
     for (const user of users) {
       await prisma.user.create({
@@ -3801,7 +3816,27 @@ function canReadAgendaEvent(user: UserToken, event: {
   );
 }
 
-app.post('/auth/login', async (req, res) => {
+// ── Rate limiting: login (brute-force) ───────────────────────────────────────
+const loginRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  limit: 20,                 // máx 20 tentativas por IP por janela
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { message: 'Muitas tentativas de login. Tente novamente em 15 minutos.' },
+});
+
+// ── Rate limiting: endpoints de IA ───────────────────────────────────────────
+const aiRateLimit = rateLimit({
+  windowMs: 60 * 1000, // 1 minuto
+  limit: 10,           // máx 10 chamadas de IA por IP por minuto
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { message: 'Limite de requisições de IA atingido. Aguarde um momento.' },
+});
+
+app.use('/ai', aiRateLimit);
+
+app.post('/auth/login', loginRateLimit, async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ message: 'email e senha são obrigatórios' });
 
