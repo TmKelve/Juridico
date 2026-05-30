@@ -306,10 +306,10 @@ function AppShell({
           userName={shortName}
           userEmail={user.email || ''}
           userRole={user.role || ''}
-          notificationCount={3}
+          notificationCount={notificationCount}
           onMenuClick={handleNavToggle}
           onLogout={onLogout}
-          onNotifications={() => trackEvent('notifications_opened')}
+          onNotifications={() => { fetchNotificationCount(); trackEvent('notifications_opened') }}
           onHelp={() => trackEvent('help_opened')}
           onShortcuts={() => trackEvent('shortcuts_opened')}
         />
@@ -387,6 +387,7 @@ function App() {
   })
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [notificationCount, setNotificationCount] = useState(0)
   const hasRestoredSessionRef = useRef(false)
 
   useEffect(() => {
@@ -402,6 +403,11 @@ function App() {
       trackPageView('dashboard', { role: user.role })
     }
   }, [user, home])
+
+  // Busca contagem real de notificações ao logar ou restaurar sessão
+  useEffect(() => {
+    if (user) fetchNotificationCount()
+  }, [user?.id])
 
   const fetchHome = async (userOverride?: User | null, silent = false) => {
     try {
@@ -428,6 +434,15 @@ function App() {
       setHome(null)
       setUser(null)
       trackEvent('session_expired', { error: (err as Error).message })
+    }
+  }
+
+  const fetchNotificationCount = async () => {
+    try {
+      const res = await api.getNotificationCount()
+      if (res.status === 200) setNotificationCount(res.data.count ?? 0)
+    } catch {
+      // silencioso — badge fica no valor anterior
     }
   }
 
