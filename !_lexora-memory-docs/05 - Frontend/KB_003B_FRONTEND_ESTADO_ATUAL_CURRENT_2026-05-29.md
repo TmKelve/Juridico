@@ -214,8 +214,8 @@ Este documento serve como base para:
 | `frontend/.env.staging.example` | Template staging | Variáveis para staging | Médio | **Não mencionado no KB-003A** — conteúdo não lido | Ler e documentar |
 | `frontend/.env` | Env local | Arquivo existe; conteúdo não lido | Alto (segredo) | Não deve ser commitado | Confirmar que não está no git |
 
-> [!note] IBM Plex Sans
-> O `tailwind.config.ts` declara `fontFamily.sans: ['"IBM Plex Sans"', 'Segoe UI', 'sans-serif']`, mas não foi identificado nenhum import via `<link>` no `index.html` ou `@import` em CSS. Se a fonte não for carregada, o sistema cairá para Segoe UI — o que pode ser intencional ou omissão. Ponto para confirmar no KB-006.
+> [!success] IBM Plex Sans — confirmada carregando (2026-05-30)
+> `<link>` do Google Fonts (400/500/600/700) adicionado em `frontend/index.html` com `preconnect`. `--font-family-base` em `tokens.css` atualizado para liderar com `"IBM Plex Sans"`. Computed style de `html` confirmado via browser. Decisão de Tom. Commit `5797948`.
 
 ---
 
@@ -223,9 +223,9 @@ Este documento serve como base para:
 
 | Arquivo | Papel | Observações | Ponto a validar |
 |---|---|---|---|
-| `frontend/index.html` | HTML entry point do Vite | Referencia `src/main.tsx`; estrutura mínima; id `root` | Verificar se existe link para IBM Plex Sans |
+| `frontend/index.html` | HTML entry point do Vite | Referencia `src/main.tsx`; estrutura mínima; id `root`. Inclui `<link>` Google Fonts IBM Plex Sans (adicionado 2026-05-30, commit `5797948`) | — |
 | `frontend/src/main.tsx` | Entry point React | `createRoot` + `StrictMode`; importa `index.css`; renderiza `<App />` | — |
-| `frontend/src/App.tsx` | Componente raiz | Login form + Router + CompanyContext.Provider + AppShell | Ver seção 9 |
+| `frontend/src/App.tsx` | Dois componentes: `App()` (auth/session) + `AppShell()` (authenticated shell) | `App` gerencia login, sessão, user state. `AppShell` (linha ~217) recebe user via props e gerencia sidebar, topbar, rotas — componentes SEPARADOS. `notificationCount` e `fetchNotificationCount` vivem em `AppShell` (corrigido 2026-05-30, commit `0e4b071`). | — |
 | `frontend/src/tokens.css` | Tokens de design | Importado em `App.tsx`; define toda a paleta, tipografia, espaçamento | — |
 | `frontend/src/index.css` | Estilos base | Importado em `main.tsx`; Tailwind directives + variáveis shadcn HSL | — |
 | `frontend/src/monitoring.ts` | Setup de monitoramento | `initMonitoring()` chamado no topo de `App.tsx` antes do render | Sentry e GA são stubs — confirmar se integração real existe |

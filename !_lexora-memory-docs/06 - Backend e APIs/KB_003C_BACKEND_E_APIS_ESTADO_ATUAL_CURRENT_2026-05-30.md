@@ -234,8 +234,8 @@ Este documento serve como base para:
 > [!note] CORS configurado em código
 > CORS não usa arquivo de config separado — configurado diretamente em `main.ts:283` via `app.use(cors({...}))`. A origem permitida vem de `FRONTEND_URL` (env var), com variantes de `localhost` em modo dev.
 
-> [!note] Sem Helmet ou headers de segurança globais identificados
-> Não foi encontrado uso de `helmet` ou configuração explícita de headers de segurança (`X-Frame-Options`, `Strict-Transport-Security`, etc.) em `main.ts`. O `vercel.json` raiz configura headers de segurança para o frontend, mas o backend não tem middleware equivalente visível.
+> [!success] Helmet e rate limiting adicionados (2026-05-30)
+> `helmet()` aplicado globalmente em `main.ts` antes do CORS (commit `94a8c91`). CSP desabilitado (gerenciado pelo Vercel/frontend); COEP desabilitado para cookies cross-origin. `express-rate-limit` adicionado: `/auth/login` 20 req/15min; `/ai/*` 10 req/min. `trust proxy=1` configurado para IP real do cliente atrás do Render. `@types/express` e `@types/bcrypt` movidos de `devDependencies` para `dependencies` (commit `92b9ef1`). Senhas mock/seed movidas para `LEXORA_DEV_PASSWORD`/`LEXORA_SEED_PASSWORD` env vars (commit `94a8c91`).
 
 ---
 
@@ -496,12 +496,12 @@ Este documento serve como base para:
 | **GET /home** | `main.ts:7217` | Lê cookie → verifyToken → retorna menu/cards por role | — | — |
 | **JWT Secret** | `auth.ts:10`, `auth/auth-claims.ts:15` | `process.env.JWT_SECRET || 's3cr3t-juridico'` | **Alto** — valor fallback hardcoded no código; qualquer deploy sem env var usa este segredo | Confirmar que `JWT_SECRET` está sempre configurado no Render |
 | **Sem refresh token** | Análise de código | Não há endpoint de refresh; sessão expira em 8h sem renovação | Médio | Confirmar comportamento esperado (relogin ou sessão longa) |
-| **Dev mock** | `main.ts:116-122`, `354-362` | Quando DB indisponível e `devMockEnabled=true`, autentica com usuários mock em memória | Médio — senhas em plain text no código | Confirmar que `LEXORA_DEV_MOCK=0` ou `NODE_ENV=production` em staging/produção |
+| **Dev mock** | `main.ts:116-122`, `354-362` | Quando DB indisponível e `devMockEnabled=true`, autentica com usuários mock em memória | ✅ **Mitigado** (2026-05-30) — senhas movidas para `LEXORA_DEV_PASSWORD` env var (commit `94a8c91`). `devMockEnabled = !isProduction` garante que não ativa em produção. | — |
 | **Dois auth files** | `src/auth.ts` e `src/auth/auth-claims.ts` | `auth.ts` tem claims simples (`sub, role, email`); `auth/auth-claims.ts` tem claims ricos (`userType, companyId, membershipId`) | **Médio** — login usa `auth.ts` legado; `auth-claims.ts` é mais novo mas pode não ser o path do login principal | Confirmar qual é usado no fluxo de login e qual pode ser descontinuado |
 | **Bearer token via header** | `main.ts:313-323` | Aceita token via cookie OU via `Authorization: Bearer ...` header | Baixo | Dual auth path pode ser útil para testes/BI |
 
-> [!warning] Dev mock users com senhas em plain text
-> `main.ts:117-122` define usuários mock com senhas em plain text diretamente no código-fonte (`password: '123456'`). Estas credenciais são visíveis em qualquer clone do repositório. Em produção, `devMockEnabled = !isProduction` garante que o mock não seja ativado — mas o risco de exposição acidental existe.
+> [!success] Dev mock — senhas movidas para env vars (2026-05-30)
+> `main.ts:117-122` agora usa `process.env.LEXORA_DEV_PASSWORD ?? '123456'` e `process.env.LEXORA_SEED_PASSWORD ?? '123456'`. O fallback `'123456'` permanece como default de desenvolvimento — risco aceito e documentado em `.env.example`. Em produção, `devMockEnabled = !isProduction` garante que o mock nunca é ativado (commit `94a8c91`).
 
 ---
 
@@ -521,10 +521,10 @@ Este documento serve como base para:
 | **Multi-tenant** | `src/shared/company-scope/company-scope-prisma.adapter.ts` | `assertCompanyScopeAllowed` — garante que operações ficam dentro da empresa autenticada | Alto — falha aqui vaza dados entre tenants | Garantir uso consistente em todos os repositories |
 | **Platform admin** | `src/platform-auth/platform-user-policy.ts` | Avalia policy para usuários de plataforma | — | — |
 | **CompanyMutationGuard** | `src/platform-access/company-status-access-policy.ts` | Política de acesso baseada em status da empresa | — | — |
-| **Admin seed** | `main.ts:8392` | `if (actor.role !== 'admin')` — **verifica role em lowercase** | **Alto** — roles reais são `ADM`, `ADV`, etc. — check `!== 'admin'` nunca é verdadeiro, logo qualquer usuário autenticado pode chamar | Corrigir ou investigar se há role `admin` separado |
+| **Admin seed** | `main.ts:8392` | ✅ `if (actor.role !== 'ADM')` — **corrigido em 2026-05-30** (commit `fae145a`) | — | — |
 
-> [!warning] Bug provável em `/admin/seed-finance`
-> O handler `POST /admin/seed-finance` verifica `actor.role !== 'admin'` para bloquear não-admins. Os roles reais no sistema são `ADM`, `ADV`, `FIN`, `ATD`. Como nenhum desses é igual a `'admin'` (lowercase), a condição **nunca é verdadeira** e qualquer usuário autenticado recebe 403. Alternativamente, o check está invertido: deveria ser `actor.role !== 'ADM'` para bloquear não-admins. Ponto a confirmar.
+> [!success] Bug `/admin/seed-finance` corrigido (2026-05-30)
+> O check `actor.role !== 'admin'` foi corrigido para `actor.role !== 'ADM'`. Endpoint agora acessível exclusivamente por usuários com role `ADM`. Commit `fae145a`.
 
 ---
 
