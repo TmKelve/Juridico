@@ -152,9 +152,9 @@ Status de ADR:
 - A pasta `docs-juridico\.obsidian` é considerada legada e inativa.
 - O vault oficial é exclusivamente `!_lexora-memory-docs`.
 
-### Agentes e skills antigos — NÃO são fonte oficial:
-- `.codex/agents/*.toml` (criados em 02/04/2026) não são fonte oficial até validação explícita.
-- `.codex/skills/` não são fonte oficial até validação explícita.
+### Agentes Codex — validados em 2026-06-01:
+- `.codex/agents/*.toml` — validados e migrados de `docs-juridico` para `!_lexora-memory-docs` (BL-009/BL-076). Referências canônicas atualizadas. Não são fonte oficial de verdade técnica, mas estão alinhados com o vault.
+- `.codex/skills/` — auditados em 2026-06-01 (BL-010). `lexora-deploy.md` e `lexora-orchestrator.md` corrigidos. Demais são válidos como metodologia geral.
 
 ### Artefatos técnicos — NÃO são documentação principal:
 - `frontend/test-results/` — artefatos automáticos gerados pelo Playwright. Puramente técnicos.
@@ -247,6 +247,7 @@ Os documentos abaixo foram identificados como necessários para a memória ofici
 |---|---|---|---|
 | [[MAPA_CANONICO_LEXORA_CURRENT]] | `01 - Knowledge Base` | Alta | **Criado** |
 | [[PROTOCOLO_CONTEXTO_ENXUTO_LEXORA_CURRENT]] | `12 - IA - Prompts e Sessoes` | Alta | **Criado** |
+| [[BUILD_DEPLOY_ENVIRONMENT_CURRENT]] | `03 - Arquitetura` | Alta | **Criado** (2026-06-01, BL-011) |
 | `ADR_001_VAULT_OFICIAL_DOCUMENTACAO_LEXORA.md` | `10 - Decisoes ADR` | Alta | A criar |
 | `CURRENT_STATE_LEXORA.md` | `02 - Estado Atual` | Alta | A criar |
 | `FONTES_OFICIAIS_CURRENT.md` | `01 - Knowledge Base` | Alta | A criar |
@@ -301,11 +302,12 @@ A fase de inventário e consolidação técnica KB-003 foi concluída em 2026-05
 ## 15. Próxima Fase Recomendada
 
 > [!note] Status do vault
-> Fase KB-003 concluída em 2026-05-30. P0 técnicos resolvidos em 2026-05-30 (BL-001, BL-003, BL-004, BL-039, BL-020, BL-040, BL-046 — commit `a96f43c`). Próxima fase: KB-004 Product Discovery.
+> Fase KB-003 concluída em 2026-05-30. P0 técnicos resolvidos em 2026-05-30. Sprint de P1 concluída em 2026-06-01 (BL-002, BL-005, BL-007, BL-008, BL-009, BL-010, BL-011, BL-065, BL-066, BL-067, BL-068, BL-073, BL-076). Próxima fase: P2 técnicos + KB-004 Product Discovery.
 
-Após a conclusão da fase KB-003 e resolução dos P0, a próxima fase documental é:
+Após a conclusão da fase KB-003 e resolução dos P0 e P1, a próxima fase documental é:
 
-1. ✅ ~~Resolver os riscos P0~~ — concluído em 2026-05-30. Ver [[BACKLOG_GERAL_LEXORA_CURRENT]] para detalhes. BL-002 (Production Branch) permanece como decisão pendente do usuário.
+1. ✅ ~~Resolver os riscos P0~~ — concluído em 2026-05-30.
+2. ✅ ~~Sprint P1~~ — concluída em 2026-06-01. Ver [[BACKLOG_GERAL_LEXORA_CURRENT]] para detalhes.
 2. Consultar [[BACKLOG_GERAL_LEXORA_CURRENT]] para prioridades e dependências atualizadas (84 itens).
 3. Iniciar `KB_004_PRODUCT_DISCOVERY_LEXORA_CURRENT.md`.
 4. Em seguida, avançar para:

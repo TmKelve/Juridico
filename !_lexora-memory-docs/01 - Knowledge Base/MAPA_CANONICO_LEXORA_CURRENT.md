@@ -51,7 +51,8 @@ Se a tarefa for ampla, comece por:
 | Redução de contexto | [[PROTOCOLO_CONTEXTO_ENXUTO_LEXORA_CURRENT]] | [[MAPA_CANONICO_LEXORA_CURRENT]] |
 | Visão técnica consolidada | [[KB_003G_RISCOS_TECNICOS_E_DIVERGENCIAS_CONSOLIDADAS_CURRENT_2026-05-30]] | KB-003A a KB-003F |
 | Backlog e ações | [[BACKLOG_GERAL_LEXORA_CURRENT]] | KB relacionado ao item |
-| Estrutura geral/deploy | [[KB_003A_ESTRUTURA_GERAL_E_CONFIGURACOES_CURRENT_2026-05-29]] | [[KB_003G_RISCOS_TECNICOS_E_DIVERGENCIAS_CONSOLIDADAS_CURRENT_2026-05-30]] |
+| Build, deploy e ambientes | [[BUILD_DEPLOY_ENVIRONMENT_CURRENT]] (em `03 - Arquitetura`) | [[KB_003A_ESTRUTURA_GERAL_E_CONFIGURACOES_CURRENT_2026-05-29]] |
+| Estrutura geral/configurações | [[KB_003A_ESTRUTURA_GERAL_E_CONFIGURACOES_CURRENT_2026-05-29]] | [[KB_003G_RISCOS_TECNICOS_E_DIVERGENCIAS_CONSOLIDADAS_CURRENT_2026-05-30]] |
 | Frontend | [[KB_003B_FRONTEND_ESTADO_ATUAL_CURRENT_2026-05-29]] | KB-005 e KB-006 futuramente |
 | Backend/APIs | [[KB_003C_BACKEND_E_APIS_ESTADO_ATUAL_CURRENT_2026-05-30]] | [[KB_003D_DADOS_PRISMA_E_CONTRATOS_CURRENT_2026-05-30]] |
 | Dados/Prisma/Contratos | [[KB_003D_DADOS_PRISMA_E_CONTRATOS_CURRENT_2026-05-30]] | [[KB_003G_RISCOS_TECNICOS_E_DIVERGENCIAS_CONSOLIDADAS_CURRENT_2026-05-30]] |
@@ -92,7 +93,7 @@ Se a tarefa for ampla, comece por:
 - Em caso de conflito, documentos `CURRENT` no vault oficial prevalecem.
 - O backlog é fonte operacional, não fonte absoluta de verdade técnica.
 - KB mais recente e específico prevalece sobre KB anterior.
-- `.codex/agents/` e `.codex/skills/` são legado potencial — verificar antes de usar.
+- `.codex/agents/` — validados e migrados para `!_lexora-memory-docs` em 2026-06-01 (BL-009/BL-076). Podem ser usados, mas não são fonte oficial de verdade técnica do projeto.
 
 ---
 
