@@ -1,8 +1,13 @@
 # Lexora — Deploy e Infraestrutura
 
+> ⚠️ **Este arquivo contém informações parcialmente desatualizadas.**
+> A fonte autoritativa é `!_lexora-memory-docs/03 - Arquitetura/BUILD_DEPLOY_ENVIRONMENT_CURRENT.md`.
+> Em caso de conflito, o documento do vault prevalece.
+> Pontos desatualizados conhecidos: referências a Cloud Run (backend está no Render), URLs de staging/produção antigas.
+
 ## Propósito
 
-Documentar os fluxos de deploy do frontend (Vercel) e backend (Cloud Run / Render), gerenciamento de migrações Prisma, variáveis de ambiente e procedimentos de rollback.
+Documentar os fluxos de deploy do frontend (Vercel) e backend (Render), gerenciamento de migrações Prisma, variáveis de ambiente e procedimentos de rollback.
 
 ---
 

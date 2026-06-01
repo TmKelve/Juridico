@@ -108,6 +108,20 @@ jobs:
           echo "Frontend did not become ready"
           exit 1
 
+      - name: Wait for seed to complete
+        run: |
+          for i in {1..30}; do
+            status=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://127.0.0.1:3000/auth/login \
+              -H "Content-Type: application/json" \
+              -d '{"email":"advogado@juridico.com","password":"123456"}')
+            if [ "$status" = "200" ]; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Seed did not complete in time"
+          exit 1
+
       - name: Run smoke tests
         run: npm run test:smoke
         working-directory: frontend
