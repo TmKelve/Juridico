@@ -326,7 +326,7 @@ Próximos itens recomendados (ver [[BACKLOG_GERAL_LEXORA_CURRENT]] para detalhes
 |---|---|---|
 | 🔴 CRÍTICO | **BL-059** | Auditar `companyScope` em todos os endpoints — risco multi-tenant crítico |
 | 🟡 Média | **BL-049** | Refactoring progressivo de `main.ts` (~8.500 linhas) para routers por domínio |
-| 🟡 Média | **BL-027** | Resolver duplicidades de `KpiCard`, `EmptyState`, `PageHeader` (desbloqueado — KB-005/006 ✅) |
+| ✅ Concluído | **BL-027/031** | EmptyState/PageHeader unificados; SidebarNav morto removido. Commit `9dea318` |
 | 🟡 Média | **BL-017** | Criar índice de documentação técnica actual (desbloqueado — KB-003B/C/D ✅) |
 | 🟡 Média | **BL-064** | Avaliar `schema_init.sql` — relação com migrations Prisma (desbloqueado por BL-055 ✅) |
 
@@ -337,5 +337,5 @@ Próximos itens recomendados (ver [[BACKLOG_GERAL_LEXORA_CURRENT]] para detalhes
 
 ---
 
-*Criado em: 2026-05-29 | Última atualização: 2026-06-09 (UPDATE-START-HERE-008 — BL-082/055/056/035/016/085 concluídos; deploy realizado; utilizador platform_admin criado em produção) | Status: current | Vault: !_lexora-memory-docs*
+*Criado em: 2026-05-29 | Última atualização: 2026-06-09 (UPDATE-START-HERE-009 — BL-027/031 concluídos; EmptyState/PageHeader unificados; código morto removido) | Status: current | Vault: !_lexora-memory-docs*
 *Baseado em: [[KB_001_DOCUMENTACAO_MAPEAMENTO_INICIAL_CURRENT_2026-05-29]], [[KB_002_GOVERNANCA_DOCUMENTAL_OFICIAL_CURRENT_2026-05-29]], [[KB_003G_RISCOS_TECNICOS_E_DIVERGENCIAS_CONSOLIDADAS_CURRENT_2026-05-30]], [[BACKLOG_GERAL_LEXORA_CURRENT]], [[MAPA_CANONICO_LEXORA_CURRENT]], [[PROTOCOLO_CONTEXTO_ENXUTO_LEXORA_CURRENT]]*
