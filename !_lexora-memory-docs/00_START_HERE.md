@@ -303,8 +303,8 @@ A fase de inventário e consolidação técnica KB-003 foi concluída em 2026-05
 
 ## 15. Próxima Fase Recomendada
 
-> [!note] Status do vault
-> Fase KB-003 concluída em 2026-05-30. Sprint P1 concluída em 2026-06-01. Fase documental KB (004/005/006) concluída em 2026-06-09. P2 quick wins (BL-012/022/050/051/052/063) + limpeza (BL-016/035/055/056/082/085) concluídos em 2026-06-09. Deploy realizado em `codex/baseline-postgres-staging`. Utilizador `platform@lexora.dev` criado em produção (BL-085 concluído).
+> [!note] Status do vault — 2026-06-09
+> Fase KB-003 concluída. Sprint P1 concluída. KB-004/005/006 concluídos. Sprint P2 concluída (BL-012/016/022/027/031/035/050/051/052/055/056/063/082/085). Deploy activo em `codex/baseline-postgres-staging`. Utilizador `platform@lexora.dev` criado em produção.
 
 Histórico de fases concluídas:
 
@@ -313,12 +313,9 @@ Histórico de fases concluídas:
 3. ✅ ~~KB-004 Product Discovery~~ — concluído em 2026-06-09.
 4. ✅ ~~KB-005 Inventário UX/UI~~ — concluído em 2026-06-09.
 5. ✅ ~~KB-006 Design System~~ — concluído em 2026-06-09.
-6. ✅ ~~BL-063 Enum UserRole no Prisma~~ — concluído em 2026-06-09.
-7. ✅ ~~BL-050 Endpoint `/healthz`~~ — concluído em 2026-06-09. **Acção manual:** configurar Health Check Path `/healthz` no Render.
-8. ✅ ~~BL-051 Sem `error.message` em respostas 500~~ — concluído em 2026-06-09.
-9. ✅ ~~BL-052 Logging HTTP com morgan~~ — concluído em 2026-06-09.
-10. ✅ ~~BL-022 Rotas platform-admin activadas~~ — concluído em 2026-06-09. (empresas / colaboradores / auditoria)
-11. ✅ ~~BL-012 `@nestjs/cli` → devDependencies~~ — concluído em 2026-06-09.
+6. ✅ ~~Sprint P2 quick wins~~ — concluída em 2026-06-09. (BL-012/022/050/051/052/063)
+7. ✅ ~~Sprint P2 limpeza P3~~ — concluída em 2026-06-09. (BL-016/035/055/056/082/085)
+8. ✅ ~~BL-027/031 Componentização~~ — concluída em 2026-06-09. (EmptyState/PageHeader unificados, código morto removido)
 
 Próximos itens recomendados (ver [[BACKLOG_GERAL_LEXORA_CURRENT]] para detalhes completos):
 
@@ -326,16 +323,14 @@ Próximos itens recomendados (ver [[BACKLOG_GERAL_LEXORA_CURRENT]] para detalhes
 |---|---|---|
 | 🔴 CRÍTICO | **BL-059** | Auditar `companyScope` em todos os endpoints — risco multi-tenant crítico |
 | 🟡 Média | **BL-049** | Refactoring progressivo de `main.ts` (~8.500 linhas) para routers por domínio |
-| ✅ Concluído | **BL-027/031** | EmptyState/PageHeader unificados; SidebarNav morto removido. Commit `9dea318` |
 | 🟡 Média | **BL-017** | Criar índice de documentação técnica actual (desbloqueado — KB-003B/C/D ✅) |
 | 🟡 Média | **BL-064** | Avaliar `schema_init.sql` — relação com migrations Prisma (desbloqueado por BL-055 ✅) |
+| 🟡 Média | **BL-038** | Design System Fase 5 — responsividade (Fases 1–4 concluídas) |
 
 > [!tip] Redução de contexto
 > Antes de iniciar novas fases, novas IAs devem consultar [[MAPA_CANONICO_LEXORA_CURRENT]] e [[PROTOCOLO_CONTEXTO_ENXUTO_LEXORA_CURRENT]] para aplicar leitura mínima e evitar releitura desnecessária dos KBs técnicos.
 
-> [!warning] Product Discovery pode começar em paralelo com quick wins técnicos, mas não deve ignorar os riscos P0 de produção e segurança.
-
 ---
 
-*Criado em: 2026-05-29 | Última atualização: 2026-06-09 (UPDATE-START-HERE-009 — BL-027/031 concluídos; EmptyState/PageHeader unificados; código morto removido) | Status: current | Vault: !_lexora-memory-docs*
+*Criado em: 2026-05-29 | Última atualização: 2026-06-09 (UPDATE-START-HERE-010 — histórico Sprint P2 completo; BL-027/031 concluídos; tabela de próximos passos reorganizada) | Status: current | Vault: !_lexora-memory-docs*
 *Baseado em: [[KB_001_DOCUMENTACAO_MAPEAMENTO_INICIAL_CURRENT_2026-05-29]], [[KB_002_GOVERNANCA_DOCUMENTAL_OFICIAL_CURRENT_2026-05-29]], [[KB_003G_RISCOS_TECNICOS_E_DIVERGENCIAS_CONSOLIDADAS_CURRENT_2026-05-30]], [[BACKLOG_GERAL_LEXORA_CURRENT]], [[MAPA_CANONICO_LEXORA_CURRENT]], [[PROTOCOLO_CONTEXTO_ENXUTO_LEXORA_CURRENT]]*

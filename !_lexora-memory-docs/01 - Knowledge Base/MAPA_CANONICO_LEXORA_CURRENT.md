@@ -56,15 +56,18 @@ Se a tarefa for ampla, comece por:
 | Frontend (componentes, telas) | [[KB_003B_FRONTEND_ESTADO_ATUAL_CURRENT_2026-05-29]] | [[KB_005_INVENTARIO_UX_UI_CURRENT_2026-06-09]], [[KB_006_DESIGN_SYSTEM_CURRENT_2026-06-09]] |
 | Backend/APIs/Express | [[KB_003C_BACKEND_E_APIS_ESTADO_ATUAL_CURRENT_2026-05-30]] | [[KB_003D_DADOS_PRISMA_E_CONTRATOS_CURRENT_2026-05-30]] |
 | Dados/Prisma/Contratos/Enum | [[KB_003D_DADOS_PRISMA_E_CONTRATOS_CURRENT_2026-05-30]] | [[KB_003G_RISCOS_TECNICOS_E_DIVERGENCIAS_CONSOLIDADAS_CURRENT_2026-05-30]] |
-| Roles / Auth / Permissões | `backend/src/roles/roles.ts` + `permissions/matrix.ts` | [[BACKLOG_GERAL_LEXORA_CURRENT]] (BL-083 concluído) |
+| Roles / Auth / Permissões | `backend/src/roles/roles.ts` + `permissions/matrix.ts` | `backend/prisma/schema.prisma` (enum `UserRole`) |
 | Testes/QA/Evidências | [[KB_003E_TESTES_QA_E_EVIDENCIAS_CURRENT_2026-05-30]] | [[BACKLOG_GERAL_LEXORA_CURRENT]] |
 | IA/Agentes/Automações | [[KB_003F_IA_AGENTES_E_AUTOMACOES_CURRENT_2026-05-30]] | [[KB_003G_RISCOS_TECNICOS_E_DIVERGENCIAS_CONSOLIDADAS_CURRENT_2026-05-30]] |
 | Riscos técnicos | [[KB_003G_RISCOS_TECNICOS_E_DIVERGENCIAS_CONSOLIDADAS_CURRENT_2026-05-30]] | [[BACKLOG_GERAL_LEXORA_CURRENT]] |
 | Decisões ADR | Pasta `10 - Decisoes ADR` | KB-003G seção de ADRs recomendados |
 | Product Discovery / Módulos | [[KB_004_PRODUCT_DISCOVERY_LEXORA_CURRENT_2026-06-09]] | KB-003G + BACKLOG |
 | Inventário UX/UI / Fluxos / States | [[KB_005_INVENTARIO_UX_UI_CURRENT_2026-06-09]] | [[KB_003B_FRONTEND_ESTADO_ATUAL_CURRENT_2026-05-29]] |
-| Design System / Tokens / Componentes | [[KB_006_DESIGN_SYSTEM_CURRENT_2026-06-09]] | [[KB_005_INVENTARIO_UX_UI_CURRENT_2026-06-09]] |
-| Observabilidade / Healthcheck / Logs | `backend/src/main.ts` (`/healthz`, morgan) | [[BACKLOG_GERAL_LEXORA_CURRENT]] (BL-050/052 concluídos) |
+| Design System / Tokens / Componentes canónicos | [[KB_006_DESIGN_SYSTEM_CURRENT_2026-06-09]] | `frontend/src/components/product/` (canónico) |
+| Componentes canónicos (uso directo) | `frontend/src/components/product/` — `EmptyState`, `PageHeader` (badge), `KpiCard`, `StatusPill`, `PriorityBadge`, etc. | Nota: `KpiCard` tem 2 variantes intencionais — `components/product/KpiCard` (display) e `dashboard/widgets/KpiCard` (button interactivo) |
+| Rotas platform-admin | `frontend/src/platform-admin/` + `frontend/src/App.tsx` (guard `platform_admin`) | `frontend/src/sidebar/SidebarNav.tsx` (secção PLATAFORMA) |
+| Observabilidade / Healthcheck / Logs | `backend/src/main.ts` (`GET /healthz`, morgan middleware) | [[BACKLOG_GERAL_LEXORA_CURRENT]] (BL-050/052 concluídos) |
+| Scripts Prisma canónicos | `backend/package.json` — `prisma:generate`, `prisma:migrate:dev`, `prisma:migrate:deploy`, `prisma:studio` | Scripts `cutover:*` e `postgres:*` removidos (BL-055/056) |
 
 ---
 
@@ -127,6 +130,6 @@ Se a tarefa for ampla, comece por:
 
 ---
 
-*Criado em: 2026-05-30 | Última atualização: 2026-06-09 (KB-004/005/006 adicionados; entradas de roles, observabilidade e design system actualizadas) | Status: current | Vault: !_lexora-memory-docs*
+*Criado em: 2026-05-30 | Última atualização: 2026-06-09 (Sprint P2 completa — componentes canónicos, rotas platform-admin, scripts Prisma, UserRole enum; BL-027/031 concluídos) | Status: current | Vault: !_lexora-memory-docs*
 *Pasta: 01 - Knowledge Base | Fonte: Claude Code*
 *Baseado em: [[00_START_HERE]], [[KB_002_GOVERNANCA_DOCUMENTAL_OFICIAL_CURRENT_2026-05-29]], [[KB_003G_RISCOS_TECNICOS_E_DIVERGENCIAS_CONSOLIDADAS_CURRENT_2026-05-30]], [[BACKLOG_GERAL_LEXORA_CURRENT]]*
