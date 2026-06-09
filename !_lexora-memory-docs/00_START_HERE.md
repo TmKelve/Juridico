@@ -304,7 +304,7 @@ A fase de inventário e consolidação técnica KB-003 foi concluída em 2026-05
 ## 15. Próxima Fase Recomendada
 
 > [!note] Status do vault
-> Fase KB-003 concluída em 2026-05-30. Sprint P1 concluída em 2026-06-01. Fase documental KB (004/005/006) concluída em 2026-06-09. P2 quick wins (BL-012/050/051/052/063) concluídos em 2026-06-09. Rotas platform-admin activadas (BL-022) em 2026-06-09. **Pendência de deploy:** commit + push das alterações desta sessão para Render + chamar BL-085 após deploy.
+> Fase KB-003 concluída em 2026-05-30. Sprint P1 concluída em 2026-06-01. Fase documental KB (004/005/006) concluída em 2026-06-09. P2 quick wins (BL-012/022/050/051/052/063) + limpeza (BL-016/035/055/056/082/085) concluídos em 2026-06-09. Deploy realizado em `codex/baseline-postgres-staging`. Utilizador `platform@lexora.dev` criado em produção (BL-085 concluído).
 
 Histórico de fases concluídas:
 
@@ -320,17 +320,15 @@ Histórico de fases concluídas:
 10. ✅ ~~BL-022 Rotas platform-admin activadas~~ — concluído em 2026-06-09. (empresas / colaboradores / auditoria)
 11. ✅ ~~BL-012 `@nestjs/cli` → devDependencies~~ — concluído em 2026-06-09.
 
-> [!warning] Pendência de deploy
-> As alterações desta sessão ainda não foram commitadas nem enviadas para o Render. Após o deploy, executar **BL-085**: `POST /admin/create-platform-user` (autenticado como ADM) para criar o utilizador `platform@lexora.dev` na BD de produção.
-
 Próximos itens recomendados (ver [[BACKLOG_GERAL_LEXORA_CURRENT]] para detalhes completos):
 
 | Prioridade | Item | Descrição |
 |---|---|---|
-| 🟠 Deploy | **BL-085** | Após deploy: `POST /admin/create-platform-user` para criar `platform@lexora.dev` em produção |
 | 🔴 CRÍTICO | **BL-059** | Auditar `companyScope` em todos os endpoints — risco multi-tenant crítico |
 | 🟡 Média | **BL-049** | Refactoring progressivo de `main.ts` (~8.500 linhas) para routers por domínio |
-| 🟡 Média | **BL-082** | Confirmar endpoints HTTP de `DocumentDraftingService` e `ChecklistSuggestionService` |
+| 🟡 Média | **BL-027** | Resolver duplicidades de `KpiCard`, `EmptyState`, `PageHeader` (desbloqueado — KB-005/006 ✅) |
+| 🟡 Média | **BL-017** | Criar índice de documentação técnica actual (desbloqueado — KB-003B/C/D ✅) |
+| 🟡 Média | **BL-064** | Avaliar `schema_init.sql` — relação com migrations Prisma (desbloqueado por BL-055 ✅) |
 
 > [!tip] Redução de contexto
 > Antes de iniciar novas fases, novas IAs devem consultar [[MAPA_CANONICO_LEXORA_CURRENT]] e [[PROTOCOLO_CONTEXTO_ENXUTO_LEXORA_CURRENT]] para aplicar leitura mínima e evitar releitura desnecessária dos KBs técnicos.
@@ -339,5 +337,5 @@ Próximos itens recomendados (ver [[BACKLOG_GERAL_LEXORA_CURRENT]] para detalhes
 
 ---
 
-*Criado em: 2026-05-29 | Última atualização: 2026-06-09 (UPDATE-START-HERE-007 — BL-022 platform-admin routes, BL-012 devDeps; BL-085 criado; pendência de deploy e criação de utilizador platform_admin em produção) | Status: current | Vault: !_lexora-memory-docs*
+*Criado em: 2026-05-29 | Última atualização: 2026-06-09 (UPDATE-START-HERE-008 — BL-082/055/056/035/016/085 concluídos; deploy realizado; utilizador platform_admin criado em produção) | Status: current | Vault: !_lexora-memory-docs*
 *Baseado em: [[KB_001_DOCUMENTACAO_MAPEAMENTO_INICIAL_CURRENT_2026-05-29]], [[KB_002_GOVERNANCA_DOCUMENTAL_OFICIAL_CURRENT_2026-05-29]], [[KB_003G_RISCOS_TECNICOS_E_DIVERGENCIAS_CONSOLIDADAS_CURRENT_2026-05-30]], [[BACKLOG_GERAL_LEXORA_CURRENT]], [[MAPA_CANONICO_LEXORA_CURRENT]], [[PROTOCOLO_CONTEXTO_ENXUTO_LEXORA_CURRENT]]*
