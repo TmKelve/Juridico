@@ -1,4 +1,4 @@
-import { PageHeader } from '@/dashboard/layout/PageHeader'
+import { PageHeader } from '@/components/product/PageHeader'
 import { PlatformAdminSupportPanel } from './SupportContextPanel'
 import type { SupportContextItem } from './types'
 

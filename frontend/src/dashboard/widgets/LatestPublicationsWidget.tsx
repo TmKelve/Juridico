@@ -2,7 +2,7 @@ import { NotebookText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { SectionCard } from './SectionCard';
 import { RailWidgetItem } from './RailWidgetItem';
-import { EmptyState } from './EmptyState';
+import { EmptyState } from '@/components/product/EmptyState';
 
 export function LatestPublicationsWidget() {
   const navigate = useNavigate();
@@ -31,7 +31,7 @@ export function LatestPublicationsWidget() {
           ))}
         </ul>
       ) : (
-        <EmptyState icon={NotebookText} title="Nenhuma publicação recente" description="As novas movimentações oficiais aparecerão aqui." />
+        <EmptyState icon={<NotebookText size={32} />} title="Nenhuma publicação recente" description="As novas movimentações oficiais aparecerão aqui." />
       )}
     </SectionCard>
   );

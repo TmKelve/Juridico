@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { ResponsibilityItem } from '../types';
 import { SectionCard } from './SectionCard';
 import { RailWidgetItem } from './RailWidgetItem';
-import { EmptyState } from './EmptyState';
+import { EmptyState } from '@/components/product/EmptyState';
 
 interface RecentCasesWidgetProps {
   items: ResponsibilityItem[];
@@ -32,7 +32,7 @@ export function RecentCasesWidget({ items }: RecentCasesWidgetProps) {
           ))}
         </ul>
       ) : (
-        <EmptyState icon={Scale} title="Nenhum processo recente" description="Os casos mais ativos da carteira aparecerão aqui." />
+        <EmptyState icon={<Scale size={32} />} title="Nenhum processo recente" description="Os casos mais ativos da carteira aparecerão aqui." />
       )}
     </SectionCard>
   );

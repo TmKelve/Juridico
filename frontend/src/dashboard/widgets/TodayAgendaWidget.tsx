@@ -2,7 +2,7 @@ import { Calendar } from 'lucide-react';
 import type { AgendaItem } from '../types';
 import { SectionCard } from './SectionCard';
 import { AgendaTimelineItem } from './AgendaTimelineItem';
-import { EmptyState } from './EmptyState';
+import { EmptyState } from '@/components/product/EmptyState';
 
 interface TodayAgendaWidgetProps {
   items: AgendaItem[];
@@ -24,7 +24,7 @@ export function TodayAgendaWidget({ items }: TodayAgendaWidgetProps) {
           ))}
         </ul>
       ) : (
-        <EmptyState icon={Calendar} title="Nenhum evento hoje" description="Sua agenda está livre no momento." />
+        <EmptyState icon={<Calendar size={32} />} title="Nenhum evento hoje" description="Sua agenda está livre no momento." />
       )}
     </SectionCard>
   );

@@ -1,4 +1,4 @@
-import { PageHeader } from '@/dashboard/layout/PageHeader'
+import { PageHeader } from '@/components/product/PageHeader'
 import { CompanyDetailPanel, CompanyListCard } from '@/components/platform-admin/companies/CompanyCards'
 import type { CompanyAdminAction, CompanyDetailView, CompanyListItemView } from './types'
 

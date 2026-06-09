@@ -1,7 +1,7 @@
 import { AlertTriangle } from 'lucide-react';
 import type { AlertItem } from '../types';
 import { SectionCard } from './SectionCard';
-import { EmptyState } from './EmptyState';
+import { EmptyState } from '@/components/product/EmptyState';
 
 interface CriticalAlertsWidgetProps {
   items: AlertItem[];
@@ -20,7 +20,7 @@ export function CriticalAlertsWidget({ items }: CriticalAlertsWidgetProps) {
           ))}
         </ul>
       ) : (
-        <EmptyState icon={AlertTriangle} title="Nenhum alerta crítico" />
+        <EmptyState icon={<AlertTriangle size={32} />} title="Nenhum alerta crítico" />
       )}
     </SectionCard>
   );

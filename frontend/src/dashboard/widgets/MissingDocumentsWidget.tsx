@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { ResponsibilityItem } from '../types';
 import { SectionCard } from './SectionCard';
 import { RailWidgetItem } from './RailWidgetItem';
-import { EmptyState } from './EmptyState';
+import { EmptyState } from '@/components/product/EmptyState';
 
 interface MissingDocumentsWidgetProps {
   items: ResponsibilityItem[];
@@ -32,7 +32,7 @@ export function MissingDocumentsWidget({ items }: MissingDocumentsWidgetProps) {
           ))}
         </ul>
       ) : (
-        <EmptyState icon={FileText} title="Documentos em dia" description="Não há pendências obrigatórias no momento." />
+        <EmptyState icon={<FileText size={32} />} title="Documentos em dia" description="Não há pendências obrigatórias no momento." />
       )}
     </SectionCard>
   );

@@ -1,6 +1,6 @@
 import { Eye, Inbox, ListFilter } from 'lucide-react';
 import type { QueueFilter, ResponsibilityItem } from '../types';
-import { EmptyState } from './EmptyState';
+import { EmptyState } from '@/components/product/EmptyState';
 
 function getSlaUrgency(sla: string): 'urgent' | 'today' | 'ok' {
   const lower = sla.toLowerCase();
@@ -171,7 +171,7 @@ export function ResponsibilityQueueTable({
               <tr>
                 <td colSpan={6}>
                   <EmptyState
-                    icon={Inbox}
+                    icon={<Inbox size={32} />}
                     title="Sem itens na fila para este filtro."
                     description="Tente mudar o filtro ou aguarde novas atribuições."
                   />

@@ -1,4 +1,4 @@
-import { PageHeader } from '@/dashboard/layout/PageHeader'
+import { PageHeader } from '@/components/product/PageHeader'
 import { AuditTimeline } from '@/components/platform-admin/audit/AuditTimeline'
 import type { PlatformAuditEntryView } from './types'
 
