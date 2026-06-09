@@ -29,7 +29,7 @@ c:\Users\tomke\app Juridico\
 │   ├── src/App.tsx                   # 681 linhas — Router + Shell
 │   ├── src/tokens.css                # 625 linhas — Design tokens
 │   ├── src/components/               # Componentes por feature
-│   ├── e2e/                          # Playwright smoke tests
+│   ├── *.smoke.test.ts               # Playwright smoke tests (raiz de frontend/)
 │   └── package.json                  # Scripts: build, dev, test:smoke
 ├── contracts/                        # 12 JSONs de contrato API
 ├── docs/                             # Documentação por epic
@@ -37,7 +37,7 @@ c:\Users\tomke\app Juridico\
 │   ├── fase-1/ ... fase-3/           # Docs de fases de plataforma
 │   ├── skills/                       # Skill files para agentes
 │   └── superpowers/                  # Guias avançados
-├── prisma/schema.prisma              # Schema Prisma (raiz)
+├── prisma.config.ts                  # Proxy de workspace → delega para backend/prisma/
 ├── scripts/                          # Scripts utilitários
 ├── .github/workflows/ci.yml          # CI: build + Playwright smoke
 ├── vercel.json                       # Deploy frontend (Vercel)
@@ -109,7 +109,7 @@ c:\Users\tomke\app Juridico\
 **Responsabilidade:** Testes e validação de smoke.
 
 **Pode fazer:**
-- Criar/editar testes em `frontend/e2e/`
+- Criar/editar testes em `frontend/ (*.smoke.test.ts na raiz de frontend/)`
 - Rodar `npm run test:smoke`
 - Verificar CI pipeline
 - Validar contratos (JSON vs implementação)
@@ -175,7 +175,7 @@ Get-ChildItem "backend\src" -Directory | Select-Object Name
 
 #### Etapa 5 — Smoke Test
 
-1. Crie teste Playwright em `frontend/e2e/`
+1. Crie teste Playwright em `frontend/ (*.smoke.test.ts na raiz de frontend/)`
 2. Verifique que as rotas existentes não quebraram
 3. Rode localmente antes de push
 

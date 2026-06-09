@@ -611,6 +611,32 @@ Novos candidatos a backlog identificados nesta etapa:
 
 ---
 
+---
+
+## Atualização — 2026-06-01 (BL-065, BL-066, BL-067, BL-068)
+
+As seguintes divergências identificadas neste KB foram resolvidas:
+
+| Item anterior | Resolução | BL | Commit |
+|---|---|---|---|
+| **Sem `playwright.config.ts`** — Playwright rodava com defaults; risco de comportamento inesperado | `frontend/playwright.config.ts` criado: baseURL, timeout 30s, retries 1 em CI, reporters github+html, chromium | BL-067 | `1816891` |
+| **7 falhas em `adv.screens.interactions.test.ts`** — credenciais inválidas para `advogado@juridico.com` / `123456` | Causa raiz confirmada: race condition — `devMock` só ativa quando Prisma inacessível; em CI o BD existe mas `seedData()` roda async e pode não completar antes dos testes iniciarem. Fix: step "Wait for seed to complete" adicionado ao `ci.yml` — polling em `POST /auth/login` até retornar 200 | BL-066 | `7616933` |
+| **Maioria dos ~96 testes backend fora do CI** — apenas `epic-cde.docs` e `epic-cde.seed` eram executados | Script `"test": "node --test tests/*.test.cjs"` adicionado ao `backend/package.json`. Step "Run backend tests" adicionado ao `ci.yml` — cobre todos os 16 arquivos `tests/*.test.cjs` incluindo os multi-tenancy | BL-065 / BL-068 | `388969d` |
+
+**Estado atual do CI (`ci.yml`):**
+```
+Checkout → Setup Node 22 → Install deps → Build backend/frontend
+→ Validate Epic CDE docs/seed → Prisma migrate
+→ Run backend tests (node --test tests/*.test.cjs — 16 arquivos)
+→ Install Playwright → Start backend + frontend
+→ Wait for backend (GET /)
+→ Wait for seed to complete (POST /auth/login até 200)
+→ Run smoke tests → Run Epic CDE smoke tests
+→ Upload Playwright artifacts
+```
+
+---
+
 *Criado em: 2026-05-30 | Status: current | Vault: !_lexora-memory-docs | Autor: claude-code*
 *Baseado em: [[KB_003C_BACKEND_E_APIS_ESTADO_ATUAL_CURRENT_2026-05-30]] | [[KB_003D_DADOS_PRISMA_E_CONTRATOS_CURRENT_2026-05-30]]*
 *Nota: Arquivo criado em `11 - Testes e Evidencias` (pasta oficial do vault) em vez de `08 - Testes QA Evidencias` (número conflita com `08 - UX UI` existente na estrutura do vault definida em `00_START_HERE.md`).*

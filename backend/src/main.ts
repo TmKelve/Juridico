@@ -1,13 +1,14 @@
-import express from 'express';
+﻿import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import { put as blobPut } from '@vercel/blob';
 import bcrypt from 'bcrypt';
 import { createHash, randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient, UserRole } from '@prisma/client';
 import { signUserToken, verifyToken, type UserToken } from './auth';
 import { buildAgendaPayload } from './agenda.contract';
 import { collectCnjPublications } from './cnj-publications.provider';
@@ -128,6 +129,7 @@ const devMockUsers = [
   { id: 2, email: 'advogado@juridico.com',   password: devMockPassword, role: 'ADV' },
   { id: 3, email: 'financeiro@juridico.com', password: devMockPassword, role: 'FIN' },
   { id: 4, email: 'atendimento@juridico.com',password: devMockPassword, role: 'ATD' },
+  { id: 5, email: 'platform@lexora.dev',     password: devMockPassword, role: 'platform_admin' },
 ];
 
 const devMockProcesses = [
@@ -254,6 +256,7 @@ app.use(cors({
   },
   credentials: true
 }));
+app.use(morgan(isProduction ? 'combined' : 'dev'));
 app.use(express.json());
 
 function isBcryptHash(value: string) {
@@ -2495,10 +2498,11 @@ async function seedData() {
   const count = await prisma.user.count();
   if (count === 0) {
     const seedPassword = process.env.LEXORA_SEED_PASSWORD ?? process.env.LEXORA_DEV_PASSWORD ?? '123456';
-    const users = [
-      { email: 'admin@juridico.com',      password: seedPassword, role: 'ADM' },
-      { email: 'advogado@juridico.com',   password: seedPassword, role: 'ADV' },
-      { email: 'financeiro@juridico.com', password: seedPassword, role: 'FIN' },
+    const users: Array<{ email: string; password: string; role: UserRole }> = [
+      { email: 'admin@juridico.com',      password: seedPassword, role: UserRole.ADM },
+      { email: 'advogado@juridico.com',   password: seedPassword, role: UserRole.ADV },
+      { email: 'financeiro@juridico.com', password: seedPassword, role: UserRole.FIN },
+      { email: 'platform@lexora.dev',     password: seedPassword, role: UserRole.platform_admin },
     ];
 
     for (const user of users) {
@@ -3896,7 +3900,7 @@ app.post('/auth/login', loginRateLimit, async (req, res) => {
     return res.json({ user: sessionUser });
   } catch (error) {
     if (!devMockEnabled || !isPrismaConnectionError(error)) {
-      return res.status(500).json({ message: error instanceof Error ? error.message : 'Erro ao autenticar' });
+      return res.status(500).json({ message: 'Erro ao autenticar' });
     }
 
     const user = getDevMockUserByEmail(email);
@@ -3938,7 +3942,7 @@ app.put('/me/avatar', async (req, res) => {
     return res.json({ success: true, avatarUrl });
   } catch (error) {
     if (!devMockEnabled || !isPrismaConnectionError(error)) {
-      return res.status(500).json({ message: error instanceof Error ? error.message : 'Erro ao atualizar avatar' });
+      return res.status(500).json({ message: 'Erro ao atualizar avatar' });
     }
     // Dev mock: retorna sucesso sem persistir
     return res.json({ success: true, avatarUrl });
@@ -3958,7 +3962,7 @@ app.put('/me/profile', async (req, res) => {
     return res.json({ success: true });
   } catch (error) {
     if (!devMockEnabled || !isPrismaConnectionError(error)) {
-      return res.status(500).json({ message: error instanceof Error ? error.message : 'Erro ao atualizar perfil' });
+      return res.status(500).json({ message: 'Erro ao atualizar perfil' });
     }
     // Dev mock: retorna sucesso sem persistir
     return res.json({ success: true });
@@ -3986,7 +3990,7 @@ app.post('/me/change-password', async (req, res) => {
     return res.json({ success: true });
   } catch (error) {
     if (!devMockEnabled || !isPrismaConnectionError(error)) {
-      return res.status(500).json({ message: error instanceof Error ? error.message : 'Erro ao alterar senha' });
+      return res.status(500).json({ message: 'Erro ao alterar senha' });
     }
     // Dev mock: verifica senha hardcoded
     if (currentPassword !== '123456') {
@@ -4008,7 +4012,7 @@ app.get('/notifications', async (req, res) => {
     });
     return res.json({ notifications });
   } catch (error) {
-    return res.status(500).json({ message: error instanceof Error ? error.message : 'Erro ao carregar notificações' });
+    return res.status(500).json({ message: 'Erro ao carregar notificações' });
   }
 });
 
@@ -4024,7 +4028,7 @@ app.post('/notifications/:id/read', async (req, res) => {
     });
     return res.json({ success: true });
   } catch (error) {
-    return res.status(500).json({ message: error instanceof Error ? error.message : 'Erro ao marcar notificação como lida' });
+    return res.status(500).json({ message: 'Erro ao marcar notificação como lida' });
   }
 });
 
@@ -4039,7 +4043,7 @@ app.post('/notifications/read-all', async (req, res) => {
     });
     return res.json({ success: true });
   } catch (error) {
-    return res.status(500).json({ message: error instanceof Error ? error.message : 'Erro ao marcar notificações como lidas' });
+    return res.status(500).json({ message: 'Erro ao marcar notificações como lidas' });
   }
 });
 
@@ -4053,7 +4057,7 @@ app.get('/notifications/count', async (req, res) => {
     });
     return res.json({ count });
   } catch (error) {
-    return res.status(500).json({ message: error instanceof Error ? error.message : 'Erro ao contar notificações' });
+    return res.status(500).json({ message: 'Erro ao contar notificações' });
   }
 });
 
@@ -4069,7 +4073,7 @@ app.get('/users', async (req, res) => {
     return res.json(users);
   } catch (error) {
     if (!devMockEnabled || !isPrismaConnectionError(error)) {
-      return res.status(500).send({ message: error instanceof Error ? error.message : 'Erro ao carregar usuários' });
+      return res.status(500).send({ message: 'Erro ao carregar usuários' });
     }
 
     return res.json(devMockUsers.map(({ id, email, role }) => ({ id, email, role })));
@@ -4136,13 +4140,13 @@ app.get('/clients/:id/portal', async (req, res) => {
     const status = getCrmContractStatus(error);
     if (status) {
       return res.status(status).json({
-        message: error instanceof Error ? error.message : 'Falha ao carregar portal do cliente',
+        message: 'Falha ao carregar portal do cliente',
         code: getCrmContractCode(error),
         details: getCrmContractDetails(error),
       });
     }
 
-    return res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao carregar portal do cliente' });
+    return res.status(500).send({ message: 'Falha ao carregar portal do cliente' });
   }
 });
 
@@ -4158,13 +4162,13 @@ app.get('/clients/:id/consent', async (req, res) => {
     const status = getCrmContractStatus(error);
     if (status) {
       return res.status(status).json({
-        message: error instanceof Error ? error.message : 'Falha ao carregar consentimento',
+        message: 'Falha ao carregar consentimento',
         code: getCrmContractCode(error),
         details: getCrmContractDetails(error),
       });
     }
 
-    return res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao carregar consentimento' });
+    return res.status(500).send({ message: 'Falha ao carregar consentimento' });
   }
 });
 
@@ -4187,13 +4191,13 @@ app.put('/clients/:id/consent', async (req, res) => {
     const status = getCrmContractStatus(error);
     if (status) {
       return res.status(status).json({
-        message: error instanceof Error ? error.message : 'Falha ao atualizar consentimento',
+        message: 'Falha ao atualizar consentimento',
         code: getCrmContractCode(error),
         details: getCrmContractDetails(error),
       });
     }
 
-    return res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao atualizar consentimento' });
+    return res.status(500).send({ message: 'Falha ao atualizar consentimento' });
   }
 });
 
@@ -4326,13 +4330,13 @@ app.get('/clients/:id/communications', async (req, res) => {
     const status = getCrmContractStatus(error);
     if (status) {
       return res.status(status).json({
-        message: error instanceof Error ? error.message : 'Falha ao carregar histórico de comunicação',
+        message: 'Falha ao carregar histórico de comunicação',
         code: getCrmContractCode(error),
         details: getCrmContractDetails(error),
       });
     }
 
-    return res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao carregar histórico de comunicação' });
+    return res.status(500).send({ message: 'Falha ao carregar histórico de comunicação' });
   }
 });
 
@@ -4360,13 +4364,13 @@ app.post('/clients/:id/communications', async (req, res) => {
     const status = getCrmContractStatus(error);
     if (status) {
       return res.status(status).json({
-        message: error instanceof Error ? error.message : 'Falha ao enviar comunicação',
+        message: 'Falha ao enviar comunicação',
         code: getCrmContractCode(error),
         details: getCrmContractDetails(error),
       });
     }
 
-    return res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao enviar comunicação' });
+    return res.status(500).send({ message: 'Falha ao enviar comunicação' });
   }
 });
 
@@ -4389,13 +4393,13 @@ app.post('/clients/:id/communications/:communicationId/retry', async (req, res) 
     const status = getCrmContractStatus(error);
     if (status) {
       return res.status(status).json({
-        message: error instanceof Error ? error.message : 'Falha ao reprocessar comunicação',
+        message: 'Falha ao reprocessar comunicação',
         code: getCrmContractCode(error),
         details: getCrmContractDetails(error),
       });
     }
 
-    return res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao reprocessar comunicação' });
+    return res.status(500).send({ message: 'Falha ao reprocessar comunicação' });
   }
 });
 
@@ -4644,7 +4648,7 @@ app.get('/deadlines', async (req, res) => {
     })));
   } catch (error) {
     if (!devMockEnabled || !isPrismaConnectionError(error)) {
-      return res.status(500).send({ message: error instanceof Error ? error.message : 'Erro ao carregar prazos' });
+      return res.status(500).send({ message: 'Erro ao carregar prazos' });
     }
 
     return res.json(getDevMockDeadlinesForRole(decoded));
@@ -4917,7 +4921,7 @@ app.post('/deadlines/bulk-action', async (req, res) => {
       return res.status(error.statusCode).json({ message: error.message, code: error.code, details: error.details ?? null });
     }
 
-    return res.status(500).json({ message: error instanceof Error ? error.message : 'Falha na ação em massa de prazos' });
+    return res.status(500).json({ message: 'Falha na ação em massa de prazos' });
   }
 });
 
@@ -5065,7 +5069,7 @@ app.post('/documents/:id/links', async (req, res) => {
   } catch (error) {
     const statusCode = getCrmContractStatus(error) ?? 500;
     return res.status(statusCode).json({
-      message: error instanceof Error ? error.message : 'Falha ao vincular entidades ao documento',
+      message: 'Falha ao vincular entidades ao documento',
       code: getCrmContractCode(error),
       details: getCrmContractDetails(error),
     });
@@ -5130,7 +5134,7 @@ app.post('/documents', async (req, res) => {
     } catch (error) {
       const statusCode = getCrmContractStatus(error) ?? 500;
       return res.status(statusCode).json({
-        message: error instanceof Error ? error.message : 'Falha no upload do documento',
+        message: 'Falha no upload do documento',
         code: getCrmContractCode(error),
         details: getCrmContractDetails(error),
       });
@@ -5243,7 +5247,7 @@ app.put('/documents/:id', async (req, res) => {
     } catch (error) {
       const statusCode = getCrmContractStatus(error) ?? 500;
       return res.status(statusCode).json({
-        message: error instanceof Error ? error.message : 'Falha ao criar nova versão',
+        message: 'Falha ao criar nova versão',
         code: getCrmContractCode(error),
         details: getCrmContractDetails(error),
       });
@@ -5287,7 +5291,7 @@ app.put('/documents/:id', async (req, res) => {
     } catch (error) {
       const statusCode = getCrmContractStatus(error) ?? 500;
       return res.status(statusCode).json({
-        message: error instanceof Error ? error.message : 'Falha ao aprovar/rejeitar documento',
+        message: 'Falha ao aprovar/rejeitar documento',
         code: getCrmContractCode(error),
         details: getCrmContractDetails(error),
       });
@@ -5602,13 +5606,13 @@ app.post('/crm/opportunities/:id/contact-events', async (req, res) => {
     const status = getCrmContractStatus(error);
     if (status) {
       return res.status(status).json({
-        message: error instanceof Error ? error.message : 'Falha ao registrar contato comercial',
+        message: 'Falha ao registrar contato comercial',
         code: getCrmContractCode(error),
         details: getCrmContractDetails(error),
       });
     }
 
-    return res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao registrar contato comercial' });
+    return res.status(500).send({ message: 'Falha ao registrar contato comercial' });
   }
 });
 
@@ -5680,13 +5684,13 @@ app.post('/crm/opportunities/:id/documents', async (req, res) => {
     const status = getCrmContractStatus(error);
     if (status) {
       return res.status(status).json({
-        message: error instanceof Error ? error.message : 'Falha ao anexar documento comercial',
+        message: 'Falha ao anexar documento comercial',
         code: getCrmContractCode(error),
         details: getCrmContractDetails(error),
       });
     }
 
-    return res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao anexar documento comercial' });
+    return res.status(500).send({ message: 'Falha ao anexar documento comercial' });
   }
 });
 
@@ -5802,13 +5806,13 @@ app.post('/crm/opportunities/:id/convert', async (req, res) => {
     const status = getCrmContractStatus(error);
     if (status) {
       return res.status(status).json({
-        message: error instanceof Error ? error.message : 'Falha ao converter oportunidade',
+        message: 'Falha ao converter oportunidade',
         code: getCrmContractCode(error),
         details: getCrmContractDetails(error),
       });
     }
 
-    return res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao converter oportunidade' });
+    return res.status(500).send({ message: 'Falha ao converter oportunidade' });
   }
 });
 
@@ -5846,13 +5850,13 @@ app.post('/crm/opportunities/:id/link-process', async (req, res) => {
     const status = getCrmContractStatus(error);
     if (status) {
       return res.status(status).json({
-        message: error instanceof Error ? error.message : 'Falha ao vincular processo',
+        message: 'Falha ao vincular processo',
         code: getCrmContractCode(error),
         details: getCrmContractDetails(error),
       });
     }
 
-    return res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao vincular processo' });
+    return res.status(500).send({ message: 'Falha ao vincular processo' });
   }
 });
 
@@ -5878,13 +5882,13 @@ app.post('/crm/prospects/signal', async (req, res) => {
     const status = getCrmContractStatus(error);
     if (status) {
       return res.status(status).json({
-        message: error instanceof Error ? error.message : 'Falha ao sinalizar prospecção',
+        message: 'Falha ao sinalizar prospecção',
         code: getCrmContractCode(error),
         details: getCrmContractDetails(error),
       });
     }
 
-    return res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao sinalizar prospecção' });
+    return res.status(500).send({ message: 'Falha ao sinalizar prospecção' });
   }
 });
 
@@ -6523,7 +6527,7 @@ app.post('/publications/:id/create-deadline', async (req, res) => {
       return res.status(error.statusCode).json({ message: error.message, code: error.code, details: error.details ?? null });
     }
 
-    return res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao criar prazo a partir da publicação' });
+    return res.status(500).send({ message: 'Falha ao criar prazo a partir da publicação' });
   }
 });
 
@@ -6999,7 +7003,7 @@ app.get('/agenda', async (req, res) => {
     return res.json(events.map((event) => buildAgendaPayload(event)));
   } catch (error) {
     if (!devMockEnabled || !isPrismaConnectionError(error)) {
-      return res.status(500).send({ message: error instanceof Error ? error.message : 'Erro ao carregar agenda' });
+      return res.status(500).send({ message: 'Erro ao carregar agenda' });
     }
 
     return res.json(getDevMockAgendaForRole(decoded));
@@ -7287,7 +7291,7 @@ app.get('/processes', async (req, res) => {
     return res.json(own);
   } catch (error) {
     if (!devMockEnabled || !isPrismaConnectionError(error)) {
-      return res.status(500).send({ message: error instanceof Error ? error.message : 'Erro ao carregar processos' });
+      return res.status(500).send({ message: 'Erro ao carregar processos' });
     }
 
     return res.json(getDevMockProcessesForRole(decoded));
@@ -7379,7 +7383,7 @@ app.get('/processes/:id', async (req, res) => {
     return res.status(403).send({ message: 'Acesso negado' });
   } catch (error) {
     if (!devMockEnabled || !isPrismaConnectionError(error)) {
-      return res.status(500).send({ message: error instanceof Error ? error.message : 'Erro ao carregar processo' });
+      return res.status(500).send({ message: 'Erro ao carregar processo' });
     }
 
     const mockProcess = getDevMockProcessById(Number(req.params.id));
@@ -8199,14 +8203,14 @@ app.post('/triage/:id/decision', async (req, res) => {
     const status = getCrmContractStatus(error);
     if (status) {
       return res.status(status).send({
-        message: error instanceof Error ? error.message : 'Falha ao decidir triagem',
+        message: 'Falha ao decidir triagem',
         code: getCrmContractCode(error),
         details: getCrmContractDetails(error),
       });
     }
 
     return res.status(500).send({
-      message: error instanceof Error ? error.message : 'Falha ao decidir triagem',
+      message: 'Falha ao decidir triagem',
     });
   }
 });
@@ -8276,7 +8280,7 @@ app.post('/triage/jobs/run-cnj', async (req, res) => {
     const result = await ingestCnjPublications(getResponsibleLabel(decoded.email) || decoded.email);
     res.status(201).json(result);
   } catch (error) {
-    res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao executar coleta CNJ' });
+    res.status(500).send({ message: 'Falha ao executar coleta CNJ' });
   }
 });
 
@@ -8289,7 +8293,7 @@ app.post('/triage/jobs/run-cpf', async (req, res) => {
     const result = await ingestCpfPublications(getResponsibleLabel(decoded.email) || decoded.email);
     res.status(201).json(result);
   } catch (error) {
-    res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao executar coleta CPF' });
+    res.status(500).send({ message: 'Falha ao executar coleta CPF' });
   }
 });
 
@@ -8302,7 +8306,7 @@ app.post('/triage/jobs/run-diario', async (req, res) => {
     const result = await ingestDiarioPublications(getResponsibleLabel(decoded.email) || decoded.email);
     res.status(201).json(result);
   } catch (error) {
-    res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao executar coleta de diário oficial' });
+    res.status(500).send({ message: 'Falha ao executar coleta de diário oficial' });
   }
 });
 
@@ -8315,7 +8319,7 @@ app.post('/triage/jobs/run-oab', async (req, res) => {
     const result = await ingestOabPublications(getResponsibleLabel(decoded.email) || decoded.email);
     res.status(201).json(result);
   } catch (error) {
-    res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao executar coleta OAB' });
+    res.status(500).send({ message: 'Falha ao executar coleta OAB' });
   }
 });
 
@@ -8357,7 +8361,7 @@ app.post('/triage/jobs/:id/reprocess', async (req, res) => {
       result,
     });
   } catch (error) {
-    res.status(500).send({ message: error instanceof Error ? error.message : 'Falha ao reprocessar job' });
+    res.status(500).send({ message: 'Falha ao reprocessar job' });
   }
 });
 
@@ -8427,6 +8431,43 @@ registerMobileRoutes({
 
 app.get('/', (req, res) => {
   res.send({ message: 'SaaS Jurídico API v1' });
+});
+
+app.get('/healthz', async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: 'ok', db: 'ok', timestamp: new Date().toISOString() });
+  } catch {
+    res.status(503).json({ status: 'error', db: 'unreachable', timestamp: new Date().toISOString() });
+  }
+});
+
+// ── Admin: Criar utilizador platform_admin ────────────────────────────────────
+// POST /admin/create-platform-user  (ADM only, idempotent)
+app.post('/admin/create-platform-user', async (req, res) => {
+  const actor = getUserFromReq(req);
+  if (!actor) return res.status(401).json({ error: 'Não autenticado' });
+  if (actor.role !== 'ADM') return res.status(403).json({ error: 'Apenas administradores' });
+
+  const email = 'platform@lexora.dev';
+  const plainPassword = process.env.LEXORA_SEED_PASSWORD ?? process.env.LEXORA_DEV_PASSWORD ?? '123456';
+
+  try {
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      return res.json({ created: false, message: `Utilizador ${email} já existe (id=${existing.id})` });
+    }
+
+    const hashed = await bcrypt.hash(plainPassword, 10);
+    const user = await prisma.user.create({
+      data: { email, password: hashed, role: UserRole.platform_admin },
+      select: { id: true, email: true, role: true },
+    });
+
+    return res.json({ created: true, user });
+  } catch (error) {
+    return res.status(500).json({ error: 'Erro ao criar utilizador platform_admin' });
+  }
 });
 
 // ── Admin: Finance Seed ──────────────────────────────────────────────────────

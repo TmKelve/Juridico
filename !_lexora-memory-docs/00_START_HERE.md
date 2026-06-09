@@ -152,9 +152,9 @@ Status de ADR:
 - A pasta `docs-juridico\.obsidian` é considerada legada e inativa.
 - O vault oficial é exclusivamente `!_lexora-memory-docs`.
 
-### Agentes e skills antigos — NÃO são fonte oficial:
-- `.codex/agents/*.toml` (criados em 02/04/2026) não são fonte oficial até validação explícita.
-- `.codex/skills/` não são fonte oficial até validação explícita.
+### Agentes Codex — validados em 2026-06-01:
+- `.codex/agents/*.toml` — validados e migrados de `docs-juridico` para `!_lexora-memory-docs` (BL-009/BL-076). Referências canônicas atualizadas. Não são fonte oficial de verdade técnica, mas estão alinhados com o vault.
+- `.codex/skills/` — auditados em 2026-06-01 (BL-010). `lexora-deploy.md` e `lexora-orchestrator.md` corrigidos. Demais são válidos como metodologia geral.
 
 ### Artefatos técnicos — NÃO são documentação principal:
 - `frontend/test-results/` — artefatos automáticos gerados pelo Playwright. Puramente técnicos.
@@ -247,11 +247,14 @@ Os documentos abaixo foram identificados como necessários para a memória ofici
 |---|---|---|---|
 | [[MAPA_CANONICO_LEXORA_CURRENT]] | `01 - Knowledge Base` | Alta | **Criado** |
 | [[PROTOCOLO_CONTEXTO_ENXUTO_LEXORA_CURRENT]] | `12 - IA - Prompts e Sessoes` | Alta | **Criado** |
+| [[BUILD_DEPLOY_ENVIRONMENT_CURRENT]] | `03 - Arquitetura` | Alta | **Criado** (2026-06-01, BL-011) |
 | `ADR_001_VAULT_OFICIAL_DOCUMENTACAO_LEXORA.md` | `10 - Decisoes ADR` | Alta | A criar |
 | `CURRENT_STATE_LEXORA.md` | `02 - Estado Atual` | Alta | A criar |
 | `FONTES_OFICIAIS_CURRENT.md` | `01 - Knowledge Base` | Alta | A criar |
 | `CONTEXTO_INICIAL_IA_CURRENT.md` | `12 - IA - Prompts e Sessoes` | Alta | A criar |
-| `KB_004_PRODUCT_DISCOVERY_LEXORA_CURRENT.md` | `01 - Knowledge Base` | Alta | Próxima etapa |
+| [[KB_004_PRODUCT_DISCOVERY_LEXORA_CURRENT_2026-06-09]] | `01 - Knowledge Base` | Alta | **Criado** (2026-06-09, BL-083 + KB-004) |
+| [[KB_005_INVENTARIO_UX_UI_CURRENT_2026-06-09]] | `01 - Knowledge Base` | Alta | **Criado** (2026-06-09, KB-005) |
+| [[KB_006_DESIGN_SYSTEM_CURRENT_2026-06-09]] | `09 - Design System` | Alta | **Criado** (2026-06-09, KB-006) |
 
 > [!note] Regra de criação
 > Todos os documentos devem ser criados com base no código atual e no estado real do projeto — nunca copiados de documentação legada sem validação.
@@ -301,16 +304,33 @@ A fase de inventário e consolidação técnica KB-003 foi concluída em 2026-05
 ## 15. Próxima Fase Recomendada
 
 > [!note] Status do vault
-> Fase KB-003 concluída em 2026-05-30. P0 técnicos resolvidos em 2026-05-30 (BL-001, BL-003, BL-004, BL-039, BL-020, BL-040, BL-046 — commit `a96f43c`). Próxima fase: KB-004 Product Discovery.
+> Fase KB-003 concluída em 2026-05-30. Sprint P1 concluída em 2026-06-01. Fase documental KB (004/005/006) concluída em 2026-06-09. P2 quick wins (BL-012/050/051/052/063) concluídos em 2026-06-09. Rotas platform-admin activadas (BL-022) em 2026-06-09. **Pendência de deploy:** commit + push das alterações desta sessão para Render + chamar BL-085 após deploy.
 
-Após a conclusão da fase KB-003 e resolução dos P0, a próxima fase documental é:
+Histórico de fases concluídas:
 
-1. ✅ ~~Resolver os riscos P0~~ — concluído em 2026-05-30. Ver [[BACKLOG_GERAL_LEXORA_CURRENT]] para detalhes. BL-002 (Production Branch) permanece como decisão pendente do usuário.
-2. Consultar [[BACKLOG_GERAL_LEXORA_CURRENT]] para prioridades e dependências atualizadas (84 itens).
-3. Iniciar `KB_004_PRODUCT_DISCOVERY_LEXORA_CURRENT.md`.
-4. Em seguida, avançar para:
-   - KB-005 — Inventário Funcional e UX/UI
-   - KB-006 — Design System e Constituição Visual
+1. ✅ ~~Resolver os riscos P0~~ — concluído em 2026-05-30.
+2. ✅ ~~Sprint P1 (13 itens)~~ — concluída em 2026-06-01.
+3. ✅ ~~KB-004 Product Discovery~~ — concluído em 2026-06-09.
+4. ✅ ~~KB-005 Inventário UX/UI~~ — concluído em 2026-06-09.
+5. ✅ ~~KB-006 Design System~~ — concluído em 2026-06-09.
+6. ✅ ~~BL-063 Enum UserRole no Prisma~~ — concluído em 2026-06-09.
+7. ✅ ~~BL-050 Endpoint `/healthz`~~ — concluído em 2026-06-09. **Acção manual:** configurar Health Check Path `/healthz` no Render.
+8. ✅ ~~BL-051 Sem `error.message` em respostas 500~~ — concluído em 2026-06-09.
+9. ✅ ~~BL-052 Logging HTTP com morgan~~ — concluído em 2026-06-09.
+10. ✅ ~~BL-022 Rotas platform-admin activadas~~ — concluído em 2026-06-09. (empresas / colaboradores / auditoria)
+11. ✅ ~~BL-012 `@nestjs/cli` → devDependencies~~ — concluído em 2026-06-09.
+
+> [!warning] Pendência de deploy
+> As alterações desta sessão ainda não foram commitadas nem enviadas para o Render. Após o deploy, executar **BL-085**: `POST /admin/create-platform-user` (autenticado como ADM) para criar o utilizador `platform@lexora.dev` na BD de produção.
+
+Próximos itens recomendados (ver [[BACKLOG_GERAL_LEXORA_CURRENT]] para detalhes completos):
+
+| Prioridade | Item | Descrição |
+|---|---|---|
+| 🟠 Deploy | **BL-085** | Após deploy: `POST /admin/create-platform-user` para criar `platform@lexora.dev` em produção |
+| 🔴 CRÍTICO | **BL-059** | Auditar `companyScope` em todos os endpoints — risco multi-tenant crítico |
+| 🟡 Média | **BL-049** | Refactoring progressivo de `main.ts` (~8.500 linhas) para routers por domínio |
+| 🟡 Média | **BL-082** | Confirmar endpoints HTTP de `DocumentDraftingService` e `ChecklistSuggestionService` |
 
 > [!tip] Redução de contexto
 > Antes de iniciar novas fases, novas IAs devem consultar [[MAPA_CANONICO_LEXORA_CURRENT]] e [[PROTOCOLO_CONTEXTO_ENXUTO_LEXORA_CURRENT]] para aplicar leitura mínima e evitar releitura desnecessária dos KBs técnicos.
@@ -319,5 +339,5 @@ Após a conclusão da fase KB-003 e resolução dos P0, a próxima fase document
 
 ---
 
-*Criado em: 2026-05-29 | Última atualização: 2026-05-30 (UPDATE-START-HERE-002 — Mapa Canônico e Protocolo de Contexto Enxuto incluídos) | Status: current | Vault: !_lexora-memory-docs*
+*Criado em: 2026-05-29 | Última atualização: 2026-06-09 (UPDATE-START-HERE-007 — BL-022 platform-admin routes, BL-012 devDeps; BL-085 criado; pendência de deploy e criação de utilizador platform_admin em produção) | Status: current | Vault: !_lexora-memory-docs*
 *Baseado em: [[KB_001_DOCUMENTACAO_MAPEAMENTO_INICIAL_CURRENT_2026-05-29]], [[KB_002_GOVERNANCA_DOCUMENTAL_OFICIAL_CURRENT_2026-05-29]], [[KB_003G_RISCOS_TECNICOS_E_DIVERGENCIAS_CONSOLIDADAS_CURRENT_2026-05-30]], [[BACKLOG_GERAL_LEXORA_CURRENT]], [[MAPA_CANONICO_LEXORA_CURRENT]], [[PROTOCOLO_CONTEXTO_ENXUTO_LEXORA_CURRENT]]*
