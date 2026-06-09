@@ -2,9 +2,11 @@ import {
   Bell,
   BookOpen,
   Briefcase,
+  Building2,
   CalendarDays,
   CircleHelp,
   ClipboardCheck,
+  ClipboardList,
   Clock3,
   FolderCog,
   Folder,
@@ -93,6 +95,17 @@ export function SidebarNav({ role, isCollapsed, onFetchUsers, onNavigate }: Side
       icon: FolderCog,
       to: '/usuarios',
       onClick: onFetchUsers,
+    })
+  }
+
+  if (role === 'platform_admin') {
+    sections.push({
+      title: 'PLATAFORMA',
+      items: [
+        { kind: 'link', label: 'Empresas', icon: Building2, to: '/platform-admin/empresas' },
+        { kind: 'link', label: 'Colaboradores', icon: Users, to: '/platform-admin/colaboradores' },
+        { kind: 'link', label: 'Auditoria', icon: ClipboardList, to: '/platform-admin/auditoria' },
+      ],
     })
   }
 

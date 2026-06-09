@@ -53,16 +53,18 @@ Se a tarefa for ampla, comece por:
 | Backlog e ações | [[BACKLOG_GERAL_LEXORA_CURRENT]] | KB relacionado ao item |
 | Build, deploy e ambientes | [[BUILD_DEPLOY_ENVIRONMENT_CURRENT]] (em `03 - Arquitetura`) | [[KB_003A_ESTRUTURA_GERAL_E_CONFIGURACOES_CURRENT_2026-05-29]] |
 | Estrutura geral/configurações | [[KB_003A_ESTRUTURA_GERAL_E_CONFIGURACOES_CURRENT_2026-05-29]] | [[KB_003G_RISCOS_TECNICOS_E_DIVERGENCIAS_CONSOLIDADAS_CURRENT_2026-05-30]] |
-| Frontend | [[KB_003B_FRONTEND_ESTADO_ATUAL_CURRENT_2026-05-29]] | KB-005 e KB-006 futuramente |
-| Backend/APIs | [[KB_003C_BACKEND_E_APIS_ESTADO_ATUAL_CURRENT_2026-05-30]] | [[KB_003D_DADOS_PRISMA_E_CONTRATOS_CURRENT_2026-05-30]] |
-| Dados/Prisma/Contratos | [[KB_003D_DADOS_PRISMA_E_CONTRATOS_CURRENT_2026-05-30]] | [[KB_003G_RISCOS_TECNICOS_E_DIVERGENCIAS_CONSOLIDADAS_CURRENT_2026-05-30]] |
+| Frontend (componentes, telas) | [[KB_003B_FRONTEND_ESTADO_ATUAL_CURRENT_2026-05-29]] | [[KB_005_INVENTARIO_UX_UI_CURRENT_2026-06-09]], [[KB_006_DESIGN_SYSTEM_CURRENT_2026-06-09]] |
+| Backend/APIs/Express | [[KB_003C_BACKEND_E_APIS_ESTADO_ATUAL_CURRENT_2026-05-30]] | [[KB_003D_DADOS_PRISMA_E_CONTRATOS_CURRENT_2026-05-30]] |
+| Dados/Prisma/Contratos/Enum | [[KB_003D_DADOS_PRISMA_E_CONTRATOS_CURRENT_2026-05-30]] | [[KB_003G_RISCOS_TECNICOS_E_DIVERGENCIAS_CONSOLIDADAS_CURRENT_2026-05-30]] |
+| Roles / Auth / Permissões | `backend/src/roles/roles.ts` + `permissions/matrix.ts` | [[BACKLOG_GERAL_LEXORA_CURRENT]] (BL-083 concluído) |
 | Testes/QA/Evidências | [[KB_003E_TESTES_QA_E_EVIDENCIAS_CURRENT_2026-05-30]] | [[BACKLOG_GERAL_LEXORA_CURRENT]] |
 | IA/Agentes/Automações | [[KB_003F_IA_AGENTES_E_AUTOMACOES_CURRENT_2026-05-30]] | [[KB_003G_RISCOS_TECNICOS_E_DIVERGENCIAS_CONSOLIDADAS_CURRENT_2026-05-30]] |
 | Riscos técnicos | [[KB_003G_RISCOS_TECNICOS_E_DIVERGENCIAS_CONSOLIDADAS_CURRENT_2026-05-30]] | [[BACKLOG_GERAL_LEXORA_CURRENT]] |
 | Decisões ADR | Pasta `10 - Decisoes ADR` | KB-003G seção de ADRs recomendados |
-| Product Discovery | KB-004 futuro | KB-003G + BACKLOG |
-| Inventário Funcional/UX/UI | KB-005 futuro | KB-003B + KB-003E |
-| Design System | KB-006 futuro | KB-003B + KB-005 futuro |
+| Product Discovery / Módulos | [[KB_004_PRODUCT_DISCOVERY_LEXORA_CURRENT_2026-06-09]] | KB-003G + BACKLOG |
+| Inventário UX/UI / Fluxos / States | [[KB_005_INVENTARIO_UX_UI_CURRENT_2026-06-09]] | [[KB_003B_FRONTEND_ESTADO_ATUAL_CURRENT_2026-05-29]] |
+| Design System / Tokens / Componentes | [[KB_006_DESIGN_SYSTEM_CURRENT_2026-06-09]] | [[KB_005_INVENTARIO_UX_UI_CURRENT_2026-06-09]] |
+| Observabilidade / Healthcheck / Logs | `backend/src/main.ts` (`/healthz`, morgan) | [[BACKLOG_GERAL_LEXORA_CURRENT]] (BL-050/052 concluídos) |
 
 ---
 
@@ -125,6 +127,6 @@ Se a tarefa for ampla, comece por:
 
 ---
 
-*Criado em: 2026-05-30 | Status: current | Vault: !_lexora-memory-docs*
+*Criado em: 2026-05-30 | Última atualização: 2026-06-09 (KB-004/005/006 adicionados; entradas de roles, observabilidade e design system actualizadas) | Status: current | Vault: !_lexora-memory-docs*
 *Pasta: 01 - Knowledge Base | Fonte: Claude Code*
 *Baseado em: [[00_START_HERE]], [[KB_002_GOVERNANCA_DOCUMENTAL_OFICIAL_CURRENT_2026-05-29]], [[KB_003G_RISCOS_TECNICOS_E_DIVERGENCIAS_CONSOLIDADAS_CURRENT_2026-05-30]], [[BACKLOG_GERAL_LEXORA_CURRENT]]*

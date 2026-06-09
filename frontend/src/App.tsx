@@ -27,6 +27,9 @@ const CrmJuridico = lazy(() => import('./CrmJuridico').then((module) => ({ defau
 const Publications = lazy(() => import('./Publications').then((module) => ({ default: module.Publications })))
 const Triagem = lazy(() => import('./Triagem').then((module) => ({ default: module.Triagem })))
 const Financeiro = lazy(() => import('./Financeiro').then((module) => ({ default: module.Financeiro })))
+const PlatformAdminCompaniesPage = lazy(() => import('./platform-admin/companies/PlatformAdminCompaniesPage').then((module) => ({ default: module.PlatformAdminCompaniesPage })))
+const PlatformAdminMembershipsPage = lazy(() => import('./platform-admin/memberships/PlatformAdminMembershipsPage').then((module) => ({ default: module.PlatformAdminMembershipsPage })))
+const PlatformAdminAuditPage = lazy(() => import('./platform-admin/audit/PlatformAdminAuditPage').then((module) => ({ default: module.PlatformAdminAuditPage })))
 
 // Initialize monitoring on app load
 initMonitoring()
@@ -195,6 +198,30 @@ function getPageMeta(pathname: string, role: string) {
     }
   }
 
+  if (pathname === '/platform-admin/empresas') {
+    return {
+      title: 'Console de Empresas',
+      subtitle: 'Listagem, detalhe e ações administrativas sobre empresas da plataforma.',
+      badge: 'Platform Admin',
+    }
+  }
+
+  if (pathname === '/platform-admin/colaboradores') {
+    return {
+      title: 'Colaboradores e Convites',
+      subtitle: 'Gestão de perfis, acessos e convites pendentes por empresa.',
+      badge: 'Platform Admin',
+    }
+  }
+
+  if (pathname === '/platform-admin/auditoria') {
+    return {
+      title: 'Auditoria de Plataforma',
+      subtitle: 'Timeline de eventos administrativos para rastreabilidade.',
+      badge: 'Platform Admin',
+    }
+  }
+
   return {
     title: 'Meu Dia',
     subtitle: `Priorize prazos críticos, avance tarefas-chave e monitore gargalos da operação (${getRoleLabel(role).toLowerCase()}).`,
@@ -238,7 +265,7 @@ function AppShell({
   const isDashboard = location.pathname === '/'
   const isCrmJuridico = location.pathname === '/crm-juridico'
   // Rotas que gerenciam seu próprio refresh — não exibir "Atualizar dados" global
-  const isSelfManaged = ['/tarefas', '/processos', '/prazos', '/agenda', '/documentos', '/clientes', '/atendimentos', '/publicacoes-intimacoes', '/financeiro', '/triagem', '/modelos-pecas'].some(r => location.pathname === r || location.pathname.startsWith(r + '/'))
+  const isSelfManaged = ['/tarefas', '/processos', '/prazos', '/agenda', '/documentos', '/clientes', '/atendimentos', '/publicacoes-intimacoes', '/financeiro', '/triagem', '/modelos-pecas', '/platform-admin'].some(r => location.pathname === r || location.pathname.startsWith(r + '/'))
   const shortName = (user.email || getRoleLabel(user.role)).split('@')[0].slice(0, 12)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -376,6 +403,18 @@ function AppShell({
                 <Route
                   path="/usuarios"
                   element={user.role === 'ADM' ? <UsersList users={users} permissions={permissions} onRefresh={fetchUsers} /> : <Navigate to="/" replace />}
+                />
+                <Route
+                  path="/platform-admin/empresas"
+                  element={user.role === 'platform_admin' ? <PlatformAdminCompaniesPage /> : <Navigate to="/" replace />}
+                />
+                <Route
+                  path="/platform-admin/colaboradores"
+                  element={user.role === 'platform_admin' ? <PlatformAdminMembershipsPage /> : <Navigate to="/" replace />}
+                />
+                <Route
+                  path="/platform-admin/auditoria"
+                  element={user.role === 'platform_admin' ? <PlatformAdminAuditPage /> : <Navigate to="/" replace />}
                 />
                 <Route path="*" element={<Navigate to="/" />} />
               </Routes>

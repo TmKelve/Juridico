@@ -11,7 +11,7 @@ model User {
   id                     Int                 @id @default(autoincrement())
   email                  String              @unique
   password               String
-  role                   String
+  role                   UserRole
   companyMemberships     CompanyMembership[]
   processes              Process[]
   ownedTasks             Task[]              @relation("TaskOwnerUser")
@@ -28,6 +28,21 @@ model User {
   avatarUrl              String?
   phone                  String?
   notifications          Notification[]
+}
+
+enum UserRole {
+  ADM
+  ADV
+  FIN
+  ATD
+  company_admin
+  manager
+  lawyer
+  assistant
+  company_finance
+  platform_admin
+  platform_billing
+  platform_support
 }
 
 enum CompanyStatus {
@@ -125,7 +140,7 @@ model CompanyMembership {
   company    Company  @relation(fields: [companyId], references: [id])
   userId     Int
   user       User     @relation(fields: [userId], references: [id])
-  role       String
+  role       UserRole
   active     Boolean  @default(true)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
